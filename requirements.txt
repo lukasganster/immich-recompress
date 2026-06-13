@@ -1,0 +1,6 @@
+flask>=3.0
+werkzeug>=3.0    # ships with Flask; imported directly for secure_filename
+requests>=2.31
+
+# gunicorn (production WSGI server) is installed by the Dockerfile, not here —
+# local development uses Flask's built-in server (python backend/server.py).

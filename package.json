@@ -1,0 +1,28 @@
+{
+  "name": "immich-optimizer",
+  "version": "0.1.0-beta.1",
+  "description": "Self-hosted web app to browse, inspect and recompress the videos and photos in your Immich library to reclaim storage. Early development / beta.",
+  "private": true,
+  "scripts": {
+    "setup": "python3 -m venv .venv && .venv/bin/pip install -r requirements.txt",
+    "start": ".venv/bin/python backend/server.py",
+    "dev": ".venv/bin/python backend/server.py",
+    "env": "cp -n .env.example .env && echo 'Created .env (edit it with your Immich URL and API key)'",
+    "build:frontend": "cd frontend && pnpm run build",
+    "watch:frontend": "cd frontend && pnpm run watch",
+    "install:frontend": "cd frontend && pnpm install"
+  },
+  "keywords": [
+    "immich",
+    "video",
+    "photo",
+    "recompress",
+    "handbrake",
+    "ffmpeg",
+    "flask"
+  ],
+  "license": "MIT",
+  "engines": {
+    "python": ">=3.9"
+  }
+}
