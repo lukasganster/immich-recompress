@@ -1,0 +1,68 @@
+@if (gridOptions()) {
+  <app-ui-grid [options]="gridOptions()!" />
+} @else {
+  <div class="empty-grid">
+    @if (!store.loaded()) {
+      <span class="empty-text">No assets loaded — select a media type to get started.</span>
+    } @else {
+      <span class="spin"></span>
+    }
+  </div>
+}
+
+<!-- Cell templates -->
+<ng-template #selectTpl let-row="row">
+  @let st = effectiveStatus(row);
+  <div class="cell-center">
+    <input type="checkbox"
+      [checked]="isSelected(row['id'])"
+      [disabled]="isLocked(row)"
+      [title]="store.isDone(st) ? 'Already optimized' : ''"
+      (change)="toggleSelect(row['id'])" />
+  </div>
+</ng-template>
+
+<ng-template #selectHeaderTpl>
+  <input type="checkbox" [checked]="isAllSelected()" (change)="toggleAll()" />
+</ng-template>
+
+<ng-template #nameTpl let-row="row">
+  <div class="name-cell">
+    <img class="row-thumb"
+      [src]="api.thumbnailUrl(row['id'])"
+      loading="lazy"
+      alt=""
+      (error)="$any($event.target).classList.add('hidden')" />
+    <span class="name-text">{{ row['name'] || '—' }}</span>
+    @if (row['media'] === 'motionphoto') {
+      <span class="lp-badge" title="Live Photo (has a motion video)">Live</span>
+    }
+  </div>
+</ng-template>
+
+<ng-template #sizeTpl let-row="row">
+  {{ humanMB($any(row['size'])) }}
+</ng-template>
+
+<ng-template #statusTpl let-row="row">
+  @let v = asVideo(row);
+  @let st = effectiveStatus(row);
+  <span class="badge" [ngClass]="st">{{ statusLabel(st) }}</span>
+  @if (['done','encoded','processed'].includes(st)) {
+    @let res = jobResult(v);
+    @if (res) {
+      @let pct = res.oldSize ? Math.round((1 - res.newSize / res.oldSize) * 100) : 0;
+      <div class="status-sub">→ {{ humanMB(res.newSize) }} <span class="neg">(−{{ pct }}%)</span></div>
+    }
+  }
+</ng-template>
+
+<ng-template #actionsTpl let-row="row">
+  @let v = asVideo(row);
+  <div class="row-actions">
+    <button title="Details" aria-label="Details" (click)="detailRequested.emit(v.id)">ℹ</button>
+    @if (immichUrl) {
+      <button title="Open in Immich" aria-label="Open in Immich" (click)="openInImmich(v)">↗</button>
+    }
+  </div>
+</ng-template>

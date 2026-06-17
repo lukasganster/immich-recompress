@@ -1,0 +1,16 @@
+:host { display: contents; }
+
+.review-media {
+  width: 100%; max-height: 52vh;
+  background: #000;
+  border-radius: var(--radius);
+  margin-bottom: 14px;
+  object-fit: contain;
+}
+
+.detail-grid {
+  display: grid; grid-template-columns: 130px 1fr;
+  gap: 6px 12px; font-size: 13px;
+}
+.detail-grid dt { color: var(--text-faint); }
+.detail-grid dd { margin: 0; }

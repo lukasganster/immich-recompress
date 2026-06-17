@@ -1,0 +1,26 @@
+<header class="app-header">
+  <h1 class="brand"><img class="logo" src="logo.png" alt="" /> Immich Optimizer</h1>
+  <button class="btn" (click)="browseClick.emit()" aria-label="Select media to load">
+    Select Media
+  </button>
+
+  <span class="header-spacer"></span>
+
+  <span class="tools">
+    <span class="pill" [ngClass]="store.handbrake() ? 'ok' : 'bad'" title="HandBrakeCLI">
+      HandBrakeCLI {{ store.handbrake() ? '✓' : '✗' }}
+    </span>
+    <span class="pill" [ngClass]="store.ffprobe() ? 'ok' : 'bad'" title="ffprobe">
+      ffprobe {{ store.ffprobe() ? '✓' : '✗' }}
+    </span>
+    <span class="pill" [ngClass]="store.ffmpeg() ? 'ok' : 'bad'" title="ffmpeg">
+      ffmpeg {{ store.ffmpeg() ? '✓' : '✗' }}
+    </span>
+  </span>
+
+  <span class="pill" [ngClass]="store.immichUrl() ? '' : 'bad'">
+    <span class="label-url">Immich:</span>
+    {{ store.immichUrl() || '—' }}
+    @if (store.immichVersion()) { <span>(v{{ store.immichVersion() }})</span> }
+  </span>
+</header>

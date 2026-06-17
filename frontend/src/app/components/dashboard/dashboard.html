@@ -1,0 +1,19 @@
+<div class="dashboard">
+  <div class="dash-item">
+    <span class="dash-label">{{ noun }}</span>
+    <span class="dash-val">{{ store.total().toLocaleString('en-US') }}</span>
+  </div>
+  <div class="dash-item">
+    <span class="dash-label">Total Size</span>
+    <span class="dash-val">{{ humanMB(store.totalSize()) }}</span>
+  </div>
+  <div class="dash-item" title="Rough estimate based on current settings">
+    <span class="dash-label">{{ potLabel }}</span>
+    <span class="dash-val dash-pot">{{ potValue }}</span>
+    @if (potSub) { <span class="dash-sub">{{ potSub }}</span> }
+  </div>
+  <div class="dash-item">
+    <span class="dash-label">Already Saved</span>
+    <span class="dash-val dash-saved">{{ humanMB(store.savedBytes()) }}</span>
+  </div>
+</div>

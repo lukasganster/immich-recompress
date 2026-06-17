@@ -1,0 +1,140 @@
+<div class="settings-summary panel">
+  <div class="ss-title">Compression Settings</div>
+  <dl class="ss-grid">
+    <dt>Video</dt><dd>{{ videoSummary }}</dd>
+    <dt>Output</dt><dd>{{ outputSummary }}</dd>
+    <dt>Photo</dt><dd>{{ photoSummary }}</dd>
+    <dt>Mode</dt><dd>{{ modeSummary }}</dd>
+  </dl>
+  <button class="btn ghost ss-edit" (click)="open.set(true)">Edit Compression-Settings</button>
+</div>
+
+@if (open()) {
+  <div class="modal-overlay" (click)="open.set(false)"></div>
+  <div class="modal" role="dialog" aria-modal="true" aria-label="Compression Settings">
+    <div class="modal-head">
+      <strong>Compression Settings</strong>
+      <button class="icon-btn" (click)="open.set(false)" aria-label="Close">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="settings-form">
+
+        <h3 class="section-head">Video Settings</h3>
+
+        <div class="field">
+          <label>Encoder</label>
+          <select [ngModel]="s.encoder" (ngModelChange)="update({encoder: $event})">
+            <option value="x265">x265</option>
+            <option value="nvenc_h265">nvenc_h265</option>
+            <option value="qsv_h265">qsv_h265</option>
+            <option value="vce_h265">vce_h265</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Quality (RF): {{ s.quality }} · {{ rfLabel(s.quality) }}</label>
+          <div class="rangewrap">
+            <input type="range" min="18" max="32"
+              [ngModel]="s.quality" (ngModelChange)="update({quality: +$event})" />
+            <input type="number" min="18" max="32" class="num-input"
+              [ngModel]="s.quality" (ngModelChange)="update({quality: +$event})" />
+          </div>
+          <small>Constant-quality target for the encoder (HandBrake's RF, like CRF).
+            <strong>Lower = better quality &amp; bigger files; higher = smaller files &amp; lower quality.</strong>
+            Roughly each +6 halves the size. 18 ≈ near-lossless, ~22–26 is the sweet spot, 32 is small but visibly soft.</small>
+        </div>
+
+        <div class="field">
+          <label>Preset</label>
+          <select [ngModel]="s.preset" (ngModelChange)="update({preset: $event})">
+            @for (p of ['ultrafast','superfast','veryfast','faster','fast','medium','slow','slower','veryslow']; track p) {
+              <option [value]="p">{{ p }}</option>
+            }
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Max Resolution</label>
+          <select [ngModel]="s.resolution" (ngModelChange)="update({resolution: $event})">
+            <option value="original">Original (no downscale)</option>
+            <option value="2160">4K · 2160p</option>
+            <option value="1440">1440p</option>
+            <option value="1080">1080p</option>
+            <option value="720">720p</option>
+            <option value="480">480p</option>
+          </select>
+          <small>Caps the longer edge; only downscales videos larger than this, never upscales.</small>
+        </div>
+
+        <div class="field">
+          <label>Skip Codecs</label>
+          <input type="text" [ngModel]="s.skip_codecs" (ngModelChange)="update({skip_codecs: $event})" />
+        </div>
+
+        <h3 class="section-head">Photo Settings</h3>
+
+        <div class="field full">
+          <label>Target Savings: {{ s.photo_target_savings }}%</label>
+          <div class="rangewrap">
+            <input type="range" min="5" max="90"
+              [ngModel]="s.photo_target_savings" (ngModelChange)="update({photo_target_savings: +$event})" />
+            <input type="number" min="5" max="95" class="num-input"
+              [ngModel]="s.photo_target_savings" (ngModelChange)="update({photo_target_savings: +$event})" />
+          </div>
+          <small>Photos are compressed (JPEG) to achieve approximately this fraction of file size savings.</small>
+        </div>
+
+        <div class="field full">
+          <div class="toggle">
+            <input type="checkbox" id="compressRaw"
+              [ngModel]="s.compress_raw" (ngModelChange)="update({compress_raw: $event})" />
+            <label for="compressRaw">Convert RAW (DNG/CR2/NEF/…) to JPEG</label>
+          </div>
+          <small class="warn">Converts RAW → JPEG and replaces the original. Requires sips (macOS).</small>
+        </div>
+
+        <h3 class="section-head">Live Photo Settings</h3>
+
+        <div class="field full">
+          <label>Motion video</label>
+          <select [ngModel]="s.motion_action" (ngModelChange)="update({motion_action: $event})">
+            <option value="remove">Remove (keep still photo only)</option>
+            <option value="recompress">Recompress (keep it live, smaller — uses the video encoder above)</option>
+            <option value="keep">Keep (analyze only, change nothing)</option>
+          </select>
+          <small>Applies to the "Live Photos" media type. The still photo is never modified; only the embedded motion video is acted on (backed up locally first).</small>
+        </div>
+
+        <h3 class="section-head">General</h3>
+
+        <div class="field">
+          <label>Min. Savings: {{ s.min_savings }}%</label>
+          <input type="range" min="0" max="50"
+            [ngModel]="s.min_savings" (ngModelChange)="update({min_savings: +$event})" />
+        </div>
+
+        <div class="field">
+          <div class="toggle">
+            <input type="checkbox" id="setReplace"
+              [ngModel]="s.replace" (ngModelChange)="update({replace: $event})" />
+            <label for="setReplace">Replace Original</label>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="toggle">
+            <input type="checkbox" id="setConfirm"
+              [ngModel]="s.confirm" (ngModelChange)="update({confirm: $event})" />
+            <label for="setConfirm">Replace only after review</label>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn" (click)="open.set(false)">Done</button>
+    </div>
+  </div>
+}

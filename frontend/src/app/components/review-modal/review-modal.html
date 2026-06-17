@@ -1,0 +1,50 @@
+@if (open()) {
+  <div class="modal-overlay" (click)="hide()"></div>
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal-head">
+      <strong>{{ currentJob()?.name || 'Preview' }}</strong>
+      <button class="icon-btn" (click)="hide()">✕</button>
+    </div>
+
+    <div class="modal-body">
+      @let j = currentJob();
+      @let id = currentId();
+      @if (j && id) {
+        @if (j.media === 'image') {
+          <img class="review-media" [src]="previewUrl(id, 'image')" alt="Preview" />
+        } @else if (j.media === 'motionphoto' && !isMotionRecompress(j)) {
+          <img class="review-media" [src]="thumbUrl(id)" alt="Still photo (kept)" />
+        } @else {
+          <video class="review-media" controls preload="metadata" playsinline
+            [src]="previewUrl(id, 'video')"></video>
+        }
+
+        <dl class="detail-grid">
+          @if (j.media === 'motionphoto' && !isMotionRecompress(j)) {
+            <dt>Motion Video</dt><dd>{{ humanMB(j.old_size) }} (reclaimed)</dd>
+            <dt>Still Photo</dt><dd>Unchanged</dd>
+            <dt>Action</dt><dd>{{ formatLabel(j) }}</dd>
+          } @else {
+            <dt>{{ j.media === 'motionphoto' ? 'Motion Video' : 'Original Size' }}</dt><dd>{{ humanMB(j.old_size) }}</dd>
+            <dt>New Size</dt><dd>{{ humanMB(j.new_size) }}</dd>
+            <dt>Savings</dt><dd>{{ humanMB((j.old_size ?? 0) - (j.new_size ?? 0)) }} (−{{ pct(j) }}%)</dd>
+            <dt>Format</dt><dd>{{ formatLabel(j) }}</dd>
+            @if (j.media === 'image') {
+              <dt>Setting</dt><dd>Target savings {{ j.photo_target_savings ?? '—' }}%</dd>
+            } @else {
+              <dt>Encoder</dt><dd>{{ j.encoder }} · RF {{ j.quality }} · {{ j.preset }}</dd>
+            }
+            @if (j.media === 'motionphoto') {
+              <dt>Still Photo</dt><dd>Unchanged</dd>
+            }
+          }
+        </dl>
+      }
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn ghost" (click)="discard()">✗ Discard</button>
+      <button class="btn" (click)="confirm()">✓ Confirm &amp; Replace</button>
+    </div>
+  </div>
+}

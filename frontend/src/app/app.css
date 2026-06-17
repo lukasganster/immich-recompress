@@ -1,0 +1,138 @@
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 16px;
+  padding: 16px 20px;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .layout { grid-template-columns: 1fr; }
+}
+
+.main-col { min-width: 0; }
+
+.filterbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.search-input {
+  background: var(--bg-elev-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px 8px 34px;
+  font-size: 13px;
+  outline: none;
+  min-width: 200px;
+  flex: 1;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='%237c8494' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 11px center;
+  transition: border-color var(--trans), box-shadow var(--trans);
+}
+
+.search-input::placeholder { color: var(--text-faint); }
+.search-input:focus { border-color: var(--accent); box-shadow: var(--ring); }
+
+.filterbar select {
+  background: var(--bg-elev-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color var(--trans), box-shadow var(--trans);
+}
+
+.filterbar select:hover { border-color: var(--accent); }
+.filterbar select:focus { border-color: var(--accent); box-shadow: var(--ring); }
+
+.statusbar {
+  position: sticky;
+  bottom: 0;
+  background: color-mix(in srgb, var(--bg-elev) 88%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-top: 1px solid var(--border);
+  padding: 9px 20px;
+  font-size: 12px;
+  color: var(--text-dim);
+  z-index: 40;
+}
+
+/* "Loading …" dialog shown while a Select Media asset load is pending.
+   The fade-in is delayed so quick responses never flash the overlay. */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 6, 10, 0.5);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  z-index: 120;
+  opacity: 0;
+  animation: loading-appear 140ms ease forwards;
+  animation-delay: 180ms;
+}
+
+@keyframes loading-appear { to { opacity: 1; } }
+
+.loading-box {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 24px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  color: var(--text);
+}
+
+.loading-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.loading-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.loading-sub {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.loading-hint {
+  margin-top: 5px;
+  font-size: 12px;
+  color: var(--accent);
+  animation: loading-hint-in 220ms ease;
+}
+
+@keyframes loading-hint-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.loading-spin {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: rot 0.8s linear infinite;
+}
+
+@keyframes rot { to { transform: rotate(360deg); } }

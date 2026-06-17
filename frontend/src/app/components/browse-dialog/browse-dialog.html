@@ -1,0 +1,88 @@
+@if (open()) {
+  <div class="modal-overlay" (click)="hide()"></div>
+  <div class="modal" role="dialog" aria-modal="true" aria-label="Select Media">
+    <div class="modal-head">
+      <strong>Select Media</strong>
+      <button class="icon-btn" (click)="hide()" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body">
+     <div class="browse-cols">
+      <div class="browse-main">
+      <div class="field type-field">
+        <label>Media Type</label>
+        <div class="seg">
+          <button [class.active]="localTab() === 'video'" (click)="localTab.set('video')">Videos</button>
+          <button [class.active]="localTab() === 'image'" (click)="localTab.set('image')">Photos</button>
+          <button [class.active]="localTab() === 'motionphoto'" (click)="localTab.set('motionphoto')">Live Photos</button>
+          <button [class.active]="localTab() === 'link'" (click)="localTab.set('link')">Link / ID</button>
+        </div>
+      </div>
+
+      @if (localTab() === 'video') {
+        <div class="field">
+          <label>Video Threshold: {{ localVideoGb() }} GB</label>
+          <div class="rangewrap">
+            <input type="range" min="0" max="10" step="0.1"
+              [ngModel]="localVideoGb()" (ngModelChange)="localVideoGb.set(+$event)" />
+            <input type="number" min="0" max="100" step="0.1" class="num-input"
+              [ngModel]="localVideoGb()" (ngModelChange)="localVideoGb.set(+$event)" />
+          </div>
+        </div>
+        <p class="hint">Videos are re-encoded with HandBrakeCLI.</p>
+      } @else if (localTab() === 'image' || localTab() === 'motionphoto') {
+        <div class="field">
+          <label>{{ localTab() === 'motionphoto' ? 'Motion Video Threshold' : 'Photo Threshold' }}: {{ localPhotoMb() }} MB</label>
+          <div class="rangewrap">
+            <input type="range" min="1" max="100" step="1"
+              [ngModel]="localPhotoMb()" (ngModelChange)="localPhotoMb.set(+$event)" />
+            <input type="number" min="0" max="500" step="1" class="num-input"
+              [ngModel]="localPhotoMb()" (ngModelChange)="localPhotoMb.set(+$event)" />
+          </div>
+        </div>
+        <p class="hint">
+          @if (localTab() === 'motionphoto') {
+            Live Photos: the still image is kept — only the embedded motion video is removed (backed up locally, recoverable from Immich trash).
+          } @else {
+            Photos are compressed with ffmpeg (JPEG).
+          }
+        </p>
+      } @else {
+        <div class="field">
+          <label>Paste Immich link(s) or asset ID(s)</label>
+          <textarea class="link-input" rows="4"
+            placeholder="http://…/photos/<id>, /photos/<id>, or a bare id — one per line"
+            [ngModel]="addInput()" (ngModelChange)="addInput.set($event)"></textarea>
+          <small>
+            @if (addMsg()) { {{ addMsg() }} }
+            @else { Adds the assets to the list, pre-selected — type (video / photo / Live Photo) is detected automatically. }
+          </small>
+        </div>
+      }
+      </div>
+
+      @if (store.keyOwners().length > 1 && localTab() !== 'link') {
+        <div class="browse-side">
+          <label class="side-label">Libraries (API keys)</label>
+          <p class="hint side-hint">Scan only the selected users' libraries.</p>
+          <div class="key-list">
+            @for (o of store.keyOwners(); track o.key_idx) {
+              <label class="key-row">
+                <input type="checkbox"
+                  [checked]="keyChecked(o.key_idx)" (change)="toggleKey(o.key_idx)" />
+                <span class="key-name">{{ o.name }}</span>
+              </label>
+            }
+          </div>
+        </div>
+      }
+     </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost push-left" (click)="clearHistory()">Clear History</button>
+      <button class="btn ghost" (click)="hide()">Cancel</button>
+      <button class="btn" [disabled]="localTab() === 'link' && addBusy()" (click)="onApply()">
+        {{ localTab() === 'link' ? '＋ Add' : 'Apply' }}
+      </button>
+    </div>
+  </div>
+}

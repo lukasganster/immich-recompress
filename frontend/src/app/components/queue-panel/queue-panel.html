@@ -1,0 +1,58 @@
+<div class="panel queue-panel">
+  <div class="panel-head">
+    <span>Queue</span>
+    <span class="spacer"></span>
+    <button class="icon-btn" (click)="clearDone()">Clear Done</button>
+  </div>
+
+  <div class="panel-body" id="queueBody">
+    @if (!orderedJobs.length) {
+      <div class="empty">No Jobs</div>
+    }
+    @for (entry of orderedJobs; track entry[0]) {
+      @let id = entry[0];
+      @let j = entry[1];
+      <div class="queue-job">
+        <div class="qj-head">
+          <span class="qj-name">{{ j.name || id }}</span>
+          <span class="qj-right">
+            <span class="badge" [ngClass]="j.status">{{ statusLabel(j.status) }}</span>
+            @if (['queued','downloading','encoding'].includes(j.status)) {
+              <button class="icon-btn sm" title="Cancel" (click)="cancel(id)">✕</button>
+            } @else if (immichUrl) {
+              <button class="icon-btn sm" title="Open in Immich" (click)="openInImmich(id, j)">↗</button>
+            }
+          </span>
+        </div>
+
+        @if (isActive(id)) {
+          <div class="progress anim">
+            <span [style.width.%]="j.progress || 0"></span>
+          </div>
+          <div class="qj-meta">{{ (j.progress || 0).toFixed(1) }}%</div>
+          @if (j.log) { <div class="qj-log" [title]="j.log">{{ j.log }}</div> }
+        } @else if (j.status === 'review') {
+          @if (j.old_size && j.new_size) {
+            @let pct = (100 - j.new_size / j.old_size * 100).toFixed(1);
+            <div class="qj-meta">{{ humanMB(j.old_size) }} → {{ humanMB(j.new_size) }} (−{{ pct }}%)</div>
+          }
+          <div class="qj-meta">Format: {{ formatLabel(j) }}</div>
+          <div class="qj-actions">
+            <button class="btn ghost sm" (click)="reviewRequested.emit(id)">▶ Preview</button>
+            <button class="btn sm" (click)="confirmReplace(id)">✓ Replace</button>
+            <button class="btn ghost sm" (click)="discard(id)">✗ Discard</button>
+          </div>
+        } @else if (['done','encoded'].includes(j.status) && j.old_size && j.new_size) {
+          @let pct2 = (100 - j.new_size / j.old_size * 100).toFixed(1);
+          <div class="qj-meta">{{ humanMB(j.old_size) }} → {{ humanMB(j.new_size) }} (−{{ pct2 }}%)</div>
+        } @else if (j.log) {
+          <div class="qj-log" [title]="j.log">{{ j.log }}</div>
+        }
+      </div>
+    }
+  </div>
+
+  <div class="saved-total">
+    Total saved: {{ humanMB(store.savedBytes()) }}
+  </div>
+</div>

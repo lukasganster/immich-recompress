@@ -1,0 +1,73 @@
+:host { display: contents; }
+
+.drawer-overlay {
+  position: fixed; inset: 0;
+  background: rgba(4, 6, 10, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 100;
+  animation: fade-in 160ms ease;
+}
+
+.drawer {
+  position: fixed; top: 0; right: 0; height: 100%;
+  width: min(520px, 100%);
+  background: var(--bg-elev);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  z-index: 101;
+  display: flex; flex-direction: column;
+  animation: drawer-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes drawer-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.drawer-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px; border-bottom: 1px solid var(--border);
+}
+
+.drawer-body { padding: 16px; overflow-y: auto; flex: 1; }
+
+.drawer-thumb {
+  width: 100%; border-radius: var(--radius);
+  background: var(--bg-elev-2); margin-bottom: 14px;
+  max-height: 300px; object-fit: contain;
+}
+
+.detail-grid {
+  display: grid; grid-template-columns: 130px 1fr;
+  gap: 6px 12px; font-size: 13px;
+}
+.detail-grid dt { color: var(--text-faint); }
+.detail-grid dd { margin: 0; word-break: break-word; }
+
+.detail-section { margin-top: 16px; }
+.detail-section h3 {
+  font-size: 12px; text-transform: uppercase;
+  letter-spacing: 0.4px; color: var(--text-faint); margin: 0 0 8px;
+}
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  background: var(--bg-elev-2); border: 1px solid var(--border);
+  border-radius: 999px; padding: 3px 10px; font-size: 12px;
+}
+.chip.flag-on { color: var(--green); border-color: rgba(63,185,80,0.4); }
+
+.drawer-actions {
+  display: flex; gap: 10px;
+  padding: 14px 16px; border-top: 1px solid var(--border);
+}
+
+.empty { padding: 30px; text-align: center; color: var(--text-faint); }
+.spin {
+  display: inline-block; width: 14px; height: 14px;
+  border: 2px solid var(--border); border-top-color: var(--accent);
+  border-radius: 50%; animation: rot 0.8s linear infinite;
+}
+@keyframes rot { to { transform: rotate(360deg); } }

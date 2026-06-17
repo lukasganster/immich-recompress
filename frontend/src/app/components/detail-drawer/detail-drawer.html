@@ -1,0 +1,116 @@
+@if (open()) {
+  <div class="drawer-overlay" (click)="hide()"></div>
+  <div class="drawer" role="dialog" aria-modal="true">
+    <div class="drawer-head">
+      <strong>{{ detail()?.name || 'Detail' }}</strong>
+      <button class="icon-btn" (click)="hide()">✕</button>
+    </div>
+
+    <div class="drawer-body">
+      @if (loading()) {
+        <div class="empty"><span class="spin"></span> Loading…</div>
+      } @else if (!detail()) {
+        <div class="empty">Failed to load details</div>
+      } @else {
+        @let d = detail()!;
+        @let ex = d.exif;
+        @let owner = d.owner;
+
+        <img class="drawer-thumb"
+          [src]="'/api/thumbnail/' + d.id"
+          [alt]="'Preview of ' + d.name"
+          (error)="$any($event.target).style.display='none'" />
+
+        <dl class="detail-grid">
+          <dt>File</dt><dd>{{ d.name }}</dd>
+          <dt>Path</dt><dd>{{ d.original_path }}</dd>
+          <dt>MIME</dt><dd>{{ d.mime_type }}</dd>
+          <dt>Checksum</dt><dd>{{ d.checksum }}</dd>
+          <dt>Size</dt><dd>{{ d.size_human }}</dd>
+          <dt>Duration</dt><dd>{{ d.duration_human || '—' }}</dd>
+          <dt>Codec</dt><dd>{{ ex.codec || '—' }}</dd>
+          <dt>Resolution</dt><dd>{{ ex.resolution || '—' }}</dd>
+          <dt>Bitrate</dt><dd>{{ ex.bitrate ?? '—' }}</dd>
+          <dt>FPS</dt><dd>{{ ex.fps ?? '—' }}</dd>
+        </dl>
+
+        <div class="detail-section">
+          <h3>Camera</h3>
+          <dl class="detail-grid">
+            <dt>Make</dt><dd>{{ ex.make || '—' }}</dd>
+            <dt>Model</dt><dd>{{ ex.model || '—' }}</dd>
+            <dt>Lens</dt><dd>{{ ex.lens || '—' }}</dd>
+          </dl>
+        </div>
+
+        <div class="detail-section">
+          <h3>Location</h3>
+          <dl class="detail-grid">
+            <dt>Coordinates</dt><dd>{{ (ex.lat != null && ex.lon != null) ? (ex.lat + ', ' + ex.lon) : '—' }}</dd>
+            <dt>City</dt><dd>{{ ex.city || '—' }}</dd>
+            <dt>Country</dt><dd>{{ ex.country || '—' }}</dd>
+          </dl>
+        </div>
+
+        <div class="detail-section">
+          <h3>Owner</h3>
+          <dl class="detail-grid">
+            <dt>Name</dt><dd>{{ owner.name || '—' }}</dd>
+            <dt>Email</dt><dd>{{ owner.email || '—' }}</dd>
+          </dl>
+        </div>
+
+        @if (d.albums?.length) {
+          <div class="detail-section">
+            <h3>Albums</h3>
+            <div class="chips">
+              @for (a of d.albums; track a.id) {
+                <span class="chip">{{ a.name || a.id }}</span>
+              }
+            </div>
+          </div>
+        }
+
+        @if (d.people?.length) {
+          <div class="detail-section">
+            <h3>People</h3>
+            <div class="chips">
+              @for (p of d.people; track p.id) {
+                <span class="chip">{{ p.name || p.id }}</span>
+              }
+            </div>
+          </div>
+        }
+
+        @if (d.tags?.length) {
+          <div class="detail-section">
+            <h3>Tags</h3>
+            <div class="chips">
+              @for (t of d.tags; track t) {
+                <span class="chip">{{ t }}</span>
+              }
+            </div>
+          </div>
+        }
+
+        <div class="detail-section">
+          <h3>Metadata</h3>
+          <dl class="detail-grid">
+            <dt>Created</dt><dd>{{ fmtDate(d.created_at) }}</dd>
+            <dt>Updated</dt><dd>{{ fmtDate(d.updated_at) }}</dd>
+          </dl>
+          <div class="chips" style="margin-top:8px">
+            <span class="chip" [class.flag-on]="d.is_favorite">Favorite</span>
+            <span class="chip" [class.flag-on]="d.is_archived">Archived</span>
+            <span class="chip" [class.flag-on]="d.is_trashed">Trashed</span>
+          </div>
+        </div>
+      }
+    </div>
+
+    <div class="drawer-actions">
+      <button class="btn ghost" (click)="download()">↓ Download Original</button>
+      <button class="btn" (click)="encode()">▶ Encode Now</button>
+    </div>
+  </div>
+}

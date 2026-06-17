@@ -1,0 +1,122 @@
+:host { display: block; }
+
+.queue-panel { height: 100%; }
+
+.panel-head {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.spacer { flex: 1; }
+
+.panel-body {
+  padding: 0 14px;
+  overflow-y: auto;
+  max-height: 60vh;
+}
+
+.empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-faint);
+}
+
+.queue-job {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.queue-job:last-child { border-bottom: none; }
+
+.qj-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.qj-right { display: flex; align-items: center; gap: 6px; }
+
+.qj-name {
+  font-size: 13px;
+  word-break: break-word;
+  min-width: 0;
+}
+
+.progress {
+  height: 7px;
+  background: var(--bg-elev-2);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 7px;
+}
+
+.progress > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+.progress.anim > span {
+  background-image: linear-gradient(90deg, var(--accent), var(--accent-hover), var(--accent));
+  background-size: 200% 100%;
+  animation: slide 1.4s linear infinite;
+}
+
+@keyframes slide { from { background-position: 0 0; } to { background-position: 200% 0; } }
+
+.qj-meta {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+.qj-log {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-top: 5px;
+  font-family: ui-monospace, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.qj-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+
+.saved-total {
+  padding: 10px 14px;
+  font-weight: 600;
+  color: var(--green);
+  border-top: 1px solid var(--border);
+}
+
+/* badge colours */
+.badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.badge.queued { color: var(--yellow); background: rgba(217,167,44,0.12); }
+.badge.encoding, .badge.downloading, .badge.replacing {
+  color: var(--blue); background: rgba(79,140,255,0.14);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+.badge.done, .badge.downloaded, .badge.encoded { color: var(--green); background: rgba(63,185,80,0.14); }
+.badge.review { color: var(--purple); background: rgba(179,136,255,0.16); }
+.badge.skipped { color: var(--orange); background: rgba(224,130,61,0.14); }
+.badge.error { color: var(--red); background: rgba(240,85,107,0.14); }
+.badge.cancelled, .badge.discarded { color: var(--text-faint); background: rgba(120,120,120,0.14); }
+
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
+
+.btn.sm { padding: 5px 10px; font-size: 12px; border-radius: 6px; }
+.icon-btn.sm { padding: 2px 7px; font-size: 12px; }

@@ -1,0 +1,72 @@
+<app-header (browseClick)="browse().show()"></app-header>
+
+<main class="layout">
+  <section class="main-col">
+    <div class="filterbar">
+      <input type="text" class="search-input" placeholder="Search by filename..."
+        [value]="store.search()"
+        (input)="onSearch($any($event.target).value)" />
+
+      @if (store.media() === 'video') {
+        <div class="seg">
+          @for (c of codecs; track c) {
+            <button [class.active]="store.codec() === c" (click)="setCodec(c)">
+              {{ codecLabels[c] }}
+            </button>
+          }
+        </div>
+      }
+
+      <select (change)="setUser($any($event.target).value)">
+        <option value="">All Users</option>
+        @for (u of store.users(); track u.id) {
+          <option [value]="u.id">{{ u.name || u.email }}</option>
+        }
+      </select>
+    </div>
+
+    <app-dashboard></app-dashboard>
+
+    <div class="panel">
+      <app-media-grid
+        (detailRequested)="drawer().show($event)">
+      </app-media-grid>
+    </div>
+
+    <app-bulk-bar
+      (encodeSelected)="onEncode($event)"
+      (downloadSelected)="onBulkDownload()"
+      (clearSelection)="store.clearSelection()">
+    </app-bulk-bar>
+  </section>
+
+  <aside class="sidebar">
+    <app-queue-panel
+      (reviewRequested)="review().show($event)"
+      (jobsRefresh)="onJobsRefresh()">
+    </app-queue-panel>
+
+    <app-settings-panel></app-settings-panel>
+  </aside>
+</main>
+
+<div class="statusbar" role="status" aria-live="polite">{{ statusText }}</div>
+
+<app-detail-drawer (encodeRequested)="onEncode($event)"></app-detail-drawer>
+<app-review-modal></app-review-modal>
+<app-browse-dialog (apply)="onBrowseApply()"></app-browse-dialog>
+
+@if (store.loading()) {
+  <div class="loading-overlay" role="status" aria-live="polite" aria-label="Fetching assets from Immich">
+    <div class="loading-box">
+      <span class="loading-spin"></span>
+      <div class="loading-text">
+        <span class="loading-title">Fetching assets from Immich</span>
+        <span class="loading-sub">{{ loadingSubtitle }}</span>
+        @if (store.loadingHint()) {
+          <span class="loading-hint">{{ store.loadingHint() }}</span>
+        }
+      </div>
+    </div>
+  </div>
+}

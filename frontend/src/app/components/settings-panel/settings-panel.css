@@ -1,0 +1,74 @@
+:host { display: block; }
+
+/* ── Sidebar summary card ─────────────────────────────────────── */
+.settings-summary { padding: 13px 14px; }
+
+.ss-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.ss-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 7px 12px;
+  margin: 12px 0 14px;
+  font-size: 12px;
+}
+.ss-grid dt { color: var(--text-faint); white-space: nowrap; }
+.ss-grid dd { margin: 0; color: var(--text); text-align: right; }
+
+.ss-edit { width: 100%; }
+
+/* ── Edit dialog form ─────────────────────────────────────────── */
+.settings-form {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 600px) { .settings-form { grid-template-columns: 1fr; } }
+
+.section-head {
+  grid-column: 1 / -1;
+  margin: 6px 0 0;
+  padding-bottom: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--accent);
+  border-bottom: 1px solid var(--border);
+}
+
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field.full { grid-column: 1 / -1; }
+.field label { font-size: 12px; color: var(--text-dim); font-weight: 500; }
+.field small { font-size: 11px; line-height: 1.4; color: var(--text-faint); }
+.field small.warn { color: var(--orange); }
+
+.field input[type="text"],
+.field input[type="number"],
+.field select {
+  background: var(--bg-elev-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color var(--trans), box-shadow var(--trans);
+}
+
+.field input[type="text"]:focus,
+.field input[type="number"]:focus,
+.field select:focus { border-color: var(--accent); box-shadow: var(--ring); }
+
+.num-input { width: 64px; }
+
+.rangewrap { display: flex; align-items: center; gap: 10px; }
+.rangewrap input[type="range"] { flex: 1; accent-color: var(--accent); }
+
+.toggle { display: flex; align-items: center; gap: 8px; }
+.toggle input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
+.toggle label { cursor: pointer; }

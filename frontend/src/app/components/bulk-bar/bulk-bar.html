@@ -1,0 +1,11 @@
+@if (show) {
+  <div class="bulkbar">
+    <strong>{{ n }} {{ noun }} selected</strong>
+    <span class="spacer"></span>
+    <button class="btn ghost" (click)="downloadSelected.emit()">↓ Download All ({{ n }})</button>
+    <button class="btn" (click)="encodeSelected.emit([...store.selected()])">
+      {{ actionLabel }} ({{ n }})
+    </button>
+    <button class="btn ghost" (click)="clearSelection.emit()">✕ Clear Selection</button>
+  </div>
+}
