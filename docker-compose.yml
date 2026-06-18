@@ -1,0 +1,35 @@
+services:
+  immich-optimizer:
+    build: .
+    image: immich-optimizer:latest
+    container_name: immich-optimizer
+    restart: unless-stopped
+    # Reads IMMICH_API_KEY / IMMICH_URL / PORT from .env.
+    # Values already in the container environment take precedence.
+    env_file:
+      - .env
+    environment:
+      # Persist job history on the named volume below (overrides the in-image
+      # default, which already points here).
+      IMMICH_DB: /data/immich_recompress.db
+    ports:
+      # Host:container — both follow PORT (compose reads PORT from .env too).
+      # Bound to 127.0.0.1 by default: this app has NO authentication and can
+      # trash/replace Immich media, so it must not be reachable from the LAN or
+      # internet. To expose it, put it behind an authenticating reverse proxy and
+      # only then change this to "${PORT:-5050}:${PORT:-5050}". See SECURITY.md.
+      - "127.0.0.1:${PORT:-5050}:${PORT:-5050}"
+    volumes:
+      # Job-history SQLite DB.
+      - immich-optimizer-data:/data
+      # Local backups taken before any replace / RAW conversion / Live-Photo
+      # strip — the only recovery path once the Immich trash is emptied.
+      - immich-optimizer-backups:/tmp/immich_recompress_backup
+      # Scratch space for downloads/encodes. Mounted so very large videos don't
+      # bloat the container writable layer; cleared automatically per job.
+      - immich-optimizer-work:/tmp/immich_recompress_ui
+
+volumes:
+  immich-optimizer-data:
+  immich-optimizer-backups:
+  immich-optimizer-work:
