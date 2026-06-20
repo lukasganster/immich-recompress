@@ -51,8 +51,7 @@ metadata / tags / albums, and moves the original to the Immich trash
 ### Docker
 
 ```bash
-git clone <repo-url> && cd immich-recompress
-cp .env.example .env            # set IMMICH_URL and IMMICH_API_KEY
+pnpm run env                    # creates .env; set IMMICH_URL and IMMICH_API_KEY in it
 docker compose up -d --build
 ```
 
@@ -61,16 +60,22 @@ Then open <http://localhost:5050>.
 ### Local
 
 ```bash
-# Backend
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-cp .env.example .env            # set IMMICH_URL and IMMICH_API_KEY
+# Backend deps: creates .venv and installs requirements.txt
+pnpm run setup
+
+# Create .env, then set IMMICH_URL and IMMICH_API_KEY in it
+pnpm run env
 
 # Frontend (Angular, pnpm): builds the UI into backend/static
-cd frontend && pnpm install && pnpm run build && cd ..
+pnpm run install:frontend && pnpm run build:frontend
 
 # Run (serves UI + API on http://127.0.0.1:5050)
-.venv/bin/python backend/server.py
+pnpm start
 ```
+
+The individual steps map to plain commands if you prefer not to use the pnpm
+wrappers (`pnpm run setup` → `python3 -m venv .venv && .venv/bin/pip install -r
+requirements.txt`, `pnpm start` → `.venv/bin/python backend/server.py`).
 
 ## Configuration
 
