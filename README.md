@@ -6,6 +6,14 @@ dashboard. Re-encode videos with HandBrake, recompress JPEGs with ffmpeg, or
 strip the motion clip from Live Photos, with a review-before-replace step and
 live progress.
 
+## Screenshots
+
+<p align="center">
+  <img src="screenshots/immich-recompress-screenshot-1.png" alt="Select media dialog" width="32%" />
+  <img src="screenshots/immich-recompress-screenshot-2.png" alt="Immich Recompress dashboard" width="32%" />
+  <img src="screenshots/immich-recompress-screenshot-3.png" alt="Review before replace" width="32%" />
+</p>
+
 ## Features
 
 - Browse videos, photos or Live Photos, filtered by size.
