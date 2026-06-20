@@ -1,1 +1,1 @@
-"""Immich Optimizer backend package."""
+"""Immich Recompress backend package."""

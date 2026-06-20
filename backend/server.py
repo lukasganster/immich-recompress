@@ -1,4 +1,4 @@
-"""Immich Optimizer — Flask entrypoint.
+"""Immich Recompress — Flask entrypoint.
 
 A web dashboard to browse, inspect, download and re-encode videos and photos
 from an Immich library. All state is kept in memory and lost on restart.

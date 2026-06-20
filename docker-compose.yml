@@ -1,8 +1,8 @@
 services:
-  immich-optimizer:
+  immich-recompress:
     build: .
-    image: immich-optimizer:latest
-    container_name: immich-optimizer
+    image: immich-recompress:latest
+    container_name: immich-recompress
     restart: unless-stopped
     # Reads IMMICH_API_KEY / IMMICH_URL / PORT from .env.
     # Values already in the container environment take precedence.
@@ -21,15 +21,15 @@ services:
       - "127.0.0.1:${PORT:-5050}:${PORT:-5050}"
     volumes:
       # Job-history SQLite DB.
-      - immich-optimizer-data:/data
+      - immich-recompress-data:/data
       # Local backups taken before any replace / RAW conversion / Live-Photo
       # strip — the only recovery path once the Immich trash is emptied.
-      - immich-optimizer-backups:/tmp/immich_recompress_backup
+      - immich-recompress-backups:/tmp/immich_recompress_backup
       # Scratch space for downloads/encodes. Mounted so very large videos don't
       # bloat the container writable layer; cleared automatically per job.
-      - immich-optimizer-work:/tmp/immich_recompress_ui
+      - immich-recompress-work:/tmp/immich_recompress_ui
 
 volumes:
-  immich-optimizer-data:
-  immich-optimizer-backups:
-  immich-optimizer-work:
+  immich-recompress-data:
+  immich-recompress-backups:
+  immich-recompress-work:

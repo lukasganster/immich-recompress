@@ -1,4 +1,4 @@
-# Frontend — Immich Optimizer
+# Frontend — Immich Recompress
 
 Angular 22 (standalone, signals, zoneless) UI, served by the Flask backend. Uses
 **[pnpm](https://pnpm.io/)**. Builds into `../backend/static`; talks to the

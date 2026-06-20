@@ -1,6 +1,6 @@
 # Security Policy
 
-Immich Optimizer is in **early development**, may still contain bugs, and is
+Immich Recompress is in **early development**, may still contain bugs, and is
 provided **as is, with no warranty**. It modifies, replaces and deletes media in
 your Immich library, so **data can be lost**. Run it **at your own risk** and
 keep your own backups.
@@ -16,7 +16,7 @@ there are no security backports.
 
 ## Security model
 
-Immich Optimizer is meant to run on your own machine or a trusted private
+Immich Recompress is meant to run on your own machine or a trusted private
 network, next to your Immich server. Please understand the following before
 running it:
 

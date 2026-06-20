@@ -1,4 +1,4 @@
-# Immich Optimizer
+# Immich Recompress
 
 Browse, inspect and **recompress** the videos and photos in your
 [Immich](https://immich.app/) library to reclaim storage, all from a small web
@@ -51,7 +51,7 @@ metadata / tags / albums, and moves the original to the Immich trash
 ### Docker
 
 ```bash
-git clone <repo-url> && cd immich-optimizer
+git clone <repo-url> && cd immich-recompress
 cp .env.example .env            # set IMMICH_URL and IMMICH_API_KEY
 docker compose up -d --build
 ```
