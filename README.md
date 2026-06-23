@@ -50,6 +50,49 @@ metadata / tags / albums, and moves the original to the Immich trash
 
 ### Docker
 
+#### Using the published image (recommended)
+
+A pre-built multi-stage image is published to the GitHub Container Registry on
+every release: `ghcr.io/lukasganster/immich-recompress:latest`.
+
+Drop this `docker-compose.yml` somewhere, alongside a `.env` that sets at least
+`IMMICH_URL` and `IMMICH_API_KEY` (see [`.env.example`](.env.example)):
+
+```yaml
+services:
+  immich-recompress:
+    image: ghcr.io/lukasganster/immich-recompress:latest
+    container_name: immich-recompress
+    restart: unless-stopped
+    env_file:
+      - .env # set IMMICH_URL and IMMICH_API_KEY here
+    environment:
+      IMMICH_DB: /data/immich_recompress.db
+    ports:
+      # Bound to 127.0.0.1: this app has NO authentication and can replace/trash
+      # Immich media — do not expose it without an authenticating reverse proxy.
+      # See SECURITY.md.
+      - "127.0.0.1:${PORT:-5050}:${PORT:-5050}"
+    volumes:
+      - immich-recompress-data:/data # job-history SQLite DB
+      - immich-recompress-backups:/tmp/immich_recompress_backup # pre-replace backups
+      - immich-recompress-work:/tmp/immich_recompress_ui # download/encode scratch
+
+volumes:
+  immich-recompress-data:
+  immich-recompress-backups:
+  immich-recompress-work:
+```
+
+```bash
+docker compose up -d
+```
+
+For reproducible deploys, pin a version instead of `latest`, e.g.
+`ghcr.io/lukasganster/immich-recompress:0.1.0-beta.1`.
+
+#### Building from source
+
 ```bash
 pnpm run env                    # creates .env; set IMMICH_URL and IMMICH_API_KEY in it
 docker compose up -d --build
