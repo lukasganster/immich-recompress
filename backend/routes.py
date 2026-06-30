@@ -35,6 +35,7 @@ from backend.jobs import (
     do_recompress_motion, do_replace, do_strip_motion, emit_job_update,
     new_job, persist_if_terminal, public_job, update_job,
 )
+from backend.media import available_encoders, cpu_count
 
 bp = Blueprint("main", __name__)
 
@@ -88,6 +89,17 @@ def api_status():
         "ffprobe": ffprobe,
         "ffmpeg": ffmpeg,
         "immich_version": immich_version,
+    })
+
+
+@bp.route("/api/capabilities")
+def api_capabilities():
+    """Video encoders the running HandBrake build supports, plus the CPU-core
+    preflight max. Static for the process lifetime; the UI fetches it once to
+    populate the encoder dropdown and cap the CPU-cores control."""
+    return jsonify({
+        "encoders": available_encoders(),
+        "cpu_count": cpu_count(),
     })
 
 
@@ -436,6 +448,24 @@ def api_download(asset_id):
 # Routes: queue management
 # --------------------------------------------------------------------------- #
 
+def _clamp_threads(value):
+    """Clamp a requested CPU-thread count to [1, cpu_count()].
+
+    Returns None (encoder default = all cores) when unset, unparseable, or <= 0,
+    so the client's "0 = auto/all" sentinel never collapses to a single core.
+    Also caps a stale/oversized value to the detected core count.
+    """
+    if value is None:
+        return None
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return None
+    if n <= 0:
+        return None
+    return min(n, cpu_count())
+
+
 @bp.route("/api/enqueue", methods=["POST"])
 def api_enqueue():
     env = get_env()
@@ -456,6 +486,7 @@ def api_enqueue():
         "photo_target_savings": body.get("photo_target_savings", 40),
         "compress_raw": bool(body.get("compress_raw", False)),
         "preset": body.get("preset", "medium"),
+        "threads": _clamp_threads(body.get("threads")),
         "resolution": body.get("resolution", "original"),
         "motion_action": body.get("motion_action", "remove"),
         "skip_codecs": body.get("skip_codecs", "hevc,av1"),

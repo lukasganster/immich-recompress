@@ -84,11 +84,7 @@ export class QueuePanelComponent {
       return j.motion_action === 'recompress' ? 'Live Photo motion → recompressed' : 'Live Photo → still';
     }
     if (j.media === 'image') return `${from} → JPEG · .jpg`;
-    const ENC: Record<string, string> = {
-      x265: 'HEVC (x265)', nvenc_h265: 'HEVC (NVENC)',
-      qsv_h265: 'HEVC (QSV)', vce_h265: 'HEVC (VCE)',
-    };
-    const target = j.new_codec?.toUpperCase() ?? ENC[j.encoder] ?? j.encoder ?? 'HEVC';
+    const target = j.new_codec?.toUpperCase() ?? this.store.encoderLabel(j.encoder);
     return `${from} → ${target} · .mp4`;
   }
 }

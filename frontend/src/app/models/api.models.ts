@@ -85,6 +85,7 @@ export interface JobPublic {
   media: MediaType;
   encoder: string;
   quality: number;
+  threads: number | null;
   photo_target_savings: number;
   compress_raw: boolean;
   preset: string;
@@ -150,6 +151,7 @@ export interface Settings {
   media: MediaType;
   encoder: string;
   quality: number;
+  threads: number;
   photo_target_savings: number;
   compress_raw: boolean;
   preset: string;
@@ -159,6 +161,25 @@ export interface Settings {
   min_savings: number;
   replace: boolean;
   confirm: boolean;
+}
+
+/** One encoder the running HandBrake build supports (from /api/capabilities). */
+export interface EncoderInfo {
+  id: string;
+  label: string;
+  hw: boolean;
+  qmin: number;
+  qmax: number;
+  qdefault: number;
+  /** Quality direction: 'low' = lower is better (RF/CRF), 'high' = higher is better (VideoToolbox). */
+  qbetter: 'low' | 'high';
+  /** Whether a CPU-core count can be set for this (software) encoder. */
+  cores: boolean;
+}
+
+export interface Capabilities {
+  encoders: EncoderInfo[];
+  cpu_count: number;
 }
 
 export interface ProcessedEntry {

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { StoreService } from '../../services/store.service';
-import { Settings } from '../../models/api.models';
+import { EncoderInfo, Settings } from '../../models/api.models';
 
 @Component({
   selector: 'app-settings-panel',
@@ -17,35 +17,55 @@ export class SettingsPanelComponent {
   /** Whether the edit dialog is open. */
   readonly open = signal(false);
 
-  private readonly ENC: Record<string, string> = {
-    x265: 'HEVC (x265)', nvenc_h265: 'HEVC (NVENC)',
-    qsv_h265: 'HEVC (QSV)', vce_h265: 'HEVC (VCE)',
-  };
-
   get s(): Settings { return this.store.settings(); }
+
+  /** Spec of the currently-selected encoder (undefined until caps load). */
+  get enc(): EncoderInfo | undefined { return this.store.selectedEncoder(); }
 
   update(patch: Partial<Settings>): void {
     this.store.settings.update(s => ({ ...s, ...patch }));
     this.store.saveSettings();
   }
 
-  /** Plain-language band for an RF (rate-factor) value. */
-  rfLabel(rf: number): string {
-    if (rf <= 20) return 'near-lossless, large files';
-    if (rf <= 23) return 'high quality';
-    if (rf <= 26) return 'balanced';
-    if (rf <= 29) return 'smaller, some quality loss';
+  /** Switching encoders changes the quality scale, so reset quality to the new
+   *  encoder's default rather than carry an out-of-range value across scales. */
+  onEncoder(id: string): void {
+    const e = this.store.encoders().find(x => x.id === id);
+    this.update(e ? { encoder: id, quality: e.qdefault } : { encoder: id });
+  }
+
+  /** Effective CPU-core count (0/unset = all detected cores). */
+  get cores(): number { return this.s.threads || this.store.cpuCount(); }
+
+  /** Plain-language quality band, honouring the encoder's direction (RF-style
+   *  lower-is-better vs VideoToolbox 0–100 higher-is-better). */
+  qualityLabel(q: number): string {
+    if (this.enc?.qbetter === 'high') {
+      if (q >= 75) return 'near-lossless, large files';
+      if (q >= 60) return 'high quality';
+      if (q >= 45) return 'balanced';
+      if (q >= 30) return 'smaller, some quality loss';
+      return 'small files, visibly softer';
+    }
+    if (q <= 20) return 'near-lossless, large files';
+    if (q <= 23) return 'high quality';
+    if (q <= 26) return 'balanced';
+    if (q <= 29) return 'smaller, some quality loss';
     return 'small files, visibly softer';
   }
 
   // --- brief summary shown in the sidebar card ---
   get videoSummary(): string {
-    return `${this.ENC[this.s.encoder] ?? this.s.encoder} · RF ${this.s.quality}`;
+    const label = this.enc?.label ?? this.s.encoder;
+    const term = this.enc?.qbetter === 'high' ? 'CQ' : 'RF';
+    return `${label} · ${term} ${this.s.quality}`;
   }
 
   get outputSummary(): string {
     const res = this.s.resolution === 'original' ? 'Original' : `${this.s.resolution}p`;
-    return `${this.s.preset} · ${res}`;
+    const speed = this.enc && this.enc.hw ? 'hardware' : this.s.preset;
+    const cores = this.enc?.cores ? ` · ${this.cores} cores` : '';
+    return `${speed} · ${res}${cores}`;
   }
 
   get photoSummary(): string {

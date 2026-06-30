@@ -19,6 +19,23 @@ services:
       # internet. To expose it, put it behind an authenticating reverse proxy and
       # only then change this to "${PORT:-5050}:${PORT:-5050}". See SECURITY.md.
       - "127.0.0.1:${PORT:-5050}:${PORT:-5050}"
+    # Hardware (GPU) video encoding — see the "Hardware acceleration" section in
+    # the README. The stock image's HandBrake has only CPU encoders; these become
+    # useful with a HandBrake build that includes NVENC/QSV. Uncomment to pass the
+    # GPU through:
+    #
+    # Intel/AMD (QSV / VAAPI):
+    # devices:
+    #   - /dev/dri:/dev/dri
+    #
+    # NVIDIA NVENC (needs the NVIDIA Container Toolkit on the host):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
     volumes:
       # Job-history SQLite DB.
       - immich-recompress-data:/data

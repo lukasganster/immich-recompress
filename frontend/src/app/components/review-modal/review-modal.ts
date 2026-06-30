@@ -69,11 +69,16 @@ export class ReviewModalComponent {
         : 'Live Photo → still (motion video removed)';
     }
     if (j.media === 'image') return `${from} → JPEG · .jpg`;
-    const ENC: Record<string, string> = {
-      x265: 'HEVC (x265)', nvenc_h265: 'HEVC (NVENC)',
-      qsv_h265: 'HEVC (QSV)', vce_h265: 'HEVC (VCE)',
-    };
-    return `${from} → ${ENC[j.encoder] ?? j.encoder ?? 'HEVC'} · .mp4`;
+    return `${from} → ${this.store.encoderLabel(j.encoder)} · .mp4`;
+  }
+
+  /** Encoder summary line: friendly label, quality (RF or CQ), and preset for
+   *  software encoders only (hardware encoders don't use HandBrake presets). */
+  encoderDetail(j: JobPublic): string {
+    const e = this.store.encoders().find(x => x.id === j.encoder);
+    const term = e?.qbetter === 'high' ? 'CQ' : 'RF';
+    const head = `${this.store.encoderLabel(j.encoder)} · ${term} ${j.quality}`;
+    return (!e || !e.hw) ? `${head} · ${j.preset}` : head;
   }
 
   previewUrl(id: string, media: string): string {

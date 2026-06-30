@@ -2,7 +2,7 @@ import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import {
-  JobsResponse, Settings, StatusResponse, VideoDetail,
+  Capabilities, JobsResponse, Settings, StatusResponse, VideoDetail,
   VideosResponse, VideoSummary, User, KeyOwner, MediaType, SortField, SortOrder,
 } from '../models/api.models';
 
@@ -12,6 +12,10 @@ export class ApiService {
 
   status(): Observable<StatusResponse> {
     return this.http.get<StatusResponse>('/api/status');
+  }
+
+  capabilities(): Observable<Capabilities> {
+    return this.http.get<Capabilities>('/api/capabilities');
   }
 
   assets(params: {

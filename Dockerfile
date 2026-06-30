@@ -30,6 +30,12 @@ FROM python:3.12-slim AS runtime
 # ffmpeg/ffprobe (photo recompression + codec probing) and HandBrakeCLI
 # (video re-encoding, software x265 works everywhere). `sips` is macOS-only and
 # intentionally absent here — the app degrades gracefully (RAW compression off).
+#
+# Debian's handbrake-cli is built WITHOUT the GPU encoders (NVENC/QSV), so only
+# the CPU encoders are detected at runtime here — software multi-core x265/AV1 is
+# the out-of-the-box path. To enable hardware encoding, swap in a HandBrake build
+# compiled with NVENC/QSV and pass the GPU device into the container (see the
+# "Hardware acceleration" section of the README and docker-compose.yml).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ffmpeg \

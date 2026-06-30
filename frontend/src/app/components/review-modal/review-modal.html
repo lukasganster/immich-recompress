@@ -32,7 +32,7 @@
             @if (j.media === 'image') {
               <dt>Setting</dt><dd>Target savings {{ j.photo_target_savings ?? '—' }}%</dd>
             } @else {
-              <dt>Encoder</dt><dd>{{ j.encoder }} · RF {{ j.quality }} · {{ j.preset }}</dd>
+              <dt>Encoder</dt><dd>{{ encoderDetail(j) }}</dd>
             }
             @if (j.media === 'motionphoto') {
               <dt>Still Photo</dt><dd>Unchanged</dd>

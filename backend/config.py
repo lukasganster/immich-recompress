@@ -61,13 +61,6 @@ MIN_FREE_BYTES = 200 * 1024 ** 2   # safety buffer for the work dir
 TERMINAL_STATES = {"done", "downloaded", "encoded", "skipped",
                    "error", "cancelled", "discarded"}
 
-ENCODER_MAP = {
-    "x265": "x265",
-    "nvenc_h265": "nvenc_h265",
-    "qsv_h265": "qsv_h265",
-    "vce_h265": "vce_h265",
-}
-
 # Photos are only *compressed*, never converted: we recompress JPEG in place and
 # skip every other format (so the on-disk format never changes). RAW gets its
 # own message since converting it would also destroy the original.

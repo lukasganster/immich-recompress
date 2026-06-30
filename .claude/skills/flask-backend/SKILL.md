@@ -40,7 +40,11 @@ Keep `ruff check --select E9,F63,F7,F82 backend/` clean.
   side effects (env load), hence the `# noqa: F401` import in `server.py`.
 - `state.py` — shared in-memory queue state + cancellation primitives.
 - `db.py` — SQLite persistence of terminal job history (`db_init`, `load_persisted_jobs`).
-- `media.py` — builds ffprobe / HandBrake / ffmpeg command lines.
+- `media.py` — builds ffprobe / HandBrake / ffmpeg command lines; also the encoder
+  catalog + runtime detection (`ENCODER_CATALOG`, `available_encoders()` parsed from
+  `HandBrakeCLI --help`, `cpu_count()`). `build_handbrake_cmd(..., threads)` resolves the
+  `-e` name from the catalog, applies presets/`--encopts` thread caps only to software
+  encoders. The UI reads detected encoders + cpu count from `GET /api/capabilities`.
 - `immich_api.py` — Immich HTTP client + parsing/summary helpers.
 - `jobs.py` — job lifecycle, encode pipeline, the background worker, SSE broadcast.
 - `routes.py` — the Flask blueprint `bp` with all HTTP routes.

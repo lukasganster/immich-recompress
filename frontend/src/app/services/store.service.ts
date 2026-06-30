@@ -1,7 +1,7 @@
 import { computed, effect, Injectable, signal } from '@angular/core';
 import {
-  JobPublic, JobStatus, KeyOwner, MediaType, ProcessedEntry, Settings, SortField, SortOrder,
-  SseJobUpdate, User, VideoSummary,
+  Capabilities, EncoderInfo, JobPublic, JobStatus, KeyOwner, MediaType, ProcessedEntry,
+  Settings, SortField, SortOrder, SseJobUpdate, User, VideoSummary,
 } from '../models/api.models';
 
 const LS_BROWSE = 'immich_browse';
@@ -64,6 +64,13 @@ export class StoreService {
   readonly ffprobe = signal(false);
   readonly ffmpeg = signal(false);
 
+  // --- encoder/CPU capabilities (from /api/capabilities) ---
+  readonly encoders = signal<EncoderInfo[]>([]);
+  readonly cpuCount = signal(1);
+  /** The encoder spec for the current settings, or undefined until caps load. */
+  readonly selectedEncoder = computed(() =>
+    this.encoders().find(e => e.id === this.settings().encoder));
+
   // --- queue ---
   readonly jobs = signal<Record<string, JobPublic>>({});
   readonly activeId = signal<string | null>(null);
@@ -80,6 +87,7 @@ export class StoreService {
     media: 'video',
     encoder: 'x265',
     quality: 24,
+    threads: 0,  // 0 = use all cores; set to the detected max once caps load
     photo_target_savings: 40,
     compress_raw: false,
     preset: 'medium',
@@ -124,7 +132,9 @@ export class StoreService {
       if (q >= q1 && q <= q2) { frac = f1 + (f2 - f1) * ((q - q1) / (q2 - q1)); break; }
       if (q > q2) frac = f2;
     }
-    const mult = s.encoder === 'x265' ? (PRESET_SAVINGS_MULT[s.preset] ?? 1.0) : 0.9;
+    // Software encoders gain efficiency from slower presets; hardware encoders
+    // ignore presets and trade a little ratio for speed.
+    const mult = this.selectedEncoder()?.hw ? 0.9 : (PRESET_SAVINGS_MULT[s.preset] ?? 1.0);
     return Math.max(0, Math.min(0.95, frac * mult));
   });
 
@@ -143,7 +153,7 @@ export class StoreService {
         const [w, h] = v.resolution.split('x').map(Number);
         if (w && h) res = Math.min(8, Math.max(0.3, (w * h) / (1920 * 1080)));
       }
-      const rt = s.encoder === 'x265' ? (PRESET_REALTIME[s.preset] ?? 1.3) : 0.15;
+      const rt = this.selectedEncoder()?.hw ? 0.15 : (PRESET_REALTIME[s.preset] ?? 1.3);
       return sum + dur * rt * res;
     }, 0);
   });
@@ -222,6 +232,34 @@ export class StoreService {
     try {
       localStorage.setItem(LS_SETTINGS, JSON.stringify(this.settings()));
     } catch { /* ignore */ }
+  }
+
+  /** Friendly label for an encoder id, from detected capabilities; falls back
+   *  to the raw id (e.g. for a historical job whose encoder this build lacks). */
+  encoderLabel(id: string): string {
+    return this.encoders().find(e => e.id === id)?.label ?? id ?? 'HEVC';
+  }
+
+  /** Apply the runtime encoder/CPU capabilities: reconcile persisted settings
+   *  with what the running HandBrake build actually supports. */
+  applyCapabilities(caps: Capabilities): void {
+    const encoders = caps.encoders ?? [];
+    const cpu = Math.max(1, caps.cpu_count || 1);
+    this.encoders.set(encoders);
+    this.cpuCount.set(cpu);
+    this.settings.update(s => {
+      const next = { ...s };
+      // Default/clamp the CPU-core count to the detected max (0 = unset → all).
+      if (!next.threads || next.threads > cpu) next.threads = cpu;
+      // If the persisted encoder isn't available in this build, fall back to the
+      // first available one and reset quality to that encoder's default scale.
+      if (encoders.length && !encoders.some(e => e.id === next.encoder)) {
+        next.encoder = encoders[0].id;
+        next.quality = encoders[0].qdefault;
+      }
+      return next;
+    });
+    this.saveSettings();
   }
 
   markProcessed(id: string, job: JobPublic): void {

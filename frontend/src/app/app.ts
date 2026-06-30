@@ -87,6 +87,7 @@ export class App implements OnInit {
       this.store.ffprobe.set(s.ffprobe);
       this.store.ffmpeg.set(s.ffmpeg);
     });
+    this.api.capabilities().subscribe(c => this.store.applyCapabilities(c));
     this.api.users().subscribe(data => this.store.users.set(data.users ?? []));
     this.api.keyOwners().subscribe(data => this.store.keyOwners.set(data.owners ?? []));
     this.api.jobs().subscribe(data => {

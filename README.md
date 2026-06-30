@@ -18,6 +18,8 @@ live progress.
 
 - Browse videos, photos or Live Photos, filtered by size.
 - Re-encode videos (HandBrake: x264 / x265 / AV1, optional resolution cap).
+- Hardware (GPU) encoding when available, auto-detected at runtime, plus a
+  selectable CPU-core count. See [Hardware acceleration](#hardware-acceleration).
 - Recompress JPEGs to a target size (ffmpeg, with a macOS `sips` fallback);
   optional opt-in RAW → JPEG.
 - Strip the hidden motion video from Live Photos.
@@ -131,6 +133,35 @@ Set in `.env` (see [`.env.example`](.env.example)):
 | `PORT`           | no       | Listen port (default `5050`)                         |
 | `HOST`           | no       | Dev-server bind address (default `127.0.0.1`)        |
 | `IMMICH_DB`      | no       | SQLite job-history path (default `./immich_recompress.db`) |
+
+## Hardware acceleration
+
+The encoder dropdown is detected at runtime from your `HandBrakeCLI` build, so
+you only see options that work. Hardware encoders are far faster and barely touch
+the CPU; software encoders compress best and expose a **CPU cores** slider
+(defaults to all cores — lower it to keep the machine responsive).
+
+| Platform | Hardware encoder | How to enable |
+| -------- | ---------------- | ------------- |
+| macOS | Apple VideoToolbox | Works out of the box. |
+| Linux + Intel/AMD | QSV / VAAPI | Pass `/dev/dri` (below) + a HandBrake build with QSV/VAAPI. |
+| Linux + NVIDIA | NVENC | [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) + GPU reservation (below) + a HandBrake build with NVENC. |
+
+> **Docker:** the stock image's Debian `handbrake-cli` has **no** GPU encoders, so
+> only CPU encoders appear — NVENC/QSV need a HandBrake build that includes them.
+> The passthrough wiring below (and in `docker-compose.yml`) is ready for one.
+
+```yaml
+services:
+  immich-recompress:
+    devices:
+      - /dev/dri:/dev/dri          # Intel/AMD (QSV / VAAPI)
+    deploy:                         # NVIDIA NVENC (needs the Container Toolkit)
+      resources:
+        reservations:
+          devices:
+            - { driver: nvidia, count: all, capabilities: [gpu] }
+```
 
 ## Project layout
 

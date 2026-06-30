@@ -13,7 +13,7 @@ import time
 from werkzeug.utils import secure_filename
 
 from backend.config import (
-    BACKUP_DIR, ENCODER_MAP, JPEG_PHOTO_EXTS, RAW_PHOTO_EXTS, TERMINAL_STATES,
+    BACKUP_DIR, JPEG_PHOTO_EXTS, RAW_PHOTO_EXTS, TERMINAL_STATES,
     WORK_DIR, get_env, human_duration, human_size, utcnow_iso,
 )
 from backend.state import (
@@ -73,6 +73,7 @@ def new_job(asset_id, params):
         "photo_target_savings": params.get("photo_target_savings", 40),
         "compress_raw": params.get("compress_raw", False),
         "preset": params.get("preset", "medium"),
+        "threads": params.get("threads"),
         "resolution": params.get("resolution", "original"),
         "motion_action": params.get("motion_action", "remove"),
         "skip_codecs": params.get("skip_codecs", "hevc,av1"),
@@ -182,29 +183,52 @@ def load_persisted_jobs():
 
 
 
+_PCT_RE = re.compile(r"(\d+(?:\.\d+)?)\s*%")
+
+
 def _parse_pct(line):
-    """Extract a progress percentage (0–100 float) from a HandBrake output line."""
-    if "%" not in line:
+    """Extract a progress percentage (0–100 float) from a HandBrake output line.
+
+    Reads the number attached to the ``%`` sign rather than the first number in
+    the line: HandBrake's progress line is ``Encoding: task 1 of 1, 47.50 %``,
+    so a naive "first number 0–100" scan would lock onto the ``1`` in "task 1 of
+    1" and pin progress at 1%.
+    """
+    m = _PCT_RE.search(line)
+    if not m:
         return None
-    for token in line.replace("%", " ").split():
-        try:
-            val = float(token)
-            if 0.0 <= val <= 100.0:
-                return val
-        except ValueError:
-            continue
-    return None
+    try:
+        val = float(m.group(1))
+    except ValueError:
+        return None
+    return val if 0.0 <= val <= 100.0 else None
+
+
+def _progress_from_line(line):
+    """Progress % for the bar, or None. Only HandBrake's *encode* phase counts.
+
+    HandBrake's preview **scan** also runs 0→100% (``Scanning title 1 of 1,
+    preview 10, 100.00 %``) and finishes before the encode starts, so counting it
+    would slam the bar to 100% while the real work hasn't begun. Muxing/optimize
+    and activity-log lines carry no encode percentage either.
+    """
+    if not line.lstrip().startswith("Encoding"):
+        return None
+    return _parse_pct(line)
 
 
 def run_handbrake(cmd, asset_id, source_duration):
-    """Run HandBrakeCLI, parsing progress from stderr. Returns True on success.
+    """Run HandBrakeCLI, parsing progress from its output. Returns True on success.
 
-    HandBrakeCLI uses \\r (carriage return) for progress lines, not \\n, so we
-    read character-by-character and split on both terminators.
+    HandBrakeCLI writes the live ``Encoding: task 1 of 1, X %`` progress to
+    *stdout*, and its activity log (plus any error detail) to *stderr*, so we
+    merge stderr into stdout and read the combined stream — discarding stdout
+    (as before) would mean never seeing real encode progress. Progress lines use
+    \\r (carriage return), not \\n, so we read char-by-char and split on both.
     """
     try:
-        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
-                                stderr=subprocess.PIPE, text=True, bufsize=0)
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True, bufsize=0)
     except (OSError, ValueError):
         update_job(asset_id, log="Failed to start HandBrakeCLI")
         emit_job_update(asset_id)
@@ -214,7 +238,7 @@ def run_handbrake(cmd, asset_id, source_duration):
     last_emit = 0.0
     buf = ""
     while True:
-        ch = proc.stderr.read(1)
+        ch = proc.stdout.read(1)
         if not ch:
             break
         if ch in ("\r", "\n"):
@@ -222,7 +246,7 @@ def run_handbrake(cmd, asset_id, source_duration):
             buf = ""
             if not line:
                 continue
-            pct = _parse_pct(line)
+            pct = _progress_from_line(line)
             changes = {"log": line}
             if pct is not None:
                 changes["progress"] = round(pct, 1)
@@ -236,8 +260,9 @@ def run_handbrake(cmd, asset_id, source_duration):
 
     # flush any remaining buffer (no trailing newline)
     if buf.strip():
-        pct = _parse_pct(buf.strip())
-        changes = {"log": buf.strip()}
+        line = buf.strip()
+        pct = _progress_from_line(line)
+        changes = {"log": line}
         if pct is not None:
             changes["progress"] = round(pct, 1)
         update_job(asset_id, **changes)
@@ -825,7 +850,7 @@ def process_motionphoto_job(env, asset_id, params):
         emit_job_update(asset_id)
         cmd = build_handbrake_cmd(src_path, out_path, params.get("encoder", "x265"),
                                   params.get("quality", 24), params.get("preset", "medium"),
-                                  params.get("resolution", "original"))
+                                  params.get("resolution", "original"), params.get("threads"))
         ok = run_handbrake(cmd, asset_id, src_duration)
         if not ok or not os.path.isfile(out_path):
             cancelled = is_cancelled(asset_id)
@@ -999,7 +1024,7 @@ def process_job(asset_id):
 
     cmd = build_handbrake_cmd(src_path, out_path, params.get("encoder", "x265"),
                               params.get("quality", 24), params.get("preset", "medium"),
-                              params.get("resolution", "original"))
+                              params.get("resolution", "original"), params.get("threads"))
     ok = run_handbrake(cmd, asset_id, src_duration)
     if not ok or not os.path.isfile(out_path):
         cancelled = is_cancelled(asset_id)

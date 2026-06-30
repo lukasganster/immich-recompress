@@ -24,35 +24,60 @@
 
         <div class="field">
           <label>Encoder</label>
-          <select [ngModel]="s.encoder" (ngModelChange)="update({encoder: $event})">
-            <option value="x265">x265</option>
-            <option value="nvenc_h265">nvenc_h265</option>
-            <option value="qsv_h265">qsv_h265</option>
-            <option value="vce_h265">vce_h265</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label>Quality (RF): {{ s.quality }} · {{ rfLabel(s.quality) }}</label>
-          <div class="rangewrap">
-            <input type="range" min="18" max="32"
-              [ngModel]="s.quality" (ngModelChange)="update({quality: +$event})" />
-            <input type="number" min="18" max="32" class="num-input"
-              [ngModel]="s.quality" (ngModelChange)="update({quality: +$event})" />
-          </div>
-          <small>Constant-quality target for the encoder (HandBrake's RF, like CRF).
-            <strong>Lower = better quality &amp; bigger files; higher = smaller files &amp; lower quality.</strong>
-            Roughly each +6 halves the size. 18 ≈ near-lossless, ~22–26 is the sweet spot, 32 is small but visibly soft.</small>
-        </div>
-
-        <div class="field">
-          <label>Preset</label>
-          <select [ngModel]="s.preset" (ngModelChange)="update({preset: $event})">
-            @for (p of ['ultrafast','superfast','veryfast','faster','fast','medium','slow','slower','veryslow']; track p) {
-              <option [value]="p">{{ p }}</option>
+          <select [ngModel]="s.encoder" (ngModelChange)="onEncoder($event)">
+            @for (e of store.encoders(); track e.id) {
+              <option [value]="e.id">{{ e.label }}</option>
+            } @empty {
+              <option [value]="s.encoder">{{ s.encoder }}</option>
             }
           </select>
+          <small>Hardware (GPU) encoders are listed only when the running HandBrake
+            build supports them — they're far faster and barely touch the CPU.</small>
         </div>
+
+        <div class="field">
+          <label>Quality ({{ enc?.qbetter === 'high' ? 'CQ' : 'RF' }}): {{ s.quality }} · {{ qualityLabel(s.quality) }}</label>
+          <div class="rangewrap">
+            <input type="range" [min]="enc?.qmin ?? 18" [max]="enc?.qmax ?? 32"
+              [ngModel]="s.quality" (ngModelChange)="update({quality: +$event})" />
+            <input type="number" [min]="enc?.qmin ?? 18" [max]="enc?.qmax ?? 32" class="num-input"
+              [ngModel]="s.quality" (ngModelChange)="update({quality: +$event})" />
+          </div>
+          @if (enc?.qbetter === 'high') {
+            <small>Constant-quality target (0–100).
+              <strong>Higher = better quality &amp; bigger files; lower = smaller files.</strong>
+              ~55–65 is a good balance.</small>
+          } @else {
+            <small>Constant-quality target for the encoder (HandBrake's RF, like CRF).
+              <strong>Lower = better quality &amp; bigger files; higher = smaller files &amp; lower quality.</strong>
+              Roughly each +6 halves the size. 18 ≈ near-lossless, ~22–26 is the sweet spot, 32 is small but visibly soft.</small>
+          }
+        </div>
+
+        @if (!enc?.hw) {
+          <div class="field">
+            <label>Preset</label>
+            <select [ngModel]="s.preset" (ngModelChange)="update({preset: $event})">
+              @for (p of ['ultrafast','superfast','veryfast','faster','fast','medium','slow','slower','veryslow']; track p) {
+                <option [value]="p">{{ p }}</option>
+              }
+            </select>
+          </div>
+        }
+
+        @if (enc?.cores) {
+          <div class="field">
+            <label>CPU cores: {{ cores }} / {{ store.cpuCount() }}</label>
+            <div class="rangewrap">
+              <input type="range" min="1" [max]="store.cpuCount()"
+                [ngModel]="cores" (ngModelChange)="update({threads: +$event})" />
+              <input type="number" min="1" [max]="store.cpuCount()" class="num-input"
+                [ngModel]="cores" (ngModelChange)="update({threads: +$event})" />
+            </div>
+            <small>How many CPU cores the software encoder may use — {{ store.cpuCount() }} detected.
+              Fewer keeps the machine responsive; the max is fastest.</small>
+          </div>
+        }
 
         <div class="field">
           <label>Max Resolution</label>
