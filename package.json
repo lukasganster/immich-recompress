@@ -1,6 +1,6 @@
 {
   "name": "immich-recompress",
-  "version": "0.1.0-beta.1",
+  "version": "0.1.0-beta.2",
   "description": "Self-hosted web app to browse, inspect and recompress the videos and photos in your Immich library to reclaim storage. Early development / beta.",
   "private": true,
   "scripts": {
