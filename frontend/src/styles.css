@@ -209,4 +209,5 @@ app-ui-grid {
   --ui-grid-accent: var(--accent);
   --ui-grid-radius: 8px;
   --ui-grid-shadow: none;
+  --ui-grid-overflow-x: hidden;
 }

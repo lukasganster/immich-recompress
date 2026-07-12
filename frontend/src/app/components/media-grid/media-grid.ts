@@ -1,9 +1,10 @@
 import {
   ChangeDetectionStrategy, Component, computed, inject,
-  OnInit, output, signal, TemplateRef, viewChild,
+  OnDestroy, OnInit, output, signal, TemplateRef, viewChild,
 } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { UiGridComponent, GridOptions, GridColumnDef, GridCellTemplateContext } from '@ornery/ui-grid';
+import { Subscription } from 'rxjs';
 import { StoreService } from '../../services/store.service';
 import { ApiService } from '../../services/api.service';
 import { VideoSummary, JobStatus } from '../../models/api.models';
@@ -16,7 +17,7 @@ import { VideoSummary, JobStatus } from '../../models/api.models';
   templateUrl: './media-grid.html',
   styleUrl: './media-grid.css',
 })
-export class MediaGridComponent implements OnInit {
+export class MediaGridComponent implements OnInit, OnDestroy {
   readonly store = inject(StoreService);
   readonly api = inject(ApiService);
 
@@ -28,43 +29,77 @@ export class MediaGridComponent implements OnInit {
   readonly statusTpl = viewChild.required<TemplateRef<GridCellTemplateContext>>('statusTpl');
   readonly actionsTpl = viewChild.required<TemplateRef<GridCellTemplateContext>>('actionsTpl');
   readonly selectTpl = viewChild.required<TemplateRef<GridCellTemplateContext>>('selectTpl');
-  readonly selectHeaderTpl = viewChild.required<TemplateRef<unknown>>('selectHeaderTpl');
 
   private tplsReady = signal(false);
+  private assetRequest: Subscription | null = null;
+  private sortUnsubscribe: (() => void) | null = null;
+
+  /** Bumped on every successful load. @ornery/ui-grid's Angular cell-template
+   *  bridge keys slots by row position, not row id, so swapping in a whole new
+   *  page of rows (same slot positions, different ids) leaves stale content in
+   *  templated cells (name/size/status/actions). Keying the grid on this value
+   *  forces Angular to destroy and recreate it whenever the row set changes,
+   *  which sidesteps the bug. Plain non-templated columns aren't affected. */
+  readonly loadGen = signal(0);
+
+  readonly totalPages = computed(() =>
+    Math.max(1, Math.ceil(this.store.total() / this.store.perPage()))
+  );
+
+  readonly firstItem = computed(() =>
+    this.store.total() ? (this.store.page() - 1) * this.store.perPage() + 1 : 0
+  );
+
+  readonly lastItem = computed(() =>
+    Math.min(this.store.page() * this.store.perPage(), this.store.total())
+  );
+
+  /** Width of the select column, shared with the "Select all" overlay
+   *  checkbox in the template (see media-grid.html) — the grid library only
+   *  supports Angular templates for body cells, not header cells, so that
+   *  checkbox is a real DOM element positioned on top of this column's
+   *  (otherwise blank) header cell rather than rendered by the grid itself. */
+  readonly selectColWidth = '4%';
+  /** Pinned so the overlay checkbox's CSS height always matches the
+   *  rendered header row, regardless of the library's own default. */
+  readonly headerRowHeight = 50;
 
   gridOptions = computed<GridOptions | null>(() => {
     if (!this.tplsReady()) return null;
     const hideClipCols = this.store.media() !== 'video';  // duration/codec only apply to videos
+    const widths = hideClipCols
+      ? { select: this.selectColWidth, name: '32%', size: '10%', resolution: '10%', date: '11%', user: '11%', status: '14%', actions: '8%' }
+      : { select: this.selectColWidth, name: '24%', size: '8%', resolution: '10%', duration: '8%', codec: '7%', date: '9%', user: '9%', status: '14%', actions: '7%' };
     const cols: GridColumnDef[] = [
       {
-        name: 'select', displayName: ' ', field: 'id', width: '44px',
+        name: 'select', displayName: ' ', field: 'id', width: widths.select,
         enableSorting: false, enableFiltering: false,
         cellTemplate: this.selectTpl() as TemplateRef<GridCellTemplateContext>,
       },
       {
         name: 'name', displayName: 'Name', field: 'name', enableSorting: true,
         cellTemplate: this.nameTpl() as TemplateRef<GridCellTemplateContext>,
-        width: '260px',
+        width: widths.name,
       },
       {
         name: 'size', displayName: 'Size', field: 'size', enableSorting: true,
         cellTemplate: this.sizeTpl() as TemplateRef<GridCellTemplateContext>,
-        width: '110px',
+        width: widths.size,
       },
-      { name: 'resolution', displayName: 'Resolution', field: 'resolution', enableSorting: false, width: '110px' },
+      { name: 'resolution', displayName: 'Resolution', field: 'resolution', enableSorting: false, width: widths.resolution },
       ...(hideClipCols ? [] : [
-        { name: 'duration', displayName: 'Duration', field: 'duration_human', enableSorting: true, width: '80px' } as GridColumnDef,
-        { name: 'codec', displayName: 'Codec', field: 'codec', enableSorting: false, width: '80px' } as GridColumnDef,
+        { name: 'duration', displayName: 'Duration', field: 'duration_human', enableSorting: true, width: widths.duration } as GridColumnDef,
+        { name: 'codec', displayName: 'Codec', field: 'codec', enableSorting: false, width: widths.codec } as GridColumnDef,
       ]),
-      { name: 'date', displayName: 'Date', field: 'date', enableSorting: true, width: '100px',
-        formatter: (v) => v ? new Date(String(v)).toLocaleDateString('en-US') : '—' },
-      { name: 'owner_name', displayName: 'User', field: 'owner_name', enableSorting: false, width: '110px' },
+      { name: 'date', displayName: 'Date', field: 'date', enableSorting: true, width: widths.date,
+        formatter: (v) => v ? String(v).slice(0, 10) : '—' },
+      { name: 'owner_name', displayName: 'User', field: 'owner_name', enableSorting: false, width: widths.user },
       {
-        name: 'status', displayName: 'Status', field: 'status', enableSorting: false, width: '140px',
+        name: 'status', displayName: 'Status', field: 'status', enableSorting: false, width: widths.status,
         cellTemplate: this.statusTpl() as TemplateRef<GridCellTemplateContext>,
       },
       {
-        name: 'actions', displayName: '', field: 'id', enableSorting: false, width: '160px',
+        name: 'actions', displayName: '', field: 'id', enableSorting: false, width: widths.actions,
         cellTemplate: this.actionsTpl() as TemplateRef<GridCellTemplateContext>,
       },
     ];
@@ -75,30 +110,22 @@ export class MediaGridComponent implements OnInit {
       columnDefs: cols,
       enableSorting: true,
       enableFiltering: false,
-      enablePagination: true,
-      enablePaginationControls: true,
-      useExternalPagination: true,
-      paginationPageSizes: [10, 25, 50, 100],
-      paginationPageSize: this.store.perPage(),
-      paginationCurrentPage: this.store.page() - 1,
-      totalItems: this.store.total(),
+      headerRowHeight: this.headerRowHeight,
+      // The backend already returns one page. Keep the grid's internal pager
+      // disabled and use the component pager below to request that page.
+      enablePagination: false,
+      enablePaginationControls: false,
       emptyMessage: this.store.loaded() ? 'No assets found' : 'No assets loaded — select a media type to get started.',
       onRegisterApi: (api) => {
         const gridApi = api as {
-          pagination?: {
-            on?: { paginationChanged?: (cb: (page: number, size: number) => void) => void };
-          };
           core?: {
-            on?: { sortChanged?: (cb: (col: string | null, dir: string) => void) => void };
+            on?: { sortChanged?: (cb: (col: string | null, dir: string) => void) => (() => void) };
           };
         };
-        gridApi.pagination?.on?.paginationChanged?.((page, size) => {
-          this.store.page.set(page + 1);
-          this.store.perPage.set(size);
-          this.store.saveBrowse();
-          this.load();
-        });
-        gridApi.core?.on?.sortChanged?.((col, dir) => {
+        // ui-grid calls onRegisterApi again whenever reactive options change.
+        // Replace the old sort listener so loads do not multiply over time.
+        this.sortUnsubscribe?.();
+        this.sortUnsubscribe = gridApi.core?.on?.sortChanged?.((col, dir) => {
           if (!col) return;
           const fieldMap: Record<string, string> = { name: 'name', size: 'size', duration: 'duration', date: 'date' };
           const sortField = fieldMap[col] ?? 'size';
@@ -106,7 +133,7 @@ export class MediaGridComponent implements OnInit {
           this.store.order.set(dir === 'asc' ? 'asc' : 'desc');
           this.store.page.set(1);
           this.load();
-        });
+        }) ?? null;
       },
     };
   });
@@ -116,12 +143,36 @@ export class MediaGridComponent implements OnInit {
     setTimeout(() => this.tplsReady.set(true), 0);
   }
 
+  ngOnDestroy(): void {
+    this.assetRequest?.unsubscribe();
+    this.sortUnsubscribe?.();
+  }
+
+  goToPage(page: number): void {
+    const nextPage = Math.min(Math.max(1, page), this.totalPages());
+    if (nextPage === this.store.page()) return;
+    this.store.page.set(nextPage);
+    this.load();
+  }
+
+  changePageSize(value: unknown): void {
+    const size = Number(value);
+    if (!this.store.perPageOptions.includes(size as 10 | 25 | 50 | 100)) return;
+    this.store.perPage.set(size);
+    this.store.page.set(1);
+    this.store.saveBrowse();
+    this.load();
+  }
+
   /** Fetch the asset list. Pass `showOverlay` for user-initiated heavy loads
    *  (Select Media apply) so a "Loading …" dialog covers the pending request. */
   load(showOverlay = false): void {
     const s = this.store;
     if (showOverlay) s.loading.set(true);
-    this.api.assets({
+    // Abort a superseded page/filter request so a late response cannot replace
+    // the data for the page the user most recently selected.
+    this.assetRequest?.unsubscribe();
+    this.assetRequest = this.api.assets({
       page: s.page(), per_page: s.perPage(), sort: s.sort(), order: s.order(),
       media: s.media(), min_mb: s.effectiveMinMb(),
       codec: s.codec() || undefined, user: s.userFilter() || undefined,
@@ -136,6 +187,7 @@ export class MediaGridComponent implements OnInit {
         s.loaded.set(true);
         s.loadError.set(data.error ?? null);
         s.loading.set(false);
+        this.loadGen.update(g => g + 1);
       },
       error: () => {
         s.loadError.set('Failed to load');

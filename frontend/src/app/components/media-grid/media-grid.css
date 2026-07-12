@@ -1,5 +1,64 @@
 :host { display: block; }
 
+.grid-shell { position: relative; }
+
+/* The grid library has no way to host an Angular template in a header
+   cell (only body cells), so this sits on top of the select column's
+   otherwise-blank header cell as a real, independently-clickable element. */
+.select-all-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.select-all-overlay input[type="checkbox"] { cursor: pointer; accent-color: var(--accent); }
+
+.grid-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border-soft);
+  background: var(--bg-elev-2);
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.pager-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pager-controls button,
+.pager-controls select {
+  height: 30px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  color: var(--text);
+}
+
+.pager-controls button {
+  width: 40px;
+  font-size: 18px;
+}
+
+.pager-controls button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pager-controls select {
+  padding: 0 10px;
+}
+
 .empty-grid {
   padding: 32px;
   text-align: center;

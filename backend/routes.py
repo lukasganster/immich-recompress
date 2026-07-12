@@ -15,7 +15,8 @@ from flask import (
 )
 
 from backend.config import (
-    BACKUP_DIR, FRONTEND_PER_PAGE, HTTP_TIMEOUT, IMMICH_PER_PAGE, STATIC_DIR,
+    ASSET_CACHE_TTL, BACKUP_DIR, FRONTEND_PER_PAGE, HTTP_TIMEOUT,
+    IMMICH_PER_PAGE, STATIC_DIR,
     get_env, human_duration, human_size, parse_duration, utcnow_iso,
 )
 from backend.state import (
@@ -38,6 +39,32 @@ from backend.jobs import (
 from backend.media import available_encoders, cpu_count
 
 bp = Blueprint("main", __name__)
+
+_asset_cache = {}
+_asset_cache_lock = threading.Lock()
+
+
+def _cached_asset_summaries(key):
+    """Return a copy of a recent completed scan, if one exists."""
+    now = time.monotonic()
+    with _asset_cache_lock:
+        cached = _asset_cache.get(key)
+        if not cached or now - cached[0] >= ASSET_CACHE_TTL:
+            if cached:
+                _asset_cache.pop(key, None)
+            return None
+        return list(cached[1])
+
+
+def _cache_asset_summaries(key, summaries):
+    now = time.monotonic()
+    with _asset_cache_lock:
+        expired = [cache_key for cache_key, value in _asset_cache.items()
+                   if now - value[0] >= ASSET_CACHE_TTL]
+        for cache_key in expired:
+            _asset_cache.pop(cache_key, None)
+        _asset_cache[key] = (now, list(summaries))
+
 
 @bp.before_request
 def _validate_asset_id():
@@ -152,10 +179,19 @@ def api_assets():
     # `keys` restricts the scan to a subset of API keys (by index); empty = all.
     key_indices = parse_key_indices(request.args.get("keys"), len(api_keys))
 
+    cache_key = (
+        env["url"], tuple(api_keys), tuple(key_indices), media, min_bytes,
+        codec_filter, user_filter, search_filter,
+    )
+    summaries = _cached_asset_summaries(cache_key)
+    if summaries is not None:
+        return paginate_summaries(summaries, sort, order, page, per_page)
+
     fetch_users(env)
 
     if media == "motionphoto":
         summaries = collect_motion_photos(env, key_indices, min_bytes, user_filter, search_filter)
+        _cache_asset_summaries(cache_key, summaries)
         return paginate_summaries(summaries, sort, order, page, per_page)
 
     # collected is a list of (asset_dict, key_idx) tuples
@@ -217,6 +253,7 @@ def api_assets():
             continue
         summaries.append(summary)
 
+    _cache_asset_summaries(cache_key, summaries)
     return paginate_summaries(summaries, sort, order, page, per_page)
 
 
