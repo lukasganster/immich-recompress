@@ -91,7 +91,7 @@ docker compose up -d
 ```
 
 For reproducible deploys, pin a version instead of `latest`, e.g.
-`ghcr.io/lukasganster/immich-recompress:0.1.0-beta.1`.
+`ghcr.io/lukasganster/immich-recompress:1.0.0`.
 
 #### Building from source
 
