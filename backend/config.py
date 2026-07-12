@@ -56,6 +56,7 @@ DB_PATH = os.environ.get("IMMICH_DB", os.path.join(PROJECT_ROOT, "immich_recompr
 IMMICH_PER_PAGE = 1000      # page size requested from Immich
 FRONTEND_PER_PAGE = 100     # page size returned to the browser
 USER_CACHE_TTL = 300        # seconds (5 minutes)
+ASSET_CACHE_TTL = 60        # reuse a completed library scan across page changes
 HTTP_TIMEOUT = 30           # seconds for normal Immich calls
 MIN_FREE_BYTES = 200 * 1024 ** 2   # safety buffer for the work dir
 TERMINAL_STATES = {"done", "downloaded", "encoded", "skipped",
