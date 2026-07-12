@@ -1,7 +1,7 @@
 {
   "name": "immich-recompress",
-  "version": "0.1.0-beta.2",
-  "description": "Self-hosted web app to browse, inspect and recompress the videos and photos in your Immich library to reclaim storage. Early development / beta.",
+  "version": "1.0.0",
+  "description": "Self-hosted web app to browse, inspect and recompress the videos and photos in your Immich library to reclaim storage.",
   "private": true,
   "scripts": {
     "setup": "python3 -m venv .venv && .venv/bin/pip install -r requirements.txt",
