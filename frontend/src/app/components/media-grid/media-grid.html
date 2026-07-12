@@ -1,7 +1,16 @@
 @if (gridOptions()) {
-  @for (gen of [loadGen()]; track gen) {
-    <app-ui-grid [options]="gridOptions()!" />
-  }
+  <div class="grid-shell">
+    @for (gen of [loadGen()]; track gen) {
+      <app-ui-grid [options]="gridOptions()!" />
+    }
+    <label class="select-all-overlay"
+      [style.width]="selectColWidth" [style.height.px]="headerRowHeight"
+      title="Select all">
+      <input type="checkbox" aria-label="Select all"
+        [checked]="isAllSelected()"
+        (change)="toggleAll()" />
+    </label>
+  </div>
   <div class="grid-pager">
     <span>{{ firstItem() }}-{{ lastItem() }} of {{ store.total() }}</span>
     <div class="pager-controls">
@@ -40,10 +49,6 @@
       [title]="store.isDone(st) ? 'Already optimized' : ''"
       (change)="toggleSelect(row['id'])" />
   </div>
-</ng-template>
-
-<ng-template #selectHeaderTpl>
-  <input type="checkbox" [checked]="isAllSelected()" (change)="toggleAll()" />
 </ng-template>
 
 <ng-template #nameTpl let-row="row">

@@ -29,7 +29,6 @@ export class MediaGridComponent implements OnInit, OnDestroy {
   readonly statusTpl = viewChild.required<TemplateRef<GridCellTemplateContext>>('statusTpl');
   readonly actionsTpl = viewChild.required<TemplateRef<GridCellTemplateContext>>('actionsTpl');
   readonly selectTpl = viewChild.required<TemplateRef<GridCellTemplateContext>>('selectTpl');
-  readonly selectHeaderTpl = viewChild.required<TemplateRef<unknown>>('selectHeaderTpl');
 
   private tplsReady = signal(false);
   private assetRequest: Subscription | null = null;
@@ -55,12 +54,22 @@ export class MediaGridComponent implements OnInit, OnDestroy {
     Math.min(this.store.page() * this.store.perPage(), this.store.total())
   );
 
+  /** Width of the select column, shared with the "Select all" overlay
+   *  checkbox in the template (see media-grid.html) — the grid library only
+   *  supports Angular templates for body cells, not header cells, so that
+   *  checkbox is a real DOM element positioned on top of this column's
+   *  (otherwise blank) header cell rather than rendered by the grid itself. */
+  readonly selectColWidth = '4%';
+  /** Pinned so the overlay checkbox's CSS height always matches the
+   *  rendered header row, regardless of the library's own default. */
+  readonly headerRowHeight = 50;
+
   gridOptions = computed<GridOptions | null>(() => {
     if (!this.tplsReady()) return null;
     const hideClipCols = this.store.media() !== 'video';  // duration/codec only apply to videos
     const widths = hideClipCols
-      ? { select: '4%', name: '32%', size: '10%', resolution: '10%', date: '11%', user: '11%', status: '14%', actions: '8%' }
-      : { select: '4%', name: '24%', size: '8%', resolution: '10%', duration: '8%', codec: '7%', date: '9%', user: '9%', status: '14%', actions: '7%' };
+      ? { select: this.selectColWidth, name: '32%', size: '10%', resolution: '10%', date: '11%', user: '11%', status: '14%', actions: '8%' }
+      : { select: this.selectColWidth, name: '24%', size: '8%', resolution: '10%', duration: '8%', codec: '7%', date: '9%', user: '9%', status: '14%', actions: '7%' };
     const cols: GridColumnDef[] = [
       {
         name: 'select', displayName: ' ', field: 'id', width: widths.select,
@@ -101,6 +110,7 @@ export class MediaGridComponent implements OnInit, OnDestroy {
       columnDefs: cols,
       enableSorting: true,
       enableFiltering: false,
+      headerRowHeight: this.headerRowHeight,
       // The backend already returns one page. Keep the grid's internal pager
       // disabled and use the component pager below to request that page.
       enablePagination: false,
