@@ -126,22 +126,25 @@ def human_duration(seconds):
 
 
 def parse_duration(value):
-    """Parse Immich duration strings like 'HH:MM:SS.ffffff' into float seconds."""
+    """Parse Immich milliseconds or legacy HH:MM:SS.fraction strings."""
     if value is None:
         return 0.0
     if isinstance(value, (int, float)):
-        return float(value)
+        return float(value) / 1000
     text = str(value).strip()
     if not text:
         return 0.0
-    try:
-        parts = text.split(":")
-        parts = [float(p) for p in parts]
-    except ValueError:
+    if ":" not in text:
         try:
-            return float(text)
+            return float(text) / 1000
         except ValueError:
             return 0.0
+
+    try:
+        parts = [float(part) for part in text.split(":")]
+    except ValueError:
+        return 0.0
+
     seconds = 0.0
     for part in parts:
         seconds = seconds * 60 + part
