@@ -8,6 +8,30 @@ const LS_BROWSE = 'immich_browse';
 const LS_PROCESSED = 'immich_processed';
 const LS_SETTINGS = 'immich_settings';
 const PER_PAGE_OPTIONS = [10, 25, 50, 100] as const;
+/** Must match backend.config.MAX_PER_PAGE. */
+export const MAX_PER_PAGE = 100_000;
+
+/**
+ * The "still working" ladder shown under the loading meter, as
+ * [milliseconds waited, what to say]. A scan of a large library runs for
+ * minutes, so the line keeps changing long past the first few seconds, and it
+ * says something true at each step rather than repeating one word. The last
+ * entries stop reassuring and start telling you what to check.
+ */
+const LOADING_HINTS: ReadonlyArray<readonly [number, string]> = [
+  [4_000, 'This takes a bit longer…'],
+  [8_000, 'Scanning will soon be completed…'],
+  [12_000, 'Request is still pending…'],
+  [17_000, 'Immich pages through assets a thousand at a time…'],
+  [23_000, 'Still reading the library…'],
+  [30_000, 'Large libraries take a while to page through…'],
+  [38_000, 'Still waiting on Immich…'],
+  [48_000, 'Nothing has failed. The scan is just long…'],
+  [60_000, 'A minute in. That is normal for a big library…'],
+  [80_000, 'Still going…'],
+  [100_000, 'This is longer than usual. Worth checking the server is reachable…'],
+  [130_000, 'Over two minutes. If the endpoint or key is wrong, this is where it shows…'],
+];
 
 const BUSY: ReadonlySet<JobStatus> = new Set(['downloading', 'encoding', 'replacing']);
 const TERMINAL: ReadonlySet<JobStatus> = new Set(['done', 'downloaded', 'encoded', 'skipped', 'error', 'cancelled', 'discarded']);
@@ -100,7 +124,20 @@ export class StoreService {
   });
 
   // --- derived ---
-  readonly perPageOptions = PER_PAGE_OPTIONS;
+  /**
+   * The fixed steps, plus the whole result set when it fits within the API
+   * ceiling. Larger libraries get the ceiling as a normal page size instead.
+   * The current value is always included after a filter change.
+   */
+  readonly perPageOptions = computed<number[]>(() => {
+    const sizes = new Set<number>(PER_PAGE_OPTIONS);
+    const total = this.total();
+    if (total > PER_PAGE_OPTIONS[PER_PAGE_OPTIONS.length - 1]) {
+      sizes.add(Math.min(total, MAX_PER_PAGE));
+    }
+    sizes.add(this.perPage());
+    return [...sizes].sort((a, b) => a - b);
+  });
 
   readonly effectiveMinMb = computed(() =>
     this.media() === 'video'
@@ -184,11 +221,9 @@ export class StoreService {
       this.loadingHintTimers = [];
       this.loadingHint.set('');
       if (!loading) return;
-      this.loadingHintTimers.push(
-        setTimeout(() => this.loadingHint.set('This takes a bit longer…'), 5000),
-        setTimeout(() => this.loadingHint.set('Scanning will soon be completed…'), 10000),
-        setTimeout(() => this.loadingHint.set('Request is still pending…'), 15000),
-      );
+      for (const [after, text] of LOADING_HINTS) {
+        this.loadingHintTimers.push(setTimeout(() => this.loadingHint.set(text), after));
+      }
     });
   }
 
@@ -199,7 +234,9 @@ export class StoreService {
       if (b.media === 'image' || b.media === 'video' || b.media === 'motionphoto') this.media.set(b.media);
       if (Number.isFinite(+b.videoMinGb)) this.videoMinGb.set(+b.videoMinGb);
       if (Number.isFinite(+b.photoMinMb)) this.photoMinMb.set(+b.photoMinMb);
-      if (([10, 25, 50, 100] as number[]).includes(+b.perPage)) this.perPage.set(+b.perPage);
+      // Only the fixed steps are restored. A remembered "show everything" size
+      // belongs to the library it was chosen for, not to the next session's.
+      if ((PER_PAGE_OPTIONS as readonly number[]).includes(+b.perPage)) this.perPage.set(+b.perPage);
       if (Array.isArray(b.selectedKeys)) {
         this.selectedKeys.set(b.selectedKeys.map(Number).filter((n: number) => Number.isInteger(n)));
       }

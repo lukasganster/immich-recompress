@@ -16,7 +16,7 @@ from flask import (
 
 from backend.config import (
     ASSET_CACHE_TTL, BACKUP_DIR, FRONTEND_PER_PAGE, HTTP_TIMEOUT,
-    IMMICH_PER_PAGE, STATIC_DIR,
+    IMMICH_PER_PAGE, MAX_PER_PAGE, STATIC_DIR,
     get_env, human_duration, human_size, parse_duration, utcnow_iso,
 )
 from backend.state import (
@@ -148,9 +148,13 @@ def api_assets():
     min_gb_param = request.args.get("min_gb")
     min_mb_param = request.args.get("min_mb")
 
+    # Beyond the fixed steps the UI offers one option holding the whole result
+    # set, so any positive size is legitimate. The ceiling only keeps a bad
+    # request from asking for an unbounded slice.
     per_page = request.args.get("per_page", FRONTEND_PER_PAGE, type=int)
-    if per_page not in (10, 25, 50, 100):
+    if not per_page or per_page < 1:
         per_page = FRONTEND_PER_PAGE
+    per_page = min(per_page, MAX_PER_PAGE)
 
     other_codec = media == "video" and codec_filter in ("__other__", "other")
 

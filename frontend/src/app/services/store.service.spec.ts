@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { StoreService } from './store.service';
+import { MAX_PER_PAGE, StoreService } from './store.service';
 import { JobPublic, VideoSummary } from '../models/api.models';
 
 /** Build a full VideoSummary from a partial, so tests stay readable. */
@@ -38,6 +38,12 @@ describe('StoreService', () => {
     store.media.set('image');
     store.photoMinMb.set(8);
     expect(store.effectiveMinMb()).toBe(8);
+  });
+
+  it('limits the large page-size option to the API ceiling', () => {
+    store.total.set(MAX_PER_PAGE + 1);
+    expect(store.perPageOptions()).toContain(MAX_PER_PAGE);
+    expect(store.perPageOptions()).not.toContain(MAX_PER_PAGE + 1);
   });
 
   it('toggleSelect adds then removes, and selectionBytes tracks selected sizes', () => {

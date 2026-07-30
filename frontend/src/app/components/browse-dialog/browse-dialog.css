@@ -1,68 +1,103 @@
+/* Select media: what to scan Immich for, and above what size.
+   Shares the settings dialog's field vocabulary. See DESIGN.md. */
+
 :host { display: contents; }
 
-.browse-cols { display: flex; gap: 20px; align-items: flex-start; }
-.browse-main { flex: 1; min-width: 0; }
-
-.field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
-.field.type-field { margin-bottom: 16px; }
-.field label { font-size: 12px; color: var(--text-dim); font-weight: 500; }
-.field input[type="number"] {
-  background: var(--bg-elev-2); color: var(--text);
-  border: 1px solid var(--border); border-radius: var(--radius-sm);
-  padding: 8px 9px; font-size: 13px; outline: none;
-  transition: border-color var(--trans), box-shadow var(--trans);
+.browse-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 0 var(--pad);
 }
-.field input[type="number"]:focus { border-color: var(--accent); box-shadow: var(--ring); }
 
-.num-input { width: 74px; }
-
-.rangewrap { display: flex; align-items: center; gap: 10px; }
-.rangewrap input[type="range"] { flex: 1; accent-color: var(--accent); }
-
-.hint { color: var(--text-faint); font-size: 12px; margin: 4px 0 0; }
-
-/* Dark-themed link/ID input, matching the header's "search by filename" box. */
-.link-input {
-  background: var(--bg-elev-2);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 8px 10px;
-  font-size: 13px;
-  outline: none;
-  width: 100%;
-  box-sizing: border-box;
-  resize: vertical;
-  font-family: inherit;
-  transition: border-color var(--trans), box-shadow var(--trans);
+.browse-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
 }
-.link-input:focus { border-color: var(--accent); box-shadow: var(--ring); }
 
-/* Libraries side panel */
 .browse-side {
-  width: 210px;
-  flex: none;
-  border-left: 1px solid var(--border);
-  padding-left: 16px;
+  padding-left: var(--pad);
+  border-left: 1px solid var(--rule);
+  min-width: 0;
 }
-.side-label { font-size: 12px; color: var(--text-dim); font-weight: 500; }
-.side-hint { margin: 4px 0 8px; }
+
+.side-label {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.side-hint { margin: 0 0 10px; }
+
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field > label { font-size: 12px; font-weight: 600; }
+
+.type-field .seg { align-self: flex-start; }
+
+.rangewrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 420px;
+}
+
+.rangewrap input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--ink);
+}
+
+.num-input { width: 78px; text-align: right; }
+
+.hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+  max-width: 70ch;
+}
+
+.link-input {
+  width: 100%;
+  resize: vertical;
+  font-size: 12px;
+  line-height: 1.5;
+}
 
 .key-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  max-height: 300px;
-  overflow: auto;
+  max-height: 260px;
+  overflow-y: auto;
 }
+
 .key-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--rule);
   cursor: pointer;
+  min-width: 0;
 }
-.key-row input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
-.key-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.key-row:last-child { border-bottom: 0; }
+
+.key-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .push-left { margin-right: auto; }
+
+@media (max-width: 720px) {
+  .browse-cols { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .browse-side { padding-left: 0; border-left: 0; border-top: 1px solid var(--rule); padding-top: 14px; }
+}
