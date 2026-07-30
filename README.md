@@ -9,9 +9,7 @@ live progress.
 ## Screenshots
 
 <p align="center">
-  <img src="screenshots/immich-recompress-screenshot-1.png" alt="Select media dialog" width="32%" />
-  <img src="screenshots/immich-recompress-screenshot-2.png" alt="Immich Recompress dashboard" width="32%" />
-  <img src="screenshots/immich-recompress-screenshot-3.png" alt="Review before replace" width="32%" />
+  <img src="screenshots/immich-recompress-demo.gif" alt="Immich Recompress workflow: select media, browse the library, and review a recompressed photo" width="100%" />
 </p>
 
 ## Features
