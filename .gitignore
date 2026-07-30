@@ -22,6 +22,7 @@ backend/static/favicon.ico
 backend/static/3rdpartylicenses.txt
 backend/static/prerendered-routes.json
 backend/static/index.html
+backend/static/media/
 
 # Work / temp directories used by the recompress worker
 /tmp/immich_recompress_ui/
