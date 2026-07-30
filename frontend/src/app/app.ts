@@ -57,7 +57,7 @@ export class App implements OnInit {
   }
 
   get statusText(): string {
-    if (!this.store.loaded()) return 'Ready — click Select Media above to load media.';
+    if (!this.store.loaded()) return 'Ready — choose Select media above to load media.';
     const s = this.store.queueStats();
     const m = this.store.media();
     const noun = m === 'image' ? 'Photos' : m === 'motionphoto' ? 'Live Photos' : 'Videos';

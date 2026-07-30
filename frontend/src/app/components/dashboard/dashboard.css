@@ -1,64 +1,114 @@
-:host { display: block; }
+/* The composition band: the library drawn to scale, its numbers set
+   inline as the bar's legend. This replaces the four stat tiles. */
 
-.dashboard {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 1px;
-  background: var(--border-soft);
-  overflow: hidden;
-  border-radius: var(--radius);
-  border: 1px solid var(--border-soft);
-  margin-bottom: 14px;
-  box-shadow: var(--shadow-sm);
+:host { display: contents; }
+
+.band {
+  padding: 13px var(--pad) 12px;
+  border-bottom: 1px solid var(--rule-hard);
+  min-width: 0;
 }
 
-@media (max-width: 700px) {
-  .dashboard { grid-template-columns: repeat(2, 1fr); }
-}
-
-.dash-item {
-  position: relative;
-  background: var(--bg-elev);
-  padding: 13px 16px;
+.band-top {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  transition: background var(--trans);
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 9px;
+  flex-wrap: wrap;
 }
 
-.dash-item::before {
-  content: "";
-  position: absolute;
-  left: 0; top: 0; bottom: 0;
-  width: 3px;
-  background: var(--accent);
-  opacity: 0;
-  transition: opacity var(--trans);
-}
-
-.dash-item:hover { background: var(--bg-elev-2); }
-.dash-item:hover::before { opacity: 0.7; }
-
-.dash-label {
-  font-size: 11px;
-  color: var(--text-faint);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+.band-total {
+  font-size: 21px;
   font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
-.dash-val {
-  font-size: 20px;
-  font-weight: 700;
-  letter-spacing: -0.2px;
-  font-variant-numeric: tabular-nums;
-}
-
-.dash-val.dash-pot { color: var(--orange); }
-.dash-val.dash-saved { color: var(--green); }
-
-.dash-sub {
+.band-of {
   font-size: 11px;
-  color: var(--text-dim);
-  font-weight: 400;
+  color: var(--ink-faint);
+}
+
+.band-top .band-of {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+/* one continuous quantity, segmented by state */
+.bar {
+  display: flex;
+  height: 18px;
+  width: 100%;
+  gap: 1px;
+}
+
+.bar > span {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  transition: width var(--trans);
+}
+
+.seg-reclaimed { background: var(--reclaimed); }
+.seg-on-disk { background: var(--untouched); }
+
+@media (prefers-reduced-motion: reduce) {
+  .bar > span { transition: none; }
+}
+
+/* the legend is keyed to the bar and set as a line, never as tiles */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 30px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.legend > li {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+}
+
+.legend .lbl { color: var(--ink-dim); }
+
+.key {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  align-self: center;
+}
+
+.legend .num { font-size: 13px; }
+
+.legend-sel {
+  padding-left: 30px;
+  border-left: 1px solid var(--rule-hard);
+}
+
+/* ── empty ──────────────────────────────────────────────────────────── */
+
+.band-empty {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.band-empty p {
+  margin: 0;
+  max-width: 68ch;
+  color: var(--ink-dim);
+}
+
+.band-empty strong { color: var(--ink); font-weight: 600; }
+
+@media (max-width: 860px) {
+  .legend { gap: 8px 20px; }
+  .legend-sel { padding-left: 0; border-left: 0; }
 }

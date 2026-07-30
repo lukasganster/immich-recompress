@@ -1,83 +1,100 @@
-.layout {
-  display: grid;
-  grid-template-columns: 1fr 360px;
-  gap: 16px;
-  padding: 16px 20px;
-  align-items: start;
-}
-
-@media (max-width: 1100px) {
-  .layout { grid-template-columns: 1fr; }
-}
-
-.main-col { min-width: 0; }
+/* Shell rows: rail, band, filters, body, status. See DESIGN.md. */
 
 .filterbar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-bottom: 14px;
+  gap: 0;
+  height: 38px;
+  padding: 0 var(--pad);
+  border-bottom: 1px solid var(--rule);
+  background: var(--sheet-2);
+  min-width: 0;
 }
 
-.search-input {
-  background: var(--bg-elev-2);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 8px 12px 8px 34px;
-  font-size: 13px;
-  outline: none;
-  min-width: 200px;
-  flex: 1;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='%237c8494' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: 11px center;
-  transition: border-color var(--trans), box-shadow var(--trans);
+.find {
+  width: 230px;
+  flex: none;
+  border: 0;
+  border-bottom: 1px solid var(--edge);
+  background: none;
+  padding: 0;
+  height: 22px;
 }
 
-.search-input::placeholder { color: var(--text-faint); }
-.search-input:focus { border-color: var(--accent); box-shadow: var(--ring); }
+.find:focus-visible { outline-offset: 3px; }
+
+.filterbar .seg { margin-left: 22px; }
 
 .filterbar select {
-  background: var(--bg-elev-2);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 8px 10px;
-  font-size: 13px;
-  outline: none;
+  margin-left: auto;
+  background: none;
+  border-color: var(--edge);
+  font-size: 12px;
+  color: var(--ink-dim);
   cursor: pointer;
-  transition: border-color var(--trans), box-shadow var(--trans);
+  transition: border-color var(--trans), color var(--trans);
 }
 
-.filterbar select:hover { border-color: var(--accent); }
-.filterbar select:focus { border-color: var(--accent); box-shadow: var(--ring); }
+.filterbar select:hover { border-color: var(--rule-hard); color: var(--ink); }
+
+/* ── body ───────────────────────────────────────────────────────────── */
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 470px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ledger {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-right: 1px solid var(--rule-hard);
+}
+
+.bench {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--sheet-2);
+}
+
+/* Below this the bench cannot hold a side-by-side comparison, so it
+   stops being a rail and becomes the section under the ledger. */
+@media (max-width: 1180px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    overflow-y: auto;
+  }
+  .ledger { border-right: 0; border-bottom: 1px solid var(--rule-hard); }
+  .bench { overflow-y: visible; }
+}
+
+/* ── status ─────────────────────────────────────────────────────────── */
 
 .statusbar {
-  position: sticky;
-  bottom: 0;
-  background: color-mix(in srgb, var(--bg-elev) 88%, transparent);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border-top: 1px solid var(--border);
-  padding: 9px 20px;
-  font-size: 12px;
-  color: var(--text-dim);
-  z-index: 40;
+  padding: 7px var(--pad);
+  border-top: 1px solid var(--rule-hard);
+  background: var(--sheet-2);
+  font-size: 11px;
+  color: var(--ink-dim);
 }
 
-/* "Loading …" dialog shown while a Select Media asset load is pending.
-   The fade-in is delayed so quick responses never flash the overlay. */
+/* ── loading ────────────────────────────────────────────────────────── */
+
 .loading-overlay {
   position: fixed;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(4, 6, 10, 0.5);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
+  background: var(--overlay);
   z-index: 120;
   opacity: 0;
   animation: loading-appear 140ms ease forwards;
@@ -87,52 +104,21 @@
 @keyframes loading-appear { to { opacity: 1; } }
 
 .loading-box {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 18px 24px;
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  color: var(--text);
+  width: min(360px, 90vw);
+  padding: 16px 18px 18px;
+  background: var(--sheet);
+  border: 1px solid var(--rule-hard);
+  box-shadow: var(--lift);
 }
 
-.loading-text {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
+.loading-text { display: flex; flex-direction: column; gap: 3px; margin-bottom: 14px; }
+.loading-title { font-size: 14px; font-weight: 600; }
+.loading-sub { font-size: 12px; color: var(--ink-dim); }
+.loading-hint { margin-top: 5px; font-size: 12px; color: var(--reclaimable); }
 
-.loading-title {
-  font-size: 14px;
-  font-weight: 600;
-}
+/* The indeterminate meter itself is declared once in styles.css. */
 
-.loading-sub {
-  font-size: 12px;
-  color: var(--text-dim);
+@media (prefers-reduced-motion: reduce) {
+  /* No fade at all, rather than the same fade with no delay. */
+  .loading-overlay { animation: none; opacity: 1; }
 }
-
-.loading-hint {
-  margin-top: 5px;
-  font-size: 12px;
-  color: var(--accent);
-  animation: loading-hint-in 220ms ease;
-}
-
-@keyframes loading-hint-in {
-  from { opacity: 0; transform: translateY(-2px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.loading-spin {
-  width: 18px;
-  height: 18px;
-  border: 2px solid var(--border);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: rot 0.8s linear infinite;
-}
-
-@keyframes rot { to { transform: rotate(360deg); } }
