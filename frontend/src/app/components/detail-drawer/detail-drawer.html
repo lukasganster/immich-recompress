@@ -1,16 +1,23 @@
 @if (open()) {
   <div class="drawer-overlay" (click)="hide()"></div>
-  <div class="drawer" role="dialog" aria-modal="true">
+  <div class="drawer" cdkTrapFocus [cdkTrapFocusAutoCapture]="true"
+    role="dialog" aria-modal="true" aria-label="Asset detail">
     <div class="drawer-head">
       <strong>{{ detail()?.name || 'Detail' }}</strong>
-      <button class="icon-btn" (click)="hide()">✕</button>
+      <button class="icon-btn" (click)="hide()" aria-label="Close">✕</button>
     </div>
 
     <div class="drawer-body">
       @if (loading()) {
-        <div class="empty"><span class="spin"></span> Loading…</div>
+        <div class="empty">
+          <span>Loading details from Immich</span>
+          <div class="meter indeterminate"><i></i></div>
+        </div>
       } @else if (!detail()) {
-        <div class="empty">Failed to load details</div>
+        <div class="empty">
+          <span>Could not load this asset's details. Immich may be unreachable.</span>
+          <button class="btn ghost" (click)="retry()">Try again</button>
+        </div>
       } @else {
         @let d = detail()!;
         @let ex = d.exif;
@@ -109,8 +116,8 @@
     </div>
 
     <div class="drawer-actions">
-      <button class="btn ghost" (click)="download()">↓ Download Original</button>
-      <button class="btn" (click)="encode()">▶ Encode Now</button>
+      <button class="btn ghost" (click)="download()">Download original</button>
+      <button class="btn" (click)="encode()">Encode now</button>
     </div>
   </div>
 }

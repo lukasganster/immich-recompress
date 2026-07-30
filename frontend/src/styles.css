@@ -1,213 +1,496 @@
+/* Immich Recompress — the measured sheet.
+   See DESIGN.md. Ruled regions, drawn quantities, meaning-bound ink.
+   No radii, no shadows on the sheet, no accent color. */
+
+@font-face {
+  font-family: Archivo;
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('./fonts/archivo-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: Archivo;
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('./fonts/archivo-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 :root {
-  /* Surfaces — deeper base with clearer elevation steps */
-  --bg: #0c0e13;
-  --bg-elev: #14171e;
-  --bg-elev-2: #1c2029;
-  --bg-elev-3: #252b37;
-  --border: #2a2f3b;
-  --border-soft: #20242e;
+  /* the sheet */
+  --sheet:     #17181a;
+  --sheet-2:   #1d1f21;
+  --sheet-3:   #232628;
+  --rule:      #2c2f32;
+  --rule-hard: #3c4044;
+  /* Structural hairlines can be quiet, but anything that is the only
+     visible edge of a control must clear 3:1 against the sheet. */
+  --edge:      #6b7074;
 
-  /* Text */
-  --text: #e8ebf2;
-  --text-dim: #a2abbb;
-  --text-faint: #7c8494;
+  /* ink */
+  --ink:       #e7e5e1;
+  --ink-dim:   #9b9994;
+  --ink-faint: #908d86;
 
-  /* Accent + status */
-  --accent: #5790ff;
-  --accent-hover: #79a6ff;
-  --accent-soft: rgba(87, 144, 255, 0.14);
-  --accent-ring: rgba(87, 144, 255, 0.45);
-  --green: #46c45a;
-  --yellow: #e0ad33;
-  --orange: #e8884a;
-  --red: #f25067;
-  --blue: #5790ff;
-  --purple: #b388ff;
+  /* the four meaning-bound inks — the only saturated color in the app */
+  --untouched:   #6d7478;
+  --reclaimable: #c9a02c;
+  --reclaimed:   #4e9c6b;
+  --destruct:    #e2685c;
 
-  --radius: 12px;
-  --radius-sm: 8px;
-  --shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --ring: 0 0 0 3px var(--accent-ring);
+  --overlay: rgba(8, 9, 10, 0.66);
+  --lift: 0 12px 34px rgba(0, 0, 0, 0.5);
+
+  --row: 34px;
+  --pad: 14px;
   --trans: 140ms ease;
+}
+
+[data-theme='light'] {
+  --sheet:     #eef0f1;
+  --sheet-2:   #f7f8f8;
+  --sheet-3:   #ffffff;
+  --rule:      #d5d8da;
+  --rule-hard: #b4b9bc;
+  --edge:      #83888c;
+
+  --ink:       #17181a;
+  --ink-dim:   #5c6165;
+  --ink-faint: #666b70;
+
+  --untouched:   #7d858a;
+  --reclaimable: #8f7108;
+  --reclaimed:   #2c7a4e;
+  --destruct:    #a5342b;
+
+  --overlay: rgba(40, 44, 48, 0.4);
+  --lift: 0 12px 34px rgba(0, 0, 0, 0.18);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
 
 html, body {
-  margin: 0; padding: 0;
-  min-height: 100%;
-  background: var(--bg);
-  color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  font-size: 14px;
-  line-height: 1.45;
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--sheet);
+  color: var(--ink);
+  font-family: Archivo, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  line-height: 1.42;
+  font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
 }
+
+html { overflow: hidden; }
 
 body {
-  background:
-    radial-gradient(1100px 560px at 18% -12%, rgba(87, 144, 255, 0.07), transparent 60%),
-    radial-gradient(900px 480px at 100% 0%, rgba(179, 136, 255, 0.05), transparent 55%),
-    var(--bg);
-  background-attachment: fixed;
+  display: grid;
+  grid-template-rows: 40px auto auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
 }
+
+app-root { display: contents; }
 
 button { font-family: inherit; cursor: pointer; }
-a { color: var(--accent); text-decoration: none; }
-a:hover { color: var(--accent-hover); }
+a { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: var(--ink-dim); }
 
-/* Keyboard focus ring — consistent across all interactive elements */
-button:focus-visible,
-a:focus-visible,
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible,
-summary:focus-visible,
-[tabindex]:focus-visible {
-  outline: none;
-  box-shadow: var(--ring);
+/* Focus is a hard outline, never a glow. */
+button:focus-visible, a:focus-visible, input:focus-visible,
+select:focus-visible, textarea:focus-visible, summary:focus-visible,
+[tabindex]:focus-visible { outline: 1px solid var(--ink); outline-offset: 2px; }
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
-/* Custom scrollbars */
-* { scrollbar-width: thin; scrollbar-color: var(--bg-elev-3) transparent; }
-::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb {
-  background: var(--bg-elev-3);
-  border-radius: 999px;
-  border: 3px solid transparent;
-  background-clip: padding-box;
+::-webkit-scrollbar-thumb { background: var(--rule-hard); }
+::-webkit-scrollbar-thumb:hover { background: var(--ink-faint); }
+* { scrollbar-width: thin; scrollbar-color: var(--rule-hard) transparent; }
+
+/* ── the one label system: region heads and column heads only ───────── */
+
+.lbl {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
 }
-::-webkit-scrollbar-thumb:hover {
-  background: var(--border);
-  background-clip: padding-box;
-}
+
+.num { font-weight: 600; }
+
+/* ── regions ────────────────────────────────────────────────────────── */
 
 .panel {
-  background: var(--bg-elev);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
-  overflow: hidden;
-  margin-bottom: 14px;
-  box-shadow: var(--shadow-sm);
+  background: var(--sheet);
+  border: 0;
+  min-width: 0;
 }
 
-.pill {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 4px 10px; border-radius: 999px;
-  background: var(--bg-elev-2); border: 1px solid var(--border);
-  font-size: 12px; color: var(--text-dim); white-space: nowrap;
+.panel-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 28px;
+  padding: 0 var(--pad);
+  border-bottom: 1px solid var(--rule-hard);
+  background: var(--sheet-2);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
 }
-.pill.ok { color: var(--green); border-color: rgba(70, 196, 90, 0.4); }
-.pill.bad { color: var(--red); border-color: rgba(242, 80, 103, 0.4); background: rgba(242, 80, 103, 0.08); }
-.pill .label-url { color: var(--text-faint); }
 
-.header-spacer { flex: 1; }
+.panel-head .spacer { flex: 1; }
 
-.seg {
-  display: inline-flex;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-  background: var(--bg-elev-2);
-}
-.seg button {
-  background: transparent; color: var(--text-dim);
-  border: none; padding: 7px 13px; font-size: 12px; font-weight: 500;
-  border-right: 1px solid var(--border);
-  transition: background var(--trans), color var(--trans);
-}
-.seg button:last-child { border-right: none; }
-.seg button:hover:not(.active) { background: var(--bg-elev-3); color: var(--text); }
-.seg button.active {
-  background: var(--accent); color: #fff;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
-}
+/* ── controls ───────────────────────────────────────────────────────── */
 
 .btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  background: var(--accent); color: #fff;
-  border: 1px solid transparent; border-radius: var(--radius-sm);
-  padding: 8px 14px; font-size: 13px; font-weight: 600;
-  cursor: pointer; font-family: inherit;
-  box-shadow: var(--shadow-sm);
-  transition: background var(--trans), border-color var(--trans), transform var(--trans), box-shadow var(--trans);
-}
-.btn:hover { background: var(--accent-hover); }
-.btn:active { transform: translateY(1px); }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn.ghost {
-  background: var(--bg-elev-2); color: var(--text);
-  border: 1px solid var(--border);
-  box-shadow: none;
-}
-.btn.ghost:hover { border-color: var(--accent); background: var(--bg-elev-3); }
-
-.icon-btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  background: var(--bg-elev-2); color: var(--text-dim);
-  border: 1px solid var(--border); border-radius: var(--radius-sm);
-  padding: 7px 9px; font-size: 13px; cursor: pointer; font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--ink);
+  background: none;
+  border: 1px solid var(--edge);
+  border-radius: 0;
+  padding: 5px 11px;
+  cursor: pointer;
   transition: background var(--trans), border-color var(--trans), color var(--trans);
 }
-.icon-btn:hover { color: var(--text); border-color: var(--accent); background: var(--bg-elev-3); }
+
+.btn:hover { background: var(--sheet-3); border-color: var(--ink-faint); }
+.btn:active { background: var(--rule); }
+.btn:disabled { color: var(--ink-faint); border-color: var(--rule); background: none; cursor: not-allowed; }
+
+/* the one filled button: the primary action of a region */
+.btn.primary { background: var(--ink); color: var(--sheet); border-color: var(--ink); }
+.btn.primary:hover { background: var(--ink-dim); border-color: var(--ink-dim); }
+.btn.primary:disabled { background: var(--rule); color: var(--ink-faint); border-color: var(--rule); }
+
+/* reserved: replaces an asset in Immich, or trashes an original */
+.btn.destruct { color: var(--destruct); border-color: var(--destruct); }
+.btn.destruct:hover { background: var(--destruct); color: var(--sheet); }
+
+.btn.ghost { border-color: var(--rule); color: var(--ink-dim); }
+.btn.ghost:hover { color: var(--ink); border-color: var(--rule-hard); background: var(--sheet-3); }
+
+.btn.sm { font-size: 11px; padding: 4px 8px; }
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink-dim);
+  background: none;
+  border: 1px solid var(--edge);
+  border-radius: 0;
+  padding: 4px 7px;
+  cursor: pointer;
+  transition: color var(--trans), border-color var(--trans), background var(--trans);
+}
+
+.icon-btn:hover { color: var(--ink); border-color: var(--ink-faint); background: var(--sheet-3); }
+.icon-btn.sm { padding: 2px 5px; font-size: 11px; }
+
+/* a text action that is not a button-shaped thing */
+.link {
+  font: inherit;
+  font-size: 11px;
+  color: var(--ink-dim);
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--edge);
+  padding: 0;
+  cursor: pointer;
+}
+
+.link:hover { color: var(--ink); border-bottom-color: var(--ink); }
+
+input[type='text'], input[type='search'], input[type='number'], select, textarea {
+  font: inherit;
+  color: var(--ink);
+  background: var(--sheet);
+  border: 1px solid var(--edge);
+  border-radius: 0;
+  padding: 4px 8px;
+}
+
+input::placeholder { color: var(--ink-faint); }
+
+input[type='checkbox'] {
+  appearance: none;
+  width: 11px;
+  height: 11px;
+  flex: none;
+  border: 1px solid var(--edge);
+  background: none;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+input[type='checkbox']:checked { background: var(--ink); border-color: var(--ink); }
+
+input[type='checkbox']:checked::after {
+  content: '';
+  width: 5px;
+  height: 2px;
+  margin-top: -1px;
+  border-left: 1.5px solid var(--sheet);
+  border-bottom: 1.5px solid var(--sheet);
+  transform: rotate(-45deg);
+}
+
+input[type='checkbox']:disabled { border-color: var(--rule); cursor: default; }
+input[type='checkbox']:disabled:checked { background: var(--rule); border-color: var(--rule); }
+
+/* segmented filter: underline, not a filled pill */
+.seg { display: inline-flex; }
+
+.seg button {
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink-dim);
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 3px 11px;
+  cursor: pointer;
+  transition: color var(--trans), border-color var(--trans);
+}
+
+.seg button:hover:not(.active) { color: var(--ink); border-bottom-color: var(--rule-hard); }
+.seg button.active { color: var(--ink); font-weight: 600; border-bottom-color: var(--ink); }
+
+/* dependency / endpoint status: plain text with a state mark, not a chip */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+
+/* A working dependency is the unremarkable default, so it gets no colour.
+   Green here would mean "already recovered", which is not what it is. */
+.pill::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  flex: none;
+  background: var(--ink-faint);
+}
+
+.pill.bad { color: var(--destruct); }
+.pill.bad::before { background: var(--destruct); }
+.pill.plain::before { display: none; }
+.pill .label-url { color: var(--ink-faint); }
+
+/* job state: a word in its meaning-bound ink */
+.badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+.badge.idle, .badge.cancelled, .badge.discarded { color: var(--ink-faint); }
+.badge.queued, .badge.downloading, .badge.downloaded { color: var(--ink-dim); }
+.badge.encoding, .badge.replacing, .badge.review, .badge.skipped { color: var(--reclaimable); }
+.badge.done, .badge.encoded, .badge.processed, .badge.replaced { color: var(--reclaimed); }
+.badge.error, .badge.failed { color: var(--destruct); }
+
+/* ── the drawn quantity ─────────────────────────────────────────────── */
+
+/* The grid's cell-template bridge wraps every Angular template in a bare
+   inline <span>. An inline box shrink-wraps, which collapses anything
+   sized as a share of the cell — including the drawn quantity — to zero
+   width. Promote those wrappers to blocks so cells fill their column. */
+span:has(> .qty),
+span:has(> .name-cell),
+span:has(> .cell-center),
+span:has(> .row-actions) { display: block; }
+
+/* A size, written and measured. No track behind the rule: an empty
+   remainder would state completion instead of magnitude. */
+.qty { display: flex; align-items: center; gap: 10px; width: 100%; }
+.qty .v { font-weight: 600; width: 58px; text-align: right; flex: none; }
+.qty .draw { flex: 1; height: 6px; min-width: 0; }
+.qty .draw i { display: block; height: 100%; background: var(--untouched); }
+.qty.hot .draw i { background: var(--reclaimable); }
+.qty.done .draw i { background: var(--reclaimed); }
+
+/* The running job's meter. Same rule, but this one carries a track,
+   because here completion is exactly what is being stated. */
+.meter { height: 6px; background: var(--rule); overflow: hidden; }
+
+/* Scaled rather than resized: progress ticks several times a second over a
+   long encode, and transform is composited where width would relayout. */
+.meter i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: var(--reclaimable);
+  transform-origin: left center;
+  transition: transform 240ms linear;
+}
+
+/* The same meter when the duration genuinely is not known. Declared once
+   here so every waiting state in the app uses one indicator. */
+.meter.indeterminate { overflow: hidden; }
+
+.meter.indeterminate i {
+  width: 34%;
+  transform: none;
+  transition: none;
+  animation: meter-sweep 1.15s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+@keyframes meter-sweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(294%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .meter i { transition: none; }
+  .meter.indeterminate i { animation: none; width: 100%; opacity: 0.5; }
+}
+
+/* ── overlays ───────────────────────────────────────────────────────── */
 
 .modal-overlay {
-  position: fixed; inset: 0;
-  background: rgba(4, 6, 10, 0.62);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  position: fixed;
+  inset: 0;
+  background: var(--overlay);
   z-index: 110;
-  animation: fade-in 160ms ease;
 }
 
 .modal {
-  position: fixed; top: 50%; left: 50%;
-  transform: translate(-50%, -48%);
-  width: min(720px, 94vw); max-height: 90vh;
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(760px, 94vw);
+  max-height: 88vh;
+  background: var(--sheet);
+  border: 1px solid var(--rule-hard);
+  box-shadow: var(--lift);
   z-index: 111;
-  display: flex; flex-direction: column;
-  animation: modal-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes modal-in {
-  from { opacity: 0; transform: translate(-50%, -44%) scale(0.97); }
-  to { opacity: 1; transform: translate(-50%, -48%) scale(1); }
+  display: flex;
+  flex-direction: column;
 }
 
 .modal-head {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 14px 16px; border-bottom: 1px solid var(--border);
-  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px var(--pad);
+  border-bottom: 1px solid var(--rule-hard);
+  background: var(--sheet-2);
+  font-size: 14px;
+  font-weight: 600;
 }
 
-.modal-body { padding: 16px; overflow-y: auto; }
+.modal-body { padding: var(--pad); overflow-y: auto; }
 
 .modal-actions {
-  display: flex; justify-content: flex-end; gap: 10px;
-  padding: 14px 16px; border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 11px var(--pad);
+  border-top: 1px solid var(--rule-hard);
+  background: var(--sheet-2);
 }
 
-/* ── uiGrid dark theme ───────────────────────────────────────── */
+/* ── uiGrid ─────────────────────────────────────────────────────────── */
+
+/* The grid keeps its styles in a shadow root, but every value below is a
+   custom property it reads from here, and custom properties inherit
+   through the shadow boundary. This is the whole theme. */
+
 app-ui-grid {
-  --ui-grid-surface: var(--bg-elev);
-  --ui-grid-header-background: var(--bg-elev-2);
-  --ui-grid-row-odd: var(--bg-elev);
-  --ui-grid-row-even: var(--bg-elev-2);
-  --ui-grid-group-background: var(--bg-elev-2);
-  --ui-grid-cell-color: var(--text);
-  --ui-grid-muted-color: var(--text-dim);
-  --ui-grid-border-color: var(--border-soft);
-  --ui-grid-accent: var(--accent);
-  --ui-grid-radius: 8px;
+  --ui-grid-surface: var(--sheet);
+  --ui-grid-header-background: var(--sheet-2);
+  --ui-grid-group-background: var(--sheet-2);
+  --ui-grid-border-color: var(--rule);
+  --ui-grid-radius: 0;
   --ui-grid-shadow: none;
   --ui-grid-overflow-x: hidden;
+
+  /* No zebra striping. The hairline between rows is the separator, and
+     alternating fills would fight the drawn quantity in the size column. */
+  --ui-grid-row-odd: var(--sheet);
+  --ui-grid-row-even: var(--sheet);
+  --ui-grid-row-hover: var(--sheet-2);
+  --ui-grid-row-selected-bg: var(--sheet-3);
+  --ui-grid-row-selected-bg-odd: var(--sheet-3);
+  --ui-grid-row-selected-color: var(--ink);
+  --ui-grid-row-focus-background: var(--sheet-3);
+  --ui-grid-cell-focus-background: var(--sheet-3);
+
+  --ui-grid-cell-color: var(--ink);
+  --ui-grid-muted-color: var(--ink-dim);
+  --ui-grid-accent: var(--ink);
+
+  --ui-grid-row-error-bg: transparent;
+  --ui-grid-row-error-color: var(--destruct);
+  --ui-grid-row-dirty-bg: transparent;
+  --ui-grid-row-dirty-color: var(--reclaimable);
+
+  /* Column heads join the app's one label system. */
+  --ui-grid-header-weight: 600;
+  --ui-grid-header-cell-padding-block: 8px;
+  --ui-grid-header-cell-padding-inline: 10px;
+  --ui-grid-header-cell-gap: 6px;
+  --ui-grid-header-actions-gap: 4px;
+  --ui-grid-header-cell-background-active: var(--sheet-3);
+
+  /* Rows at the sheet's density. */
+  --ui-grid-body-cell-padding-block: 7px;
+  --ui-grid-body-cell-padding-inline: 10px;
+
+  /* Sort controls become small square marks, not floating round chips. */
+  --ui-grid-control-size: 16px;
+  --ui-grid-control-icon-size: 9px;
+  --ui-grid-control-radius: 0;
+  --ui-grid-control-background: transparent;
+  --ui-grid-control-background-active: var(--ink);
+  --ui-grid-control-border-color: var(--edge);
+  --ui-grid-control-border-color-active: var(--ink);
+  --ui-grid-control-color: var(--ink-faint);
+  --ui-grid-control-color-active: var(--sheet);
+
+  --ui-grid-empty-state-min-height: 220px;
+  --ui-grid-empty-state-padding: 40px 14px;
+  --ui-grid-empty-state-gap: 10px;
 }

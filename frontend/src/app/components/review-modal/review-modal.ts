@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, inject, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, inject, output, signal } from '@angular/core';
+import { CdkTrapFocus } from '@angular/cdk/a11y';
 import { ApiService } from '../../services/api.service';
 import { StoreService } from '../../services/store.service';
 import { JobPublic } from '../../models/api.models';
@@ -6,6 +7,7 @@ import { JobPublic } from '../../models/api.models';
 @Component({
   selector: 'app-review-modal',
   standalone: true,
+  imports: [CdkTrapFocus],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './review-modal.html',
   styleUrl: './review-modal.css',
@@ -81,11 +83,16 @@ export class ReviewModalComponent {
     return (!e || !e.hw) ? `${head} · ${j.preset}` : head;
   }
 
-  previewUrl(id: string, media: string): string {
-    return this.api.previewUrl(id) + (media === 'image' ? '' : '');
+  previewUrl(id: string): string {
+    return this.api.previewUrl(id);
   }
 
   thumbUrl(id: string): string {
     return this.api.thumbnailUrl(id, 'preview');
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    if (this.open()) this.hide();
   }
 }

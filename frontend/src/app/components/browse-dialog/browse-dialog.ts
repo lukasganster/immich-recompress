@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, inject, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, inject, output, signal } from '@angular/core';
+import { CdkTrapFocus } from '@angular/cdk/a11y';
 import { FormsModule } from '@angular/forms';
 import { StoreService } from '../../services/store.service';
 import { ApiService } from '../../services/api.service';
@@ -7,7 +8,7 @@ import { MediaType } from '../../models/api.models';
 @Component({
   selector: 'app-browse-dialog',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, CdkTrapFocus],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './browse-dialog.html',
   styleUrl: './browse-dialog.css',
@@ -104,5 +105,10 @@ export class BrowseDialogComponent {
     if (!n) return;
     if (!confirm(`Really clear the processing history (${n} files)?`)) return;
     this.store.clearProcessed();
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    if (this.open()) this.hide();
   }
 }

@@ -1,122 +1,205 @@
+/* The bench: what needs a decision, what is running, what is waiting,
+   what is finished. In that order. See DESIGN.md. */
+
 :host { display: block; }
 
-.queue-panel { height: 100%; }
+.bench-section { border-bottom: 1px solid var(--rule-hard); }
 
-.panel-head {
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--border);
+.bench-section .panel-head { position: sticky; top: 0; z-index: 2; }
+
+.count { font-size: 11px; color: var(--ink-faint); font-weight: 400; letter-spacing: 0; text-transform: none; }
+
+.bench-empty {
+  margin: 0;
+  padding: 12px var(--pad) 14px;
+  color: var(--ink-faint);
+  max-width: 52ch;
+}
+
+/* ── the clamped asset under review ─────────────────────────────────── */
+
+.clamp { border-bottom: 1px solid var(--rule); }
+.clamp:last-child { border-bottom: 0; }
+
+.clamp-head {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding: 10px var(--pad) 9px;
+}
+
+.clamp-head .f {
   font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.spacer { flex: 1; }
-
-.panel-body {
-  padding: 0 14px;
-  overflow-y: auto;
-  max-height: 60vh;
-}
-
-.empty {
-  padding: 24px;
-  text-align: center;
-  color: var(--text-faint);
-}
-
-.queue-job {
-  padding: 10px 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.queue-job:last-child { border-bottom: none; }
-
-.qj-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  justify-content: space-between;
-}
-
-.qj-right { display: flex; align-items: center; gap: 6px; }
-
-.qj-name {
-  font-size: 13px;
-  word-break: break-word;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   min-width: 0;
 }
 
-.progress {
-  height: 7px;
-  background: var(--bg-elev-2);
-  border-radius: 999px;
-  overflow: hidden;
-  margin-top: 7px;
+.clamp-head .spacer { flex: 1; }
+
+.compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--rule-hard);
+  border-block: 1px solid var(--rule-hard);
 }
 
-.progress > span {
+.compare.single { grid-template-columns: 1fr; }
+
+.pane {
+  background: var(--sheet);
+  padding: 10px var(--pad) 12px;
+  min-width: 0;
+}
+
+.pane .lbl { display: block; margin-bottom: 7px; }
+
+/* The frame keeps its box even when the preview cannot be fetched, so the
+   two panes stay aligned and no broken-image glyph ever ships. */
+.frame {
   display: block;
+  width: 100%;
+  height: 112px;
+  background: var(--sheet-3);
+  margin-bottom: 9px;
+  overflow: hidden;
+}
+
+.frame img, .frame video {
+  display: block;
+  width: 100%;
   height: 100%;
-  background: var(--accent);
-  transition: width 0.3s ease;
+  object-fit: cover;
 }
 
-.progress.anim > span {
-  background-image: linear-gradient(90deg, var(--accent), var(--accent-hover), var(--accent));
-  background-size: 200% 100%;
-  animation: slide 1.4s linear infinite;
+.frame img.hidden, .frame video.hidden { display: none; }
+
+.pane .big {
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
-@keyframes slide { from { background-position: 0 0; } to { background-position: 200% 0; } }
+.pane.after .big { color: var(--reclaimed); }
 
-.qj-meta {
-  font-size: 11px;
-  color: var(--text-dim);
-  margin-top: 4px;
+.pane-note { margin: 0; font-size: 12px; color: var(--ink-dim); }
+
+.spec {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  padding: 3px 0 0;
+  color: var(--ink-dim);
+  min-width: 0;
 }
 
-.qj-log {
-  font-size: 11px;
-  color: var(--text-faint);
-  margin-top: 5px;
-  font-family: ui-monospace, monospace;
-  white-space: nowrap;
+.spec b {
+  font-weight: 500;
+  color: var(--ink);
+  text-align: right;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.qj-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.verdict {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 11px var(--pad) 0;
+}
+
+.verdict .num { font-size: 17px; color: var(--reclaimed); }
+.verdict-pct { font-size: 11px; color: var(--ink-dim); }
+.verdict .spacer { flex: 1; }
+
+/* States what replacing actually does, immediately above the button
+   that does it. Product principle 2: destructive actions stay deliberate. */
+.consequence {
+  margin: 9px 0 0;
+  padding: 0 var(--pad);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+  max-width: 62ch;
+}
+
+.clamp-acts {
+  display: flex;
+  gap: 8px;
+  padding: 11px var(--pad) 13px;
+}
+
+/* ── running ────────────────────────────────────────────────────────── */
+
+.job { padding: 11px var(--pad) 12px; }
+
+.job-top {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  margin-bottom: 8px;
+}
+
+.job-top .f {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.running-pct { color: var(--reclaimable); }
+
+.job-log {
+  margin-top: 7px;
+  font-size: 11px;
+  color: var(--ink-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── waiting / finished ─────────────────────────────────────────────── */
+
+.line {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px var(--pad);
+  border-bottom: 1px solid var(--rule);
+  min-width: 0;
+}
+
+.line:last-of-type { border-bottom: 0; }
+
+.line .f {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.was { font-size: 11px; color: var(--ink-faint); white-space: nowrap; }
+.delta { font-size: 11px; font-weight: 600; color: var(--reclaimed); white-space: nowrap; }
 
 .saved-total {
-  padding: 10px 14px;
-  font-weight: 600;
-  color: var(--green);
-  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px var(--pad) 11px;
+  border-top: 1px solid var(--rule);
 }
 
-/* badge colours */
-.badge {
-  display: inline-block;
-  padding: 2px 9px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  border: 1px solid transparent;
+.saved-total .num { color: var(--reclaimed); font-size: 14px; }
+
+@media (max-width: 640px) {
+  .compare { grid-template-columns: 1fr; }
 }
-
-.badge.queued { color: var(--yellow); background: rgba(217,167,44,0.12); }
-.badge.encoding, .badge.downloading, .badge.replacing {
-  color: var(--blue); background: rgba(79,140,255,0.14);
-  animation: pulse 1.4s ease-in-out infinite;
-}
-.badge.done, .badge.downloaded, .badge.encoded { color: var(--green); background: rgba(63,185,80,0.14); }
-.badge.review { color: var(--purple); background: rgba(179,136,255,0.16); }
-.badge.skipped { color: var(--orange); background: rgba(224,130,61,0.14); }
-.badge.error { color: var(--red); background: rgba(240,85,107,0.14); }
-.badge.cancelled, .badge.discarded { color: var(--text-faint); background: rgba(120,120,120,0.14); }
-
-@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
-
-.btn.sm { padding: 5px 10px; font-size: 12px; border-radius: 6px; }
-.icon-btn.sm { padding: 2px 7px; font-size: 12px; }

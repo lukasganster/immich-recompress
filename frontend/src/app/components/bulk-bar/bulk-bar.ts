@@ -16,11 +16,11 @@ export class BulkBarComponent {
 
   get noun(): string {
     const m = this.store.media();
-    return m === 'image' ? 'Photos' : m === 'motionphoto' ? 'Live Photos' : 'Videos';
+    return m === 'image' ? 'photos' : m === 'motionphoto' ? 'Live Photos' : 'videos';
   }
   get actionLabel(): string {
     const m = this.store.media();
-    return m === 'image' ? '▶ Compress All' : m === 'motionphoto' ? 'Strip Motion' : '▶ Encode All';
+    return m === 'image' ? 'Compress' : m === 'motionphoto' ? 'Strip motion from' : 'Encode';
   }
   get n(): number { return this.store.selected().size; }
   get show(): boolean { return this.n > 0; }
