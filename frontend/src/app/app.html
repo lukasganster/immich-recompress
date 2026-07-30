@@ -1,37 +1,34 @@
 <app-header (browseClick)="browse().show()"></app-header>
 
-<main class="layout">
-  <section class="main-col">
-    <div class="filterbar">
-      <input type="text" class="search-input" placeholder="Search by filename..."
-        [value]="store.search()"
-        (input)="onSearch($any($event.target).value)" />
+<app-dashboard></app-dashboard>
 
-      @if (store.media() === 'video') {
-        <div class="seg">
-          @for (c of codecs; track c) {
-            <button [class.active]="store.codec() === c" (click)="setCodec(c)">
-              {{ codecLabels[c] }}
-            </button>
-          }
-        </div>
+<div class="filterbar">
+  <input type="text" class="find" placeholder="Find by filename"
+    aria-label="Find by filename"
+    [value]="store.search()"
+    (input)="onSearch($any($event.target).value)" />
+
+  @if (store.media() === 'video') {
+    <div class="seg" role="group" aria-label="Filter by codec">
+      @for (c of codecs; track c) {
+        <button [class.active]="store.codec() === c" (click)="setCodec(c)">
+          {{ codecLabels[c] }}
+        </button>
       }
-
-      <select (change)="setUser($any($event.target).value)">
-        <option value="">All Users</option>
-        @for (u of store.users(); track u.id) {
-          <option [value]="u.id">{{ u.name || u.email }}</option>
-        }
-      </select>
     </div>
+  }
 
-    <app-dashboard></app-dashboard>
+  <select aria-label="Filter by user" (change)="setUser($any($event.target).value)">
+    <option value="">All users</option>
+    @for (u of store.users(); track u.id) {
+      <option [value]="u.id">{{ u.name || u.email }}</option>
+    }
+  </select>
+</div>
 
-    <div class="panel">
-      <app-media-grid
-        (detailRequested)="drawer().show($event)">
-      </app-media-grid>
-    </div>
+<main class="layout">
+  <section class="ledger">
+    <app-media-grid (detailRequested)="drawer().show($event)"></app-media-grid>
 
     <app-bulk-bar
       (encodeSelected)="onEncode($event)"
@@ -40,7 +37,7 @@
     </app-bulk-bar>
   </section>
 
-  <aside class="sidebar">
+  <aside class="bench">
     <app-queue-panel
       (reviewRequested)="review().show($event)"
       (jobsRefresh)="onJobsRefresh()">
@@ -59,7 +56,6 @@
 @if (store.loading()) {
   <div class="loading-overlay" role="status" aria-live="polite" aria-label="Fetching assets from Immich">
     <div class="loading-box">
-      <span class="loading-spin"></span>
       <div class="loading-text">
         <span class="loading-title">Fetching assets from Immich</span>
         <span class="loading-sub">{{ loadingSubtitle }}</span>
@@ -67,6 +63,7 @@
           <span class="loading-hint">{{ store.loadingHint() }}</span>
         }
       </div>
+      <div class="meter indeterminate"><i></i></div>
     </div>
   </div>
 }

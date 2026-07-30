@@ -1,45 +1,58 @@
 :host { display: contents; }
 
-.app-header {
+.rail {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 20px;
-  background: color-mix(in srgb, var(--bg-elev) 82%, transparent);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: 0;
-  z-index: 50;
-  flex-wrap: wrap;
+  gap: 18px;
+  padding: 0 var(--pad);
+  border-bottom: 1px solid var(--rule-hard);
+  background: var(--sheet-2);
+  min-width: 0;
+  overflow: hidden;
 }
 
-.app-header h1 {
-  font-size: 17px;
-  margin: 0;
-  font-weight: 650;
-  letter-spacing: 0.2px;
-  white-space: nowrap;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.app-header h1 .logo {
-  width: 26px;
-  height: 26px;
+.logo {
+  width: 16px;
+  height: 16px;
   display: block;
   flex: none;
-  border-radius: 6px;
 }
 
-.header-spacer { flex: 1; }
+.wordmark {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0;
+  white-space: nowrap;
+  margin-left: -10px;
+}
 
-/* Tool-status pills clustered tighter so they read as one group */
-.tools {
+.sep {
+  width: 1px;
+  height: 15px;
+  flex: none;
+  background: var(--rule);
+}
+
+.header-spacer { flex: 1; min-width: 0; }
+
+.deps {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* The endpoint is the first thing to give up room; the dependency
+   states are what actually stop the app working. */
+.rail > .pill.plain { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+@media (max-width: 1180px) {
+  .rail { gap: 14px; }
+  .deps { gap: 12px; }
+}
+
+@media (max-width: 860px) {
+  .rail > .pill.plain { display: none; }
+  .rail > .sep:last-of-type { display: none; }
 }

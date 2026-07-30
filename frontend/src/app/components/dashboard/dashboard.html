@@ -1,19 +1,40 @@
-<div class="dashboard">
-  <div class="dash-item">
-    <span class="dash-label">{{ noun }}</span>
-    <span class="dash-val">{{ store.total().toLocaleString('en-US') }}</span>
-  </div>
-  <div class="dash-item">
-    <span class="dash-label">Total Size</span>
-    <span class="dash-val">{{ humanMB(store.totalSize()) }}</span>
-  </div>
-  <div class="dash-item" title="Rough estimate based on current settings">
-    <span class="dash-label">{{ potLabel }}</span>
-    <span class="dash-val dash-pot">{{ potValue }}</span>
-    @if (potSub) { <span class="dash-sub">{{ potSub }}</span> }
-  </div>
-  <div class="dash-item">
-    <span class="dash-label">Already Saved</span>
-    <span class="dash-val dash-saved">{{ humanMB(store.savedBytes()) }}</span>
-  </div>
-</div>
+<section class="band" aria-label="Library composition">
+  @if (store.loaded()) {
+    <div class="band-top">
+      <span class="lbl">Library</span>
+      <span class="band-total">{{ humanMB(store.totalSize()) }}</span>
+      <span class="band-of">across {{ store.total().toLocaleString('en-US') }} {{ noun }}</span>
+    </div>
+
+    <div class="bar" role="img"
+      [attr.aria-label]="humanMB(reclaimed().bytes) + ' has already been reclaimed. '
+        + humanMB(store.totalSize()) + ' is still on disk.'">
+      <span class="seg-reclaimed" [style.width.%]="reclaimed().pct"></span>
+      <span class="seg-on-disk" [style.width.%]="onDisk().pct"></span>
+    </div>
+
+    <!-- The bar's own aria-label already states these figures in prose, but
+         the legend is plain readable text, so it is left in the tree. -->
+    <ul class="legend">
+      <li>
+        <i class="key seg-reclaimed" aria-hidden="true"></i>
+        <span class="num">{{ humanMB(reclaimed().bytes) }}</span>
+        <span class="lbl">reclaimed</span>
+      </li>
+
+      @if (selectionCount() > 0) {
+        <li class="legend-sel">
+          <span class="num">{{ selectionEstimate }}</span>
+          <span class="lbl">selected</span>
+          <span class="band-of">{{ selectionTime }} to encode</span>
+        </li>
+      }
+    </ul>
+  } @else {
+    <div class="band-empty">
+      <span class="lbl">Library</span>
+      <p>Nothing loaded yet. Choose <strong>Select media</strong> above to scan Immich for
+        videos, photos or Live Photos above a size threshold.</p>
+    </div>
+  }
+</section>

@@ -1,26 +1,24 @@
-<header class="app-header">
-  <h1 class="brand"><img class="logo" src="logo.png" alt="" /> Immich Recompress</h1>
-  <button class="btn" (click)="browseClick.emit()" aria-label="Select media to load">
-    Select Media
-  </button>
+<header class="rail">
+  <img class="logo" src="logo.png" alt="" />
+  <h1 class="wordmark">Immich Recompress</h1>
+
+  <span class="sep"></span>
+
+  <button class="btn" (click)="browseClick.emit()">Select media</button>
 
   <span class="header-spacer"></span>
 
-  <span class="tools">
-    <span class="pill" [ngClass]="store.handbrake() ? 'ok' : 'bad'" title="HandBrakeCLI">
-      HandBrakeCLI {{ store.handbrake() ? '✓' : '✗' }}
-    </span>
-    <span class="pill" [ngClass]="store.ffprobe() ? 'ok' : 'bad'" title="ffprobe">
-      ffprobe {{ store.ffprobe() ? '✓' : '✗' }}
-    </span>
-    <span class="pill" [ngClass]="store.ffmpeg() ? 'ok' : 'bad'" title="ffmpeg">
-      ffmpeg {{ store.ffmpeg() ? '✓' : '✗' }}
-    </span>
+  <span class="deps">
+    <span class="pill" [class.bad]="!store.handbrake()" title="HandBrakeCLI">HandBrakeCLI</span>
+    <span class="pill" [class.bad]="!store.ffprobe()" title="ffprobe">ffprobe</span>
+    <span class="pill" [class.bad]="!store.ffmpeg()" title="ffmpeg">ffmpeg</span>
   </span>
 
-  <span class="pill" [ngClass]="store.immichUrl() ? '' : 'bad'">
-    <span class="label-url">Immich:</span>
-    {{ store.immichUrl() || '—' }}
-    @if (store.immichVersion()) { <span>(v{{ store.immichVersion() }})</span> }
+  <span class="sep"></span>
+
+  <span class="pill plain" [class.bad]="!store.immichUrl()">
+    <span class="label-url">Immich</span>
+    {{ store.immichUrl() || 'not connected' }}
+    @if (store.immichVersion()) { <span class="label-url">v{{ store.immichVersion() }}</span> }
   </span>
 </header>

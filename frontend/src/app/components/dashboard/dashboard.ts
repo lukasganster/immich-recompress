@@ -1,5 +1,11 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { StoreService } from '../../services/store.service';
+
+/** One segment of the composition band. */
+interface Segment {
+  readonly pct: number;
+  readonly bytes: number;
+}
 
 @Component({
   selector: 'app-dashboard',
@@ -10,6 +16,27 @@ import { StoreService } from '../../services/store.service';
 })
 export class DashboardComponent {
   readonly store = inject(StoreService);
+
+  /**
+   * The band draws the whole library to scale: what recompressing already
+   * recovered, and what is still on disk. Its denominator therefore includes
+   * the already-recovered bytes, which are no longer part of totalSize. It
+   * states no estimate of what could still be recovered, because that number
+   * is a guess and this band only reports measured facts.
+   */
+  private readonly denominator = computed(() =>
+    this.store.savedBytes() + this.store.totalSize());
+
+  readonly reclaimed = computed<Segment>(() => this.segment(this.store.savedBytes()));
+
+  readonly onDisk = computed<Segment>(() => this.segment(this.store.totalSize()));
+
+  private segment(bytes: number): Segment {
+    const denom = this.denominator();
+    return { bytes, pct: denom > 0 ? (bytes / denom) * 100 : 0 };
+  }
+
+  readonly selectionCount = computed(() => this.store.selected().size);
 
   humanMB(bytes: number): string {
     if (!bytes) return '0 MB';
@@ -28,31 +55,17 @@ export class DashboardComponent {
 
   get noun(): string {
     const m = this.store.media();
-    return m === 'image' ? 'Photos' : m === 'motionphoto' ? 'Live Photos' : 'Videos';
+    return m === 'image' ? 'photos' : m === 'motionphoto' ? 'Live Photos' : 'videos';
   }
 
-  get hasSelection(): boolean { return this.store.selected().size > 0; }
-
-  get potLabel(): string {
-    const n = this.store.selected().size;
-    return n > 0 ? `Estimated Savings (${n} selected)` : 'Potential Savings (estimated)';
+  /** The selection's own estimate, shown beside the library's. */
+  get selectionEstimate(): string {
+    const bytes = this.store.estimatedSavingsBytes();
+    const frac = Math.round(this.store.estimatedSavingsFraction() * 100);
+    return `${this.humanMB(bytes)} from ${this.selectionCount()} selected (−${frac}%)`;
   }
 
-  get potValue(): string {
-    if (this.hasSelection) {
-      const bytes = this.store.estimatedSavingsBytes();
-      const frac = this.store.estimatedSavingsFraction();
-      const totalSel = this.store.selectionBytes();
-      return `≈ ${this.humanMB(bytes)} (−${Math.round(frac * 100)}% of ${this.humanMB(totalSel)})`;
-    }
-    const pot = this.store.totalPotential();
-    const tot = this.store.totalSize();
-    const pct = tot ? Math.round(pot / tot * 100) : 0;
-    return `≈ ${this.humanMB(pot)} (−${pct}%)`;
-  }
-
-  get potSub(): string {
-    if (!this.hasSelection) return '';
-    return `⏱ est. ${this.humanTime(this.store.estimatedSeconds())}`;
+  get selectionTime(): string {
+    return this.humanTime(this.store.estimatedSeconds());
   }
 }
