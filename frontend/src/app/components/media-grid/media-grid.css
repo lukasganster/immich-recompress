@@ -1,6 +1,21 @@
-:host { display: block; }
+/* The ledger. Dense, ruled, and carrying the drawn quantity in the size
+   column. See DESIGN.md. */
 
-.grid-shell { position: relative; }
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.grid-shell {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
 
 /* The grid library has no way to host an Angular template in a header
    cell (only body cells), so this sits on top of the select column's
@@ -16,18 +31,20 @@
   cursor: pointer;
 }
 
-.select-all-overlay input[type="checkbox"] { cursor: pointer; accent-color: var(--accent); }
+/* ── pager ──────────────────────────────────────────────────────────── */
 
 .grid-pager {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 12px 18px;
-  border-top: 1px solid var(--border-soft);
-  background: var(--bg-elev-2);
-  color: var(--text-dim);
-  font-size: 13px;
+  height: 34px;
+  padding: 0 var(--pad);
+  border-top: 1px solid var(--rule-hard);
+  background: var(--sheet-2);
+  color: var(--ink-dim);
+  font-size: 11px;
+  flex: none;
 }
 
 .pager-controls {
@@ -36,49 +53,65 @@
   gap: 10px;
 }
 
-.pager-controls button,
-.pager-controls select {
-  height: 30px;
-  border: 1px solid var(--border-soft);
-  border-radius: 8px;
-  background: var(--bg-elev);
-  color: var(--text);
-}
-
 .pager-controls button {
-  width: 40px;
-  font-size: 18px;
+  width: 20px;
+  height: 19px;
+  line-height: 1;
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink);
+  background: none;
+  border: 1px solid var(--rule-hard);
+  cursor: pointer;
+  transition: background var(--trans), border-color var(--trans);
 }
 
-.pager-controls button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
+.pager-controls button:hover:not(:disabled) { background: var(--sheet-3); border-color: var(--ink-faint); }
+.pager-controls button:disabled { color: var(--ink-faint); border-color: var(--rule); cursor: not-allowed; }
 
 .pager-controls select {
-  padding: 0 10px;
+  height: 19px;
+  padding: 0 4px;
+  font-size: 11px;
+  color: var(--ink-dim);
+  border-color: var(--rule);
+  background: none;
 }
+
+/* ── empty ──────────────────────────────────────────────────────────── */
 
 .empty-grid {
-  padding: 32px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px var(--pad);
   text-align: center;
-  color: var(--text-faint);
+  color: var(--ink-dim);
 }
+
+.empty-text { max-width: 54ch; }
+.empty-text strong { color: var(--ink); font-weight: 600; }
+.empty-text.is-error { color: var(--destruct); }
+.empty-meter { width: 180px; }
+
+/* ── cells ──────────────────────────────────────────────────────────── */
 
 .name-cell {
   display: flex;
   align-items: center;
   gap: 9px;
+  min-width: 0;
 }
 
 .row-thumb {
-  height: 30px;
-  width: 40px;
+  height: 20px;
+  width: 26px;
   flex: none;
   object-fit: cover;
-  border-radius: 4px;
-  background: var(--bg-elev-2);
-  border: 1px solid var(--border);
+  background: var(--sheet-3);
 }
 
 .row-thumb.hidden { display: none; }
@@ -94,11 +127,11 @@
   flex: none;
   font-size: 10px;
   font-weight: 600;
-  padding: 1px 6px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
-  color: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0 3px;
+  color: var(--ink-faint);
+  border: 1px solid var(--edge);
   white-space: nowrap;
 }
 
@@ -108,8 +141,7 @@
   justify-content: center;
 }
 
-.cell-center input[type="checkbox"] { cursor: pointer; accent-color: var(--accent); }
-.cell-center input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.4; }
+.cell-center input[type='checkbox']:disabled { cursor: not-allowed; }
 
 .row-actions {
   display: flex;
@@ -120,69 +152,26 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  background: var(--bg-elev-2);
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-  border-radius: 7px;
-  font-size: 13px;
-  cursor: pointer;
-  font-family: inherit;
-  transition: background var(--trans), border-color var(--trans), color var(--trans);
-}
-
-.row-actions button:hover {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-
-.badge {
-  display: inline-block;
-  padding: 2px 9px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
+  width: 22px;
+  height: 20px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink-faint);
+  background: none;
   border: 1px solid transparent;
+  cursor: pointer;
+  transition: color var(--trans), border-color var(--trans);
 }
 
-.badge.idle { color: var(--text-faint); }
-.badge.queued { color: var(--yellow); background: rgba(217,167,44,0.12); }
-.badge.encoding,
-.badge.downloading,
-.badge.replacing {
-  color: var(--blue);
-  background: rgba(79,140,255,0.14);
-  animation: pulse 1.4s ease-in-out infinite;
-}
-.badge.done, .badge.downloaded, .badge.encoded { color: var(--green); background: rgba(63,185,80,0.14); }
-.badge.processed { color: var(--green); background: rgba(63,185,80,0.10); border-color: rgba(63,185,80,0.35); }
-.badge.review { color: var(--purple); background: rgba(179,136,255,0.16); }
-.badge.skipped { color: var(--orange); background: rgba(224,130,61,0.14); }
-.badge.error { color: var(--red); background: rgba(240,85,107,0.14); }
-.badge.cancelled, .badge.discarded { color: var(--text-faint); background: rgba(120,120,120,0.14); }
+.row-actions button:hover { color: var(--ink); border-color: var(--rule-hard); }
 
-@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
-
+/* The result of a finished job, stated under its state word. */
 .status-sub {
   display: block;
   font-size: 11px;
-  color: var(--text-dim);
-  margin-top: 3px;
+  color: var(--ink-faint);
+  margin-top: 2px;
   white-space: nowrap;
 }
 
-.neg { color: var(--green); }
-
-.spin {
-  display: inline-block;
-  width: 14px;
-  height: 14px;
-  border: 2px solid var(--border);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: rot 0.8s linear infinite;
-}
-
-@keyframes rot { to { transform: rotate(360deg); } }
+.neg { color: var(--reclaimed); font-weight: 600; }

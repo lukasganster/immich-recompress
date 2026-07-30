@@ -23,18 +23,23 @@
         (click)="goToPage(store.page() + 1)">›</button>
       <select aria-label="Rows per page" [value]="store.perPage()"
         (change)="changePageSize($any($event.target).value)">
-        @for (size of store.perPageOptions; track size) {
-          <option [value]="size">{{ size }}</option>
+        @for (size of store.perPageOptions(); track size) {
+          <option [value]="size">{{ pageSizeLabel(size) }}</option>
         }
       </select>
     </div>
   </div>
 } @else {
   <div class="empty-grid">
-    @if (!store.loaded()) {
-      <span class="empty-text">No assets loaded — select a media type to get started.</span>
-    } @else {
-      <span class="spin"></span>
+    @if (store.loadError()) {
+      <span class="empty-text is-error" role="alert">{{ store.loadError() }}</span>
+      <button class="btn" (click)="load(true)">Try again</button>
+    } @else if (pageLoading()) {
+      <div class="meter indeterminate empty-meter"><i></i></div>
+      <span class="empty-text" role="status">Loading assets</span>
+    } @else if (!store.loaded()) {
+      <span class="empty-text">No assets loaded. Choose <strong>Select media</strong> in the
+        top bar to scan Immich for videos, photos or Live Photos above a size threshold.</span>
     }
   </div>
 }
@@ -65,8 +70,14 @@
   </div>
 </ng-template>
 
+<!-- The size, written and drawn. The rule is measured against the largest
+     row on the page, so the expensive files read as a shape down the
+     column before any number is read. See DESIGN.md. -->
 <ng-template #sizeTpl let-row="row">
-  {{ humanMB($any(row['size'])) }}
+  <div class="qty" [ngClass]="sizeInk(row)">
+    <span class="v">{{ humanMB($any(row['size'])) }}</span>
+    <i class="draw" aria-hidden="true"><i [style.width.%]="sizePct(row)"></i></i>
+  </div>
 </ng-template>
 
 <ng-template #statusTpl let-row="row">

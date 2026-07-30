@@ -1,8 +1,9 @@
 @if (open()) {
   <div class="modal-overlay" (click)="hide()"></div>
-  <div class="modal" role="dialog" aria-modal="true" aria-label="Select Media">
+  <div class="modal" cdkTrapFocus [cdkTrapFocusAutoCapture]="true"
+    role="dialog" aria-modal="true" aria-label="Select media">
     <div class="modal-head">
-      <strong>Select Media</strong>
+      <strong>Select media</strong>
       <button class="icon-btn" (click)="hide()" aria-label="Close">✕</button>
     </div>
     <div class="modal-body">
@@ -78,7 +79,7 @@
      </div>
     </div>
     <div class="modal-actions">
-      <button class="btn ghost push-left" (click)="clearHistory()">Clear History</button>
+      <button class="btn ghost push-left" (click)="clearHistory()">Clear history</button>
       <button class="btn ghost" (click)="hide()">Cancel</button>
       <button class="btn" [disabled]="localTab() === 'link' && addBusy()" (click)="onApply()">
         {{ localTab() === 'link' ? '＋ Add' : 'Apply' }}

@@ -1,11 +1,11 @@
 import {
   ChangeDetectionStrategy, Component, computed, inject,
-  OnDestroy, OnInit, output, signal, TemplateRef, viewChild,
+  ElementRef, OnDestroy, OnInit, output, signal, TemplateRef, viewChild,
 } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { UiGridComponent, GridOptions, GridColumnDef, GridCellTemplateContext } from '@ornery/ui-grid';
 import { Subscription } from 'rxjs';
-import { StoreService } from '../../services/store.service';
+import { MAX_PER_PAGE, StoreService } from '../../services/store.service';
 import { ApiService } from '../../services/api.service';
 import { VideoSummary, JobStatus } from '../../models/api.models';
 
@@ -20,6 +20,7 @@ import { VideoSummary, JobStatus } from '../../models/api.models';
 export class MediaGridComponent implements OnInit, OnDestroy {
   readonly store = inject(StoreService);
   readonly api = inject(ApiService);
+  private readonly host: ElementRef<HTMLElement> = inject(ElementRef);
 
   readonly detailRequested = output<string>();
 
@@ -31,6 +32,8 @@ export class MediaGridComponent implements OnInit, OnDestroy {
   readonly selectTpl = viewChild.required<TemplateRef<GridCellTemplateContext>>('selectTpl');
 
   private tplsReady = signal(false);
+  /** True while any asset request is pending, including a page/filter change. */
+  readonly pageLoading = signal(false);
   private assetRequest: Subscription | null = null;
   private sortUnsubscribe: (() => void) | null = null;
 
@@ -61,15 +64,24 @@ export class MediaGridComponent implements OnInit, OnDestroy {
    *  (otherwise blank) header cell rather than rendered by the grid itself. */
   readonly selectColWidth = '4%';
   /** Pinned so the overlay checkbox's CSS height always matches the
-   *  rendered header row, regardless of the library's own default. */
-  readonly headerRowHeight = 50;
+   *  rendered header row, regardless of the library's own default.
+   *  Must stay in step with --ui-grid-header-cell-padding-block. */
+  readonly headerRowHeight = 32;
 
   gridOptions = computed<GridOptions | null>(() => {
     if (!this.tplsReady()) return null;
+    // Before the first load there is nothing to put in a table, and the
+    // library's built-in empty state talks about filters and sort order,
+    // which is the wrong advice here. Same when the load failed: a table
+    // cannot say what went wrong. Render our own state instead.
+    if (!this.store.loaded() || this.store.loadError() || this.pageLoading()) return null;
     const hideClipCols = this.store.media() !== 'video';  // duration/codec only apply to videos
+    // Size is wide because it carries the drawn quantity as well as the
+    // number — the rule beside each value is what makes the expensive rows
+    // visible before anything is read. See DESIGN.md.
     const widths = hideClipCols
-      ? { select: this.selectColWidth, name: '32%', size: '10%', resolution: '10%', date: '11%', user: '11%', status: '14%', actions: '8%' }
-      : { select: this.selectColWidth, name: '24%', size: '8%', resolution: '10%', duration: '8%', codec: '7%', date: '9%', user: '9%', status: '14%', actions: '7%' };
+      ? { select: this.selectColWidth, name: '27%', size: '17%', resolution: '11%', date: '11%', user: '10%', status: '13%', actions: '7%' }
+      : { select: this.selectColWidth, name: '20%', size: '16%', resolution: '11%', duration: '9%', codec: '8%', date: '9%', user: '7%', status: '12%', actions: '4%' };
     const cols: GridColumnDef[] = [
       {
         name: 'select', displayName: ' ', field: 'id', width: widths.select,
@@ -88,14 +100,14 @@ export class MediaGridComponent implements OnInit, OnDestroy {
       },
       { name: 'resolution', displayName: 'Resolution', field: 'resolution', enableSorting: false, width: widths.resolution },
       ...(hideClipCols ? [] : [
-        { name: 'duration', displayName: 'Duration', field: 'duration_human', enableSorting: true, width: widths.duration } as GridColumnDef,
+        { name: 'duration', displayName: 'Length', field: 'duration_human', enableSorting: true, width: widths.duration } as GridColumnDef,
         { name: 'codec', displayName: 'Codec', field: 'codec', enableSorting: false, width: widths.codec } as GridColumnDef,
       ]),
       { name: 'date', displayName: 'Date', field: 'date', enableSorting: true, width: widths.date,
         formatter: (v) => v ? String(v).slice(0, 10) : '—' },
       { name: 'owner_name', displayName: 'User', field: 'owner_name', enableSorting: false, width: widths.user },
       {
-        name: 'status', displayName: 'Status', field: 'status', enableSorting: false, width: widths.status,
+        name: 'status', displayName: 'State', field: 'status', enableSorting: false, width: widths.status,
         cellTemplate: this.statusTpl() as TemplateRef<GridCellTemplateContext>,
       },
       {
@@ -115,8 +127,13 @@ export class MediaGridComponent implements OnInit, OnDestroy {
       // disabled and use the component pager below to request that page.
       enablePagination: false,
       enablePaginationControls: false,
-      emptyMessage: this.store.loaded() ? 'No assets found' : 'No assets loaded — select a media type to get started.',
+      // Only reachable once a load has happened, so this always talks about
+      // filters rather than about getting started.
+      emptyMessage: 'Nothing matches the current filters. Widen the search, or lower the size threshold in Select media.',
       onRegisterApi: (api) => {
+        // The grid has just built (or rebuilt) its shadow root, so this is
+        // the reliable moment to put our rules into it.
+        setTimeout(() => this.themeGridShadow(), 0);
         const gridApi = api as {
           core?: {
             on?: { sortChanged?: (cb: (col: string | null, dir: string) => void) => (() => void) };
@@ -148,6 +165,52 @@ export class MediaGridComponent implements OnInit, OnDestroy {
     this.sortUnsubscribe?.();
   }
 
+  /**
+   * The grid renders its rows inside a shadow root, so the sheet's density
+   * and truncation rules cannot reach them through the global stylesheet.
+   * Everything themeable by custom property is set in styles.css; these are
+   * the few rules that need real selectors, adopted into the shadow root.
+   * Cheap and idempotent: the sheet is built once and adopted once.
+   */
+  private themeGridShadow(): void {
+    const el = this.host.nativeElement.querySelector('ui-grid-element');
+    const root = el?.shadowRoot;
+    if (!root || root.adoptedStyleSheets.includes(MediaGridComponent.shadowSheet)) return;
+    root.adoptedStyleSheets = [...root.adoptedStyleSheets, MediaGridComponent.shadowSheet];
+  }
+
+  private static readonly shadowSheet = (() => {
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(`
+      /* One line per row. A wrapping cell would break the ledger's
+         rhythm and hide the drawn quantity below the fold. */
+      .body-cell {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        height: var(--row, 34px);
+        align-content: center;
+      }
+      /* Cell templates are slotted in from the light DOM, and the wrapper
+         they land in is a shrink-wrapping flex item. Without this the
+         drawn quantity has no width to be drawn across. */
+      .cell-shell { min-width: 0; }
+      .cell-content { flex: 1 1 auto; min-width: 0; }
+      ::slotted(span) { display: block; width: 100%; min-width: 0; }
+      .header-label { text-overflow: ellipsis; }
+      .header-cell { border-bottom-color: var(--rule-hard); }
+      /* Column heads join the app's one label system. */
+      .header-label {
+        font-size: 10px;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+      }
+      .empty-state { color: var(--ink-dim); max-width: none; }
+    `);
+    return sheet;
+  })();
+
   goToPage(page: number): void {
     const nextPage = Math.min(Math.max(1, page), this.totalPages());
     if (nextPage === this.store.page()) return;
@@ -155,9 +218,18 @@ export class MediaGridComponent implements OnInit, OnDestroy {
     this.load();
   }
 
+  /** The one option that is not a fixed step says what it actually does. */
+  pageSizeLabel(size: number): string {
+    return size === this.store.total() && size > 100
+      ? `All ${size}`
+      : size === MAX_PER_PAGE && this.store.total() > MAX_PER_PAGE
+        ? `${size.toLocaleString('en-US')} per page`
+        : `${size}`;
+  }
+
   changePageSize(value: unknown): void {
     const size = Number(value);
-    if (!this.store.perPageOptions.includes(size as 10 | 25 | 50 | 100)) return;
+    if (!this.store.perPageOptions().includes(size)) return;
     this.store.perPage.set(size);
     this.store.page.set(1);
     this.store.saveBrowse();
@@ -169,6 +241,8 @@ export class MediaGridComponent implements OnInit, OnDestroy {
   load(showOverlay = false): void {
     const s = this.store;
     if (showOverlay) s.loading.set(true);
+    s.loadError.set(null);
+    this.pageLoading.set(true);
     // Abort a superseded page/filter request so a late response cannot replace
     // the data for the page the user most recently selected.
     this.assetRequest?.unsubscribe();
@@ -187,18 +261,53 @@ export class MediaGridComponent implements OnInit, OnDestroy {
         s.loaded.set(true);
         s.loadError.set(data.error ?? null);
         s.loading.set(false);
+        this.pageLoading.set(false);
         this.loadGen.update(g => g + 1);
       },
       error: () => {
-        s.loadError.set('Failed to load');
+        // Name the problem and the recovery, not the failure.
+        s.loadError.set(
+          'Could not reach the backend to list assets. Check that Immich is up and the API key is still valid, then try again.');
+        s.videos.set([]);
+        s.total.set(0);
+        s.totalSize.set(0);
+        s.totalPotential.set(0);
         s.loaded.set(true);
         s.loading.set(false);
+        this.pageLoading.set(false);
+        this.loadGen.update(g => g + 1);
       },
     });
   }
 
   asVideo(row: Record<string, unknown>): VideoSummary {
     return row as unknown as VideoSummary;
+  }
+
+  /**
+   * Largest size on the current page. Every row's rule is drawn against
+   * this, so the column re-scales per page rather than against the library
+   * — the comparison that matters is between the rows you can actually see.
+   */
+  readonly maxSize = computed(() =>
+    this.store.videos().reduce((max, v) => Math.max(max, v.size || 0), 0));
+
+  /** Width of a row's drawn quantity, as a percentage of the widest row. */
+  sizePct(row: Record<string, unknown>): number {
+    const max = this.maxSize();
+    if (!max) return 0;
+    const size = Number(row['size']) || 0;
+    // Floor at 1% so a genuinely tiny file still draws a visible mark
+    // rather than reading as missing data.
+    return Math.max(1, (size / max) * 100);
+  }
+
+  /** Which meaning-bound ink the rule wears. See DESIGN.md. */
+  sizeInk(row: Record<string, unknown>): string {
+    const st = this.effectiveStatus(row);
+    if (this.store.isDone(st)) return 'done';
+    if (this.store.isBusy(st) || this.isSelected(row['id'])) return 'hot';
+    return '';
   }
 
   effectiveStatus(row: Record<string, unknown>): JobStatus {
@@ -257,7 +366,7 @@ export class MediaGridComponent implements OnInit, OnDestroy {
       idle: '–', queued: 'queued', encoding: 'encoding', downloading: 'downloading',
       replacing: 'replacing', done: 'done', downloaded: 'downloaded', encoded: 'encoded',
       review: 'review', skipped: 'skipped', error: 'error', cancelled: 'cancelled',
-      discarded: 'discarded', processed: '✓ done',
+      discarded: 'discarded', processed: 'done',
     };
     return map[status] ?? status;
   }
