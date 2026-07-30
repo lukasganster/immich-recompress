@@ -1,16 +1,24 @@
+/* Full playback of a recompressed file. The decision itself lives on the
+   bench; this exists for actually watching the result. See DESIGN.md. */
+
 :host { display: contents; }
 
 .review-media {
-  width: 100%; max-height: 52vh;
+  display: block;
+  width: 100%;
+  max-height: 52vh;
   background: #000;
-  border-radius: var(--radius);
-  margin-bottom: 14px;
+  margin-bottom: var(--pad);
   object-fit: contain;
 }
 
 .detail-grid {
-  display: grid; grid-template-columns: 130px 1fr;
-  gap: 6px 12px; font-size: 13px;
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 5px 16px;
+  font-size: 12px;
+  margin: 0;
 }
-.detail-grid dt { color: var(--text-faint); }
-.detail-grid dd { margin: 0; }
+
+.detail-grid dt { color: var(--ink-dim); }
+.detail-grid dd { margin: 0; font-weight: 500; }

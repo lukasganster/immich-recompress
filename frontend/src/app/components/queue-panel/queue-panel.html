@@ -1,58 +1,159 @@
-<div class="panel queue-panel">
+<!-- The bench. Anything awaiting a decision is compared here, on screen,
+     rather than behind a modal. See DESIGN.md. -->
+
+@let review = reviewJobs;
+@let running = runningJobs;
+@let waiting = waitingJobs;
+@let finished = finishedJobs;
+
+<section class="bench-section" aria-label="Awaiting review">
   <div class="panel-head">
-    <span>Queue</span>
+    <span>On the bench</span>
     <span class="spacer"></span>
-    <button class="icon-btn" (click)="clearDone()">Clear Done</button>
+    <span class="count">{{ review.length }} awaiting review</span>
   </div>
 
-  <div class="panel-body" id="queueBody">
-    @if (!orderedJobs.length) {
-      <div class="empty">No Jobs</div>
-    }
-    @for (entry of orderedJobs; track entry[0]) {
+  @if (!review.length) {
+    <p class="bench-empty">
+      Nothing to review. Encoded files land here for a side-by-side check before
+      anything in Immich is touched.
+    </p>
+  }
+
+  @for (entry of review; track entry[0]) {
+    @let id = entry[0];
+    @let j = entry[1];
+    <article class="clamp">
+      <div class="clamp-head">
+        <span class="f">{{ j.name || id }}</span>
+        <span class="spacer"></span>
+        <span class="badge review">review</span>
+      </div>
+
+      @if (isMotionStrip(j)) {
+        <div class="compare single">
+          <div class="pane">
+            <span class="lbl">Still photo</span>
+            <img class="frame" [src]="thumbUrl(id)" alt="" loading="lazy" />
+            <p class="pane-note">Kept exactly as it is. Only the motion video is removed.</p>
+          </div>
+        </div>
+      } @else {
+        <div class="compare">
+          <div class="pane">
+            <span class="lbl">Original</span>
+            <div class="frame">
+              <img [src]="thumbUrl(id)" alt="" loading="lazy"
+                (error)="$any($event.target).classList.add('hidden')" />
+            </div>
+            <div class="big">{{ humanMB(j.old_size) }}</div>
+            <div class="spec"><span>Codec</span><b>{{ (j.codec || '—').toUpperCase() }}</b></div>
+          </div>
+          <div class="pane after">
+            <span class="lbl">Recompressed</span>
+            <div class="frame">
+              @if (j.media === 'image') {
+                <img [src]="outputUrl(id)" alt="The recompressed image" loading="lazy"
+                  (error)="$any($event.target).classList.add('hidden')" />
+              } @else {
+                <video [src]="outputUrl(id)" preload="metadata" muted playsinline
+                  aria-label="First frame of the recompressed video"
+                  (error)="$any($event.target).classList.add('hidden')"></video>
+              }
+            </div>
+            <div class="big">{{ humanMB(j.new_size) }}</div>
+            <div class="spec"><span>Format</span><b>{{ formatLabel(j) }}</b></div>
+          </div>
+        </div>
+      }
+
+      <div class="verdict">
+        <span class="lbl">Reclaims</span>
+        <span class="num">{{ humanMB(savedBytes(j)) }}</span>
+        <span class="verdict-pct">−{{ savedPct(j) }}%</span>
+        <span class="spacer"></span>
+        <button class="link" (click)="reviewRequested.emit(id)">Open full preview</button>
+      </div>
+
+      <p class="consequence">
+        Replacing uploads the recompressed file as a new asset, copies the original's
+        metadata, tags and albums onto it, then moves the original to the Immich trash.
+        A local backup is kept.
+      </p>
+
+      <div class="clamp-acts">
+        <button class="btn destruct" (click)="confirmReplace(id)">Replace in Immich</button>
+        <button class="btn ghost" (click)="discard(id)">Keep original</button>
+      </div>
+    </article>
+  }
+</section>
+
+@if (running.length) {
+  <section class="bench-section" aria-label="Running">
+    <div class="panel-head"><span>Running</span></div>
+    @for (entry of running; track entry[0]) {
       @let id = entry[0];
       @let j = entry[1];
-      <div class="queue-job">
-        <div class="qj-head">
-          <span class="qj-name">{{ j.name || id }}</span>
-          <span class="qj-right">
-            <span class="badge" [ngClass]="j.status">{{ statusLabel(j.status) }}</span>
-            @if (['queued','downloading','encoding'].includes(j.status)) {
-              <button class="icon-btn sm" title="Cancel" (click)="cancel(id)">✕</button>
-            } @else if (immichUrl) {
-              <button class="icon-btn sm" title="Open in Immich" (click)="openInImmich(id, j)">↗</button>
-            }
-          </span>
-        </div>
-
-        @if (isActive(id)) {
-          <div class="progress anim">
-            <span [style.width.%]="j.progress || 0"></span>
-          </div>
-          <div class="qj-meta">{{ (j.progress || 0).toFixed(1) }}%</div>
-          @if (j.log) { <div class="qj-log" [title]="j.log">{{ j.log }}</div> }
-        } @else if (j.status === 'review') {
-          @if (j.old_size && j.new_size) {
-            @let pct = (100 - j.new_size / j.old_size * 100).toFixed(1);
-            <div class="qj-meta">{{ humanMB(j.old_size) }} → {{ humanMB(j.new_size) }} (−{{ pct }}%)</div>
+      <div class="job">
+        <div class="job-top">
+          <span class="f">{{ j.name || id }}</span>
+          <span class="num running-pct">{{ (j.progress || 0).toFixed(0) }}%</span>
+          @if (isCancellable(j)) {
+            <button class="icon-btn sm" title="Cancel" aria-label="Cancel" (click)="cancel(id)">✕</button>
           }
-          <div class="qj-meta">Format: {{ formatLabel(j) }}</div>
-          <div class="qj-actions">
-            <button class="btn ghost sm" (click)="reviewRequested.emit(id)">▶ Preview</button>
-            <button class="btn sm" (click)="confirmReplace(id)">✓ Replace</button>
-            <button class="btn ghost sm" (click)="discard(id)">✗ Discard</button>
-          </div>
-        } @else if (['done','encoded'].includes(j.status) && j.old_size && j.new_size) {
-          @let pct2 = (100 - j.new_size / j.old_size * 100).toFixed(1);
-          <div class="qj-meta">{{ humanMB(j.old_size) }} → {{ humanMB(j.new_size) }} (−{{ pct2 }}%)</div>
-        } @else if (j.log) {
-          <div class="qj-log" [title]="j.log">{{ j.log }}</div>
+        </div>
+        <div class="meter"><i [style.transform]="'scaleX(' + ((j.progress || 0) / 100) + ')'"></i></div>
+        @if (j.log) { <div class="job-log" [title]="j.log">{{ j.log }}</div> }
+      </div>
+    }
+  </section>
+}
+
+@if (waiting.length) {
+  <section class="bench-section" aria-label="Waiting">
+    <div class="panel-head">
+      <span>Waiting</span><span class="spacer"></span><span class="count">{{ waiting.length }}</span>
+    </div>
+    @for (entry of waiting; track entry[0]) {
+      @let id = entry[0];
+      @let j = entry[1];
+      <div class="line">
+        <span class="f">{{ j.name || id }}</span>
+        <span class="was">{{ humanMB(j.old_size) }}</span>
+        <button class="icon-btn sm" title="Cancel" aria-label="Cancel" (click)="cancel(id)">✕</button>
+      </div>
+    }
+  </section>
+}
+
+@if (finished.length) {
+  <section class="bench-section" aria-label="Finished">
+    <div class="panel-head">
+      <span>Finished</span>
+      <span class="spacer"></span>
+      <button class="link" (click)="clearDone()">Clear</button>
+    </div>
+    @for (entry of finished; track entry[0]) {
+      @let id = entry[0];
+      @let j = entry[1];
+      <div class="line">
+        <span class="f">{{ j.name || id }}</span>
+        @if (j.old_size && j.new_size) {
+          <span class="was">{{ humanMB(j.old_size) }} → {{ humanMB(j.new_size) }}</span>
+          <span class="delta">−{{ savedPct(j) }}%</span>
+        } @else {
+          <span class="badge" [ngClass]="j.status">{{ statusLabel(j.status) }}</span>
+        }
+        @if (immichUrl) {
+          <button class="icon-btn sm" title="Open in Immich" aria-label="Open in Immich"
+            (click)="openInImmich(id, j)">↗</button>
         }
       </div>
     }
-  </div>
-
-  <div class="saved-total">
-    Total saved: {{ humanMB(store.savedBytes()) }}
-  </div>
-</div>
+    <div class="saved-total">
+      <span class="lbl">Reclaimed this session</span>
+      <span class="num">{{ humanMB(store.savedBytes()) }}</span>
+    </div>
+  </section>
+}

@@ -1,19 +1,20 @@
 <div class="settings-summary panel">
-  <div class="ss-title">Compression Settings</div>
+  <div class="ss-title">Compression settings</div>
   <dl class="ss-grid">
     <dt>Video</dt><dd>{{ videoSummary }}</dd>
     <dt>Output</dt><dd>{{ outputSummary }}</dd>
     <dt>Photo</dt><dd>{{ photoSummary }}</dd>
     <dt>Mode</dt><dd>{{ modeSummary }}</dd>
   </dl>
-  <button class="btn ghost ss-edit" (click)="open.set(true)">Edit Compression-Settings</button>
+  <button class="btn ghost ss-edit" (click)="open.set(true)">Edit compression settings</button>
 </div>
 
 @if (open()) {
   <div class="modal-overlay" (click)="open.set(false)"></div>
-  <div class="modal" role="dialog" aria-modal="true" aria-label="Compression Settings">
+  <div class="modal" cdkTrapFocus [cdkTrapFocusAutoCapture]="true"
+    role="dialog" aria-modal="true" aria-label="Compression settings">
     <div class="modal-head">
-      <strong>Compression Settings</strong>
+      <strong>Compression settings</strong>
       <button class="icon-btn" (click)="open.set(false)" aria-label="Close">✕</button>
     </div>
 

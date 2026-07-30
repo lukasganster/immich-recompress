@@ -1,9 +1,10 @@
 @if (open()) {
   <div class="modal-overlay" (click)="hide()"></div>
-  <div class="modal" role="dialog" aria-modal="true">
+  <div class="modal" cdkTrapFocus [cdkTrapFocusAutoCapture]="true"
+    role="dialog" aria-modal="true" aria-label="Preview recompressed file">
     <div class="modal-head">
       <strong>{{ currentJob()?.name || 'Preview' }}</strong>
-      <button class="icon-btn" (click)="hide()">✕</button>
+      <button class="icon-btn" (click)="hide()" aria-label="Close">✕</button>
     </div>
 
     <div class="modal-body">
@@ -11,12 +12,12 @@
       @let id = currentId();
       @if (j && id) {
         @if (j.media === 'image') {
-          <img class="review-media" [src]="previewUrl(id, 'image')" alt="Preview" />
+          <img class="review-media" [src]="previewUrl(id)" alt="Preview" />
         } @else if (j.media === 'motionphoto' && !isMotionRecompress(j)) {
           <img class="review-media" [src]="thumbUrl(id)" alt="Still photo (kept)" />
         } @else {
           <video class="review-media" controls preload="metadata" playsinline
-            [src]="previewUrl(id, 'video')"></video>
+            [src]="previewUrl(id)"></video>
         }
 
         <dl class="detail-grid">
@@ -43,8 +44,10 @@
     </div>
 
     <div class="modal-actions">
-      <button class="btn ghost" (click)="discard()">✗ Discard</button>
-      <button class="btn" (click)="confirm()">✓ Confirm &amp; Replace</button>
+      <!-- Same order and emphasis as the bench, so the decision never
+           changes shape depending on where it is made. -->
+      <button class="btn destruct" (click)="confirm()">Replace in Immich</button>
+      <button class="btn ghost" (click)="discard()">Keep original</button>
     </div>
   </div>
 }

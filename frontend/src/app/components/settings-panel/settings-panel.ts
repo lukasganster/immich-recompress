@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, inject, signal } from '@angular/core';
+import { CdkTrapFocus } from '@angular/cdk/a11y';
 import { FormsModule } from '@angular/forms';
 import { StoreService } from '../../services/store.service';
 import { EncoderInfo, Settings } from '../../models/api.models';
@@ -6,7 +7,7 @@ import { EncoderInfo, Settings } from '../../models/api.models';
 @Component({
   selector: 'app-settings-panel',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, CdkTrapFocus],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './settings-panel.html',
   styleUrl: './settings-panel.css',
@@ -75,5 +76,10 @@ export class SettingsPanelComponent {
   get modeSummary(): string {
     if (!this.s.replace) return 'Keep original';
     return this.s.confirm ? 'Replace after review' : 'Replace immediately';
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    if (this.open()) this.open.set(false);
   }
 }
