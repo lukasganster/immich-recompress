@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, inject, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, inject, output, signal } from '@angular/core';
+import { CdkTrapFocus } from '@angular/cdk/a11y';
 import { ApiService } from '../../services/api.service';
 import { StoreService } from '../../services/store.service';
 import { VideoDetail } from '../../models/api.models';
@@ -6,6 +7,7 @@ import { VideoDetail } from '../../models/api.models';
 @Component({
   selector: 'app-detail-drawer',
   standalone: true,
+  imports: [CdkTrapFocus],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './detail-drawer.html',
   styleUrl: './detail-drawer.css',
@@ -32,6 +34,17 @@ export class DetailDrawerComponent {
   }
 
   hide(): void { this.open.set(false); }
+
+  /** Re-request the detail after a failed load. */
+  retry(): void {
+    const id = this.currentId();
+    if (id) this.show(id);
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    if (this.open()) this.hide();
+  }
 
   download(): void {
     const id = this.currentId();

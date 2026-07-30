@@ -50,6 +50,12 @@ export class QueuePanelComponent {
     return id === this.store.activeId() || this.store.isBusy(st as JobStatus);
   }
 
+  /** Replacing is asynchronous but irreversible, so only queue and encoder
+   * states expose cancellation. This mirrors the backend contract. */
+  isCancellable(j: JobPublic): boolean {
+    return j.status === 'queued' || j.status === 'downloading' || j.status === 'encoding';
+  }
+
   get immichUrl(): string { return this.store.immichUrl(); }
 
   /** Open the job's asset in Immich. Replaced jobs link to the new asset
@@ -86,5 +92,62 @@ export class QueuePanelComponent {
     if (j.media === 'image') return `${from} → JPEG · .jpg`;
     const target = j.new_codec?.toUpperCase() ?? this.store.encoderLabel(j.encoder);
     return `${from} → ${target} · .mp4`;
+  }
+
+  /* ── the bench ──────────────────────────────────────────────────────
+     Product principle 1: nothing is replaced unseen. The comparison lives
+     here permanently rather than behind a modal, so the four groups below
+     are ordered by what needs the user's attention, not by job id. */
+
+  /** Jobs waiting on a decision. These get the full side-by-side. */
+  get reviewJobs(): [string, JobPublic][] {
+    return this.entries().filter(([, j]) => j.status === 'review');
+  }
+
+  /** The one job actually encoding right now, if any. */
+  get runningJobs(): [string, JobPublic][] {
+    return this.entries().filter(([id]) => this.isActive(id));
+  }
+
+  get waitingJobs(): [string, JobPublic][] {
+    return this.entries().filter(([id, j]) => j.status === 'queued' && !this.isActive(id));
+  }
+
+  /** Everything already resolved, plus anything that failed. */
+  get finishedJobs(): [string, JobPublic][] {
+    return this.entries().filter(([id, j]) =>
+      j.status !== 'review' && j.status !== 'queued' && !this.isActive(id));
+  }
+
+  private entries(): [string, JobPublic][] {
+    return Object.entries(this.store.jobs());
+  }
+
+  /** Percent of the original reclaimed by a finished encode. */
+  savedPct(j: JobPublic): number {
+    if (!j.old_size || !j.new_size) return 0;
+    return Math.round((1 - j.new_size / j.old_size) * 100);
+  }
+
+  savedBytes(j: JobPublic): number {
+    return Math.max(0, (j.old_size ?? 0) - (j.new_size ?? 0));
+  }
+
+  /** A Live Photo whose motion clip is stripped has no recompressed file to
+   *  show, so the bench states the outcome instead of comparing two sizes. */
+  isMotionStrip(j: JobPublic): boolean {
+    return j.media === 'motionphoto' && j.motion_action !== 'recompress';
+  }
+
+  /** The original, straight from Immich. */
+  thumbUrl(id: string): string {
+    return this.api.thumbnailUrl(id, 'preview');
+  }
+
+  /** The encoded output itself, so the "after" pane shows the actual file
+   *  that would replace the original rather than a copy of the original's
+   *  thumbnail. Video renders as a <video> so its first frame is the still. */
+  outputUrl(id: string): string {
+    return this.api.previewUrl(id);
   }
 }
