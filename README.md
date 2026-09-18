@@ -34,11 +34,11 @@ metadata / tags / albums, and moves the original to the Immich trash
 ## Requirements
 
 - [`HandBrakeCLI`](https://handbrake.fr/) and [`ffmpeg` / `ffprobe`](https://ffmpeg.org/) on `PATH`
-- An Immich server (tested with **v2.7.4**) and an **admin** API key
+- An Immich server (tested with **v3.2.2**) and an **admin** API key
 - Docker, or for local dev: Python 3.9+ and Node 22 + [pnpm](https://pnpm.io/)
 
-> **Immich compatibility:** Developed and tested against Immich **2.7.4**. Newer or
-> older releases may work but API behaviour can differ — check `/api/status` for the
+> **Immich compatibility:** Developed and tested against Immich **3.2.2**. Newer or
+> older releases may work but API behaviour can differ. Check `/api/status` for the
 > detected server version and report issues if something breaks on your version.
 
 ## Quick start
@@ -70,7 +70,7 @@ services:
       IMMICH_DB: /data/immich_recompress.db
     ports:
       # Bound to 127.0.0.1: this app has NO authentication and can replace/trash
-      # Immich media — do not expose it without an authenticating reverse proxy.
+      # Immich media: do not expose it without an authenticating reverse proxy.
       # See SECURITY.md.
       - "127.0.0.1:${PORT:-5050}:${PORT:-5050}"
     volumes:
@@ -137,7 +137,7 @@ Set in `.env` (see [`.env.example`](.env.example)):
 The encoder dropdown is detected at runtime from your `HandBrakeCLI` build, so
 you only see options that work. Hardware encoders are far faster and barely touch
 the CPU; software encoders compress best and expose a **CPU cores** slider
-(defaults to all cores — lower it to keep the machine responsive).
+(defaults to all cores. Lower it to keep the machine responsive).
 
 | Platform | Hardware encoder | How to enable |
 | -------- | ---------------- | ------------- |
@@ -146,7 +146,7 @@ the CPU; software encoders compress best and expose a **CPU cores** slider
 | Linux + NVIDIA | NVENC | [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) + GPU reservation (below) + a HandBrake build with NVENC. |
 
 > **Docker:** the stock image's Debian `handbrake-cli` has **no** GPU encoders, so
-> only CPU encoders appear — NVENC/QSV need a HandBrake build that includes them.
+> only CPU encoders appear. NVENC/QSV need a HandBrake build that includes them.
 > The passthrough wiring below (and in `docker-compose.yml`) is ready for one.
 
 ```yaml
