@@ -12,8 +12,10 @@
 }
 
 .logo {
-  width: 16px;
-  height: 16px;
+  width: 26px;
+  height: 26px;
+  aspect-ratio: 1;
+  object-fit: contain;
   display: block;
   flex: none;
 }
