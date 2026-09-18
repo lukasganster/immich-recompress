@@ -95,7 +95,7 @@ html { overflow: hidden; }
 
 body {
   display: grid;
-  grid-template-rows: 40px auto auto minmax(0, 1fr) auto;
+  grid-template-rows: 56px auto auto minmax(0, 1fr) auto;
   grid-template-columns: minmax(0, 1fr);
   overflow: hidden;
 }
