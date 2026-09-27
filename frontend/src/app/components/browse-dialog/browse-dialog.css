@@ -69,6 +69,30 @@
   line-height: 1.5;
 }
 
+.date-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.date-inputs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.date-inputs label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+
+.date-inputs input { min-width: 0; }
+.date-error { margin: 0; font-size: 12px; color: var(--destruct); }
+
 .key-list {
   display: flex;
   flex-direction: column;

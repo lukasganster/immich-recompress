@@ -1,6 +1,6 @@
 import { computed, effect, Injectable, signal } from '@angular/core';
 import {
-  Capabilities, EncoderInfo, JobPublic, JobStatus, KeyOwner, MediaType, ProcessedEntry,
+  Capabilities, CaptureDateFilter, EncoderInfo, JobPublic, JobStatus, KeyOwner, MediaType, ProcessedEntry,
   Settings, SortField, SortOrder, SseJobUpdate, User, VideoSummary,
 } from '../models/api.models';
 
@@ -10,6 +10,10 @@ const LS_SETTINGS = 'immich_settings';
 const PER_PAGE_OPTIONS = [10, 25, 50, 100] as const;
 /** Must match backend.config.MAX_PER_PAGE. */
 export const MAX_PER_PAGE = 100_000;
+
+function browserTimezone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+}
 
 /**
  * The "still working" ladder shown under the loading meter, as
@@ -73,6 +77,16 @@ export class StoreService {
   readonly media = signal<MediaType>('video');
   readonly videoMinGb = signal(0.5);
   readonly photoMinMb = signal(10);
+  /** Dates entered in this IANA timezone describe whole calendar days. */
+  readonly captureDateFrom = signal('');
+  readonly captureDateTo = signal('');
+  readonly captureTimezone = signal(browserTimezone());
+
+  readonly captureDates = computed<CaptureDateFilter>(() => ({
+    dateFrom: this.captureDateFrom(),
+    dateTo: this.captureDateTo(),
+    timezone: this.captureTimezone(),
+  }));
 
   // --- users ---
   readonly users = signal<User[]>([]);
@@ -234,6 +248,11 @@ export class StoreService {
       if (b.media === 'image' || b.media === 'video' || b.media === 'motionphoto') this.media.set(b.media);
       if (Number.isFinite(+b.videoMinGb)) this.videoMinGb.set(+b.videoMinGb);
       if (Number.isFinite(+b.photoMinMb)) this.photoMinMb.set(+b.photoMinMb);
+      if (typeof b.captureDateFrom === 'string') this.captureDateFrom.set(b.captureDateFrom);
+      if (typeof b.captureDateTo === 'string') this.captureDateTo.set(b.captureDateTo);
+      if (typeof b.captureTimezone === 'string' && b.captureTimezone) {
+        this.captureTimezone.set(b.captureTimezone);
+      }
       // Only the fixed steps are restored. A remembered "show everything" size
       // belongs to the library it was chosen for, not to the next session's.
       if ((PER_PAGE_OPTIONS as readonly number[]).includes(+b.perPage)) this.perPage.set(+b.perPage);
@@ -261,6 +280,8 @@ export class StoreService {
         media: this.media(), videoMinGb: this.videoMinGb(),
         photoMinMb: this.photoMinMb(), perPage: this.perPage(),
         selectedKeys: this.selectedKeys(),
+        captureDateFrom: this.captureDateFrom(), captureDateTo: this.captureDateTo(),
+        captureTimezone: this.captureTimezone(),
       }));
     } catch { /* ignore */ }
   }

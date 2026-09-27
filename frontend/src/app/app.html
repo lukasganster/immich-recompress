@@ -18,6 +18,12 @@
     </div>
   }
 
+  @if (store.captureDateFrom() || store.captureDateTo()) {
+    <span class="active-filter" role="status">
+      Capture: {{ store.captureDateFrom() || 'any time' }} to {{ store.captureDateTo() || 'any time' }}
+      ({{ store.captureTimezone() }})
+    </span>
+  }
   <select aria-label="Filter by user" (change)="setUser($any($event.target).value)">
     <option value="">All users</option>
     @for (u of store.users(); track u.id) {

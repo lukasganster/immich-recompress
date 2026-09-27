@@ -53,7 +53,12 @@ export class App implements OnInit {
     const threshold = m === 'video'
       ? `≥ ${this.store.videoMinGb()} GB`
       : `≥ ${this.store.photoMinMb()} MB`;
-    return `${noun} · ${threshold}`;
+    const dateFrom = this.store.captureDateFrom();
+    const dateTo = this.store.captureDateTo();
+    const dates = dateFrom || dateTo
+      ? ` · taken ${dateFrom || 'any time'} to ${dateTo || 'any time'}`
+      : '';
+    return `${noun} · ${threshold}${dates}`;
   }
 
   get statusText(): string {

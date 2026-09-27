@@ -59,6 +59,29 @@
           </small>
         </div>
       }
+
+      @if (localTab() !== 'link') {
+        <div class="field date-field">
+          <div class="date-label-row">
+            <label>Date taken</label>
+            @if (localDateFrom() || localDateTo()) {
+              <button type="button" class="link" (click)="clearDates()">Clear dates</button>
+            }
+          </div>
+          <div class="date-inputs">
+            <label>From
+              <input type="date" [ngModel]="localDateFrom()"
+                (ngModelChange)="localDateFrom.set($event); dateError.set('')" />
+            </label>
+            <label>Through
+              <input type="date" [ngModel]="localDateTo()"
+                (ngModelChange)="localDateTo.set($event); dateError.set('')" />
+            </label>
+          </div>
+          <p class="hint">Optional. Dates use {{ localTimezone() }} and include both endpoints.</p>
+          @if (dateError()) { <p class="date-error" role="alert">{{ dateError() }}</p> }
+        </div>
+      }
       </div>
 
       @if (store.keyOwners().length > 1 && localTab() !== 'link') {

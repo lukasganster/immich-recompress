@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import {
   Capabilities, JobsResponse, Settings, StatusResponse, VideoDetail,
   VideosResponse, VideoSummary, User, KeyOwner, MediaType, SortField, SortOrder,
+  CaptureDateFilter,
 } from '../models/api.models';
 
 @Injectable({ providedIn: 'root' })
@@ -21,7 +22,7 @@ export class ApiService {
   assets(params: {
     page: number; per_page: number; sort: SortField; order: SortOrder;
     media: MediaType; min_mb: number; codec?: string; user?: string; search?: string;
-    keys?: number[];
+    keys?: number[]; captureDates?: CaptureDateFilter;
   }): Observable<VideosResponse> {
     const p: Record<string, string> = {
       page: String(params.page), per_page: String(params.per_page),
@@ -32,6 +33,11 @@ export class ApiService {
     if (params.user) p['user'] = params.user;
     if (params.search) p['search'] = params.search;
     if (params.keys && params.keys.length) p['keys'] = params.keys.join(',');
+    if (params.captureDates?.dateFrom) p['date_from'] = params.captureDates.dateFrom;
+    if (params.captureDates?.dateTo) p['date_to'] = params.captureDates.dateTo;
+    if (params.captureDates && (params.captureDates.dateFrom || params.captureDates.dateTo)) {
+      p['timezone'] = params.captureDates.timezone;
+    }
     return this.http.get<VideosResponse>('/api/assets', { params: p });
   }
 
