@@ -24,6 +24,10 @@ export class BrowseDialogComponent {
   localTab = signal<MediaType | 'link'>('video');
   localVideoGb = signal(0.5);
   localPhotoMb = signal(10);
+  localDateFrom = signal('');
+  localDateTo = signal('');
+  localTimezone = signal('UTC');
+  dateError = signal('');
 
   // --- add by link / ID ---
   addInput = signal('');
@@ -37,6 +41,10 @@ export class BrowseDialogComponent {
     this.localTab.set(this.store.media());
     this.localVideoGb.set(this.store.videoMinGb());
     this.localPhotoMb.set(this.store.photoMinMb());
+    this.localDateFrom.set(this.store.captureDateFrom());
+    this.localDateTo.set(this.store.captureDateTo());
+    this.localTimezone.set(this.store.captureTimezone());
+    this.dateError.set('');
     const sel = this.store.selectedKeys();
     const all = this.store.keyOwners().map(o => o.key_idx);
     this.localKeys.set(new Set(sel.length ? sel : all));  // empty stored = all
@@ -56,6 +64,12 @@ export class BrowseDialogComponent {
   }
 
   hide(): void { this.open.set(false); }
+
+  clearDates(): void {
+    this.localDateFrom.set('');
+    this.localDateTo.set('');
+    this.dateError.set('');
+  }
 
   /** Resolve the pasted Immich URLs / `/photos/<id>` / bare ids and add the
    *  matching assets to the list, pre-selected. Closes the dialog only when
@@ -86,9 +100,17 @@ export class BrowseDialogComponent {
 
   onApply(): void {
     if (this.localTab() === 'link') { this.addByLink(); return; }
+    if (this.localDateFrom() && this.localDateTo()
+        && this.localDateFrom() > this.localDateTo()) {
+      this.dateError.set('The start date must not be after the end date.');
+      return;
+    }
     this.store.media.set(this.localTab() as MediaType);
     this.store.videoMinGb.set(this.localVideoGb());
     this.store.photoMinMb.set(this.localPhotoMb());
+    this.store.captureDateFrom.set(this.localDateFrom());
+    this.store.captureDateTo.set(this.localDateTo());
+    this.store.captureTimezone.set(this.localTimezone());
     // Store all-selected (or none) as [] meaning "scan all keys".
     const owners = this.store.keyOwners();
     const chosen = owners.map(o => o.key_idx).filter(i => this.localKeys().has(i));

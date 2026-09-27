@@ -7,6 +7,12 @@ export type MediaType = 'video' | 'image' | 'motionphoto';
 export type SortField = 'size' | 'savings' | 'date' | 'name' | 'duration';
 export type SortOrder = 'asc' | 'desc';
 
+export interface CaptureDateFilter {
+  dateFrom: string;
+  dateTo: string;
+  timezone: string;
+}
+
 export interface VideoSummary {
   id: string;
   media: MediaType;

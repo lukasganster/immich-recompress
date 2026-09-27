@@ -234,7 +234,7 @@ select:focus-visible, textarea:focus-visible, summary:focus-visible,
 
 .link:hover { color: var(--ink); border-bottom-color: var(--ink); }
 
-input[type='text'], input[type='search'], input[type='number'], select, textarea {
+input[type='text'], input[type='search'], input[type='number'], input[type='date'], select, textarea {
   font: inherit;
   color: var(--ink);
   background: var(--sheet);

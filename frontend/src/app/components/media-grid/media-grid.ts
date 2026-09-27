@@ -104,7 +104,7 @@ export class MediaGridComponent implements OnInit, OnDestroy {
         { name: 'codec', displayName: 'Codec', field: 'codec', enableSorting: false, width: widths.codec } as GridColumnDef,
       ]),
       { name: 'date', displayName: 'Date', field: 'date', enableSorting: true, width: widths.date,
-        formatter: (v) => v ? String(v).slice(0, 10) : '—' },
+        formatter: (v) => this.formatCaptureDate(v) },
       { name: 'owner_name', displayName: 'User', field: 'owner_name', enableSorting: false, width: widths.user },
       {
         name: 'status', displayName: 'State', field: 'status', enableSorting: false, width: widths.status,
@@ -251,6 +251,7 @@ export class MediaGridComponent implements OnInit, OnDestroy {
       media: s.media(), min_mb: s.effectiveMinMb(),
       codec: s.codec() || undefined, user: s.userFilter() || undefined,
       search: s.search() || undefined, keys: s.selectedKeys(),
+      captureDates: s.captureDates(),
     }).subscribe({
       next: data => {
         s.videos.set(data.assets ?? []);
@@ -264,10 +265,10 @@ export class MediaGridComponent implements OnInit, OnDestroy {
         this.pageLoading.set(false);
         this.loadGen.update(g => g + 1);
       },
-      error: () => {
-        // Name the problem and the recovery, not the failure.
-        s.loadError.set(
-          'Could not reach the backend to list assets. Check that Immich is up and the API key is still valid, then try again.');
+      error: (response: { error?: { error?: string } }) => {
+        // Surface validation and Immich compatibility errors from the backend.
+        s.loadError.set(response.error?.error
+          ?? 'Could not reach the backend to list assets. Check that Immich is up and the API key is still valid, then try again.');
         s.videos.set([]);
         s.total.set(0);
         s.totalSize.set(0);
@@ -359,6 +360,19 @@ export class MediaGridComponent implements OnInit, OnDestroy {
     const mb = bytes / (1024 * 1024);
     if (mb >= 1024) return (mb / 1024).toFixed(2) + ' GB';
     return mb.toFixed(1) + ' MB';
+  }
+
+  formatCaptureDate(value: unknown): string {
+    if (!value) return '—';
+    const parsed = new Date(String(value));
+    if (Number.isNaN(parsed.getTime())) return String(value).slice(0, 10);
+    try {
+      return new Intl.DateTimeFormat(undefined, {
+        timeZone: this.store.captureTimezone(), year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(parsed);
+    } catch {
+      return String(value).slice(0, 10);
+    }
   }
 
   statusLabel(status: JobStatus): string {

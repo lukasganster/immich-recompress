@@ -14,7 +14,7 @@ live progress.
 
 ## Features
 
-- Browse videos, photos or Live Photos, filtered by size.
+- Browse videos, photos or Live Photos, filtered by size and capture date.
 - Re-encode videos (HandBrake: x264 / x265 / AV1, optional resolution cap).
 - Hardware (GPU) encoding when available, auto-detected at runtime, plus a
   selectable CPU-core count. See [Hardware acceleration](#hardware-acceleration).
@@ -40,6 +40,10 @@ metadata / tags / albums, and moves the original to the Immich trash
 > **Immich compatibility:** Developed and tested against Immich **3.2.2**. Newer or
 > older releases may work but API behaviour can differ. Check `/api/status` for the
 > detected server version and report issues if something breaks on your version.
+
+Capture-date filters use Immich's structured metadata search API. Dates are
+interpreted as whole calendar days in the browser's timezone, including both
+selected endpoints. The selected timezone is saved with the filter.
 
 ## Quick start
 

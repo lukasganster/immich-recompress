@@ -37,6 +37,16 @@
 
 .filterbar select:hover { border-color: var(--rule-hard); color: var(--ink); }
 
+.active-filter {
+  margin-left: 14px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-dim);
+  font-size: 11px;
+}
+
 /* ── body ───────────────────────────────────────────────────────────── */
 
 .layout {

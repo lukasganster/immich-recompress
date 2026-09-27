@@ -356,6 +356,17 @@ def detect_immich_version(env):
     return None
 
 
+def supports_structured_search(env):
+    """Whether the server version supports the v3.2 cursor/filter search shape."""
+    version = detect_immich_version(env)
+    if not version:
+        return False
+    match = re.search(r"(\d+)\.(\d+)(?:\.(\d+))?", version)
+    if not match:
+        return False
+    return tuple(int(part or 0) for part in match.groups()) >= (3, 2, 0)
+
+
 def asset_codec(asset):
     info = asset.get("exifInfo") or {}
     media = asset.get("originalMimeType")
@@ -366,6 +377,8 @@ UUID_RE = re.compile(
     r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 
 
+class StructuredSearchError(RuntimeError):
+    """An Immich metadata search that cannot safely provide all results."""
 
 
 def norm_media(value):
@@ -415,6 +428,46 @@ def search_metadata_all(env, body, max_pages=100):
     return items
 
 
+def search_metadata_filtered(env, asset_filter, max_pages=100):
+    """Return every result from Immich's cursor-based structured search API.
+
+    The structured and legacy search request formats are mutually exclusive.
+    Date-constrained scans use this helper so their requested constraints are
+    never silently dropped when a server rejects the newer API shape.
+    """
+    items = []
+    cursor = None
+    for page in range(1, max_pages + 1):
+        body = {"filter": asset_filter, "withExif": True,
+                "size": IMMICH_PER_PAGE}
+        if cursor:
+            body["cursor"] = cursor
+        try:
+            resp = requests.post(env["url"] + "/api/search/metadata",
+                                 headers=immich_headers(env), json=body,
+                                 timeout=HTTP_TIMEOUT)
+        except requests.RequestException as exc:
+            raise StructuredSearchError(f"Could not search Immich: {exc}") from exc
+        if resp.status_code != 200:
+            raise StructuredSearchError(
+                f"Immich metadata search returned HTTP {resp.status_code}. "
+                "Capture-date filtering requires an Immich version that supports structured search.")
+        try:
+            data = resp.json()
+        except ValueError as exc:
+            raise StructuredSearchError("Immich returned an invalid metadata-search response.") from exc
+        block = (data.get("assets") or {}) if isinstance(data, dict) else {}
+        page_items = block.get("items", [])
+        if not isinstance(page_items, list):
+            raise StructuredSearchError("Immich returned an invalid metadata-search result list.")
+        items.extend(page_items)
+        cursor = block.get("nextCursor")
+        if not cursor:
+            return items
+    raise StructuredSearchError(
+        f"The capture-date search exceeded the {max_pages}-page scan limit. Narrow the date range.")
+
+
 def motion_summary(env, still, vasset, vsize):
     """Build a list summary for a Live/motion photo. `size`/`potential` are the
     motion-video size — i.e. the bytes that stripping would reclaim."""
@@ -449,28 +502,39 @@ def motion_summary(env, still, vasset, vsize):
     }
 
 
-def collect_motion_photos(env, key_indices, min_bytes, user_filter, search_filter):
+def collect_motion_photos(env, key_indices, min_bytes, user_filter, search_filter,
+                          capture_filter=None, legacy_capture_filter=None):
     """List Live/motion photos. The still IMAGE asset carries livePhotoVideoId;
     the reclaimable bytes live on the hidden VIDEO component. Returns summaries
     whose `size` is the motion-video size (what stripping would free)."""
     # Hidden video components keyed by id, so we can look up sizes without an
-    # extra request per photo.
+    # extra request per photo. A capture-date filter applies to the still, not
+    # its linked clip, so only fetch the linked clips for matching stills.
     video_map = {}
-    for key_idx in key_indices:
-        key_env = env_for_key(env, key_idx)
-        for v in search_metadata_all(key_env, {"type": "VIDEO", "visibility": "hidden",
-                                               "withExif": True}):
-            vid = v.get("id")
-            if vid:
-                video_map[vid] = v
+    has_capture_filter = capture_filter is not None or legacy_capture_filter is not None
+    if not has_capture_filter:
+        for key_idx in key_indices:
+            key_env = env_for_key(env, key_idx)
+            for v in search_metadata_all(key_env, {"type": "VIDEO", "visibility": "hidden",
+                                                   "withExif": True}):
+                vid = v.get("id")
+                if vid:
+                    video_map[vid] = v
 
     summaries = []
     for key_idx in key_indices:
         key_env = env_for_key(env, key_idx)
-        body = {"type": "IMAGE", "isMotion": True, "withExif": True}
-        if user_filter:
-            body["ownerId"] = user_filter
-        for still in search_metadata_all(key_env, body):
+        if capture_filter is None:
+            body = {"type": "IMAGE", "isMotion": True, "withExif": True}
+            if user_filter:
+                body["ownerId"] = user_filter
+            if legacy_capture_filter:
+                body.update(legacy_capture_filter)
+            stills = search_metadata_all(key_env, body)
+        else:
+            motion_filter = {**capture_filter, "isMotion": {"eq": True}}
+            stills = search_metadata_filtered(key_env, motion_filter)
+        for still in stills:
             vid = still.get("livePhotoVideoId")
             if not vid:
                 continue

@@ -7,6 +7,8 @@ import queue
 import shutil
 import threading
 import time
+from datetime import date, datetime, time as datetime_time, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
 from flask import (
@@ -29,6 +31,7 @@ from backend.immich_api import (
     env_for_asset_verified, env_for_key, fetch_asset, fetch_key_owners,
     fetch_users, immich_headers, motion_summary, norm_media, owner_name_for,
     paginate_summaries, parse_key_indices, search_metadata_all, video_summary,
+    search_metadata_filtered, StructuredSearchError, supports_structured_search,
     _key_env_for_asset,
 )
 from backend.jobs import (
@@ -64,6 +67,84 @@ def _cache_asset_summaries(key, summaries):
         for cache_key in expired:
             _asset_cache.pop(cache_key, None)
         _asset_cache[key] = (now, list(summaries))
+
+
+def _normalise_capture_dates(args):
+    """Validate date inputs and convert their chosen-zone days to UTC bounds."""
+    date_from_raw = (args.get("date_from") or "").strip()
+    date_to_raw = (args.get("date_to") or "").strip()
+    if not date_from_raw and not date_to_raw:
+        return None, None
+
+    timezone_name = (args.get("timezone") or "").strip()
+    if not timezone_name:
+        return None, "A timezone is required when filtering by capture date."
+    try:
+        selected_timezone = ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError:
+        return None, "The selected timezone is not available on this server."
+
+    def parse_date(value):
+        if not value:
+            return None
+        if len(value) != 10 or value[4] != "-" or value[7] != "-":
+            raise ValueError
+        return date.fromisoformat(value)
+
+    try:
+        date_from = parse_date(date_from_raw)
+        date_to = parse_date(date_to_raw)
+    except ValueError:
+        return None, "Capture dates must use the YYYY-MM-DD format."
+    if date_from and date_to and date_from > date_to:
+        return None, "The capture-date start must not be after the end date."
+
+    def utc_start(day):
+        local = datetime.combine(day, datetime_time.min, tzinfo=selected_timezone)
+        return local.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    end_exclusive = (
+        datetime.combine(date_to + timedelta(days=1), datetime_time.min, tzinfo=selected_timezone)
+        .astimezone(timezone.utc)
+        if date_to else None
+    )
+
+    return {
+        "date_from": date_from_raw,
+        "date_to": date_to_raw,
+        "timezone": timezone_name,
+        "start": utc_start(date_from) if date_from else None,
+        # Calendar arithmetic retains midnight across daylight-saving changes.
+        "end": end_exclusive.isoformat().replace("+00:00", "Z") if end_exclusive else None,
+        # Legacy Immich's takenBefore comparison is inclusive, unlike the
+        # structured filter's half-open `lt` bound.
+        "legacy_end": (
+            (end_exclusive - timedelta(microseconds=1)).isoformat().replace("+00:00", "Z")
+            if end_exclusive else None
+        ),
+    }, None
+
+
+def _structured_capture_filter(immich_type, capture_dates):
+    """Build the Immich v3 structured filter for a capture-date browse."""
+    asset_filter = {"type": {"eq": immich_type}}
+    taken_at = {}
+    if capture_dates["start"]:
+        taken_at["gte"] = capture_dates["start"]
+    if capture_dates["end"]:
+        taken_at["lt"] = capture_dates["end"]
+    asset_filter["takenAt"] = taken_at
+    return asset_filter
+
+
+def _legacy_capture_filter(capture_dates):
+    """Build the pre-v3.2 date parameters, whose upper bound is inclusive."""
+    asset_filter = {}
+    if capture_dates["start"]:
+        asset_filter["takenAfter"] = capture_dates["start"]
+    if capture_dates["legacy_end"]:
+        asset_filter["takenBefore"] = capture_dates["legacy_end"]
+    return asset_filter
 
 
 @bp.before_request
@@ -147,6 +228,9 @@ def api_assets():
     search_filter = (request.args.get("search") or "").strip().lower()
     min_gb_param = request.args.get("min_gb")
     min_mb_param = request.args.get("min_mb")
+    capture_dates, date_error = _normalise_capture_dates(request.args)
+    if date_error:
+        return jsonify({"error": date_error}), 400
 
     # Beyond the fixed steps the UI offers one option holding the whole result
     # set, so any positive size is legitimate. The ceiling only keeps a bad
@@ -186,15 +270,24 @@ def api_assets():
     cache_key = (
         env["url"], tuple(api_keys), tuple(key_indices), media, min_bytes,
         codec_filter, user_filter, search_filter,
+        (capture_dates or {}).get("start"), (capture_dates or {}).get("end"),
+        (capture_dates or {}).get("timezone"),
     )
     summaries = _cached_asset_summaries(cache_key)
     if summaries is not None:
         return paginate_summaries(summaries, sort, order, page, per_page)
 
     fetch_users(env)
+    use_structured_search = capture_dates and supports_structured_search(env)
 
     if media == "motionphoto":
-        summaries = collect_motion_photos(env, key_indices, min_bytes, user_filter, search_filter)
+        try:
+            summaries = collect_motion_photos(
+                env, key_indices, min_bytes, user_filter, search_filter,
+                _structured_capture_filter("IMAGE", capture_dates) if use_structured_search else None,
+                _legacy_capture_filter(capture_dates) if capture_dates and not use_structured_search else None)
+        except StructuredSearchError as exc:
+            return jsonify({"error": str(exc)}), 502
         _cache_asset_summaries(cache_key, summaries)
         return paginate_summaries(summaries, sort, order, page, per_page)
 
@@ -202,10 +295,20 @@ def api_assets():
     collected: list = []
     for key_idx in key_indices:
         key_env = env_for_key(env, key_idx)
+        if capture_dates and use_structured_search:
+            try:
+                for asset in search_metadata_filtered(
+                    key_env, _structured_capture_filter(immich_type, capture_dates)):
+                    collected.append((asset, key_idx))
+            except StructuredSearchError as exc:
+                return jsonify({"error": str(exc)}), 502
+            continue
         immich_page = 1
         while True:
             body = {"type": immich_type, "size": IMMICH_PER_PAGE, "page": immich_page,
                     "withExif": True}
+            if capture_dates:
+                body.update(_legacy_capture_filter(capture_dates))
             if user_filter:
                 body["ownerId"] = user_filter
             try:
