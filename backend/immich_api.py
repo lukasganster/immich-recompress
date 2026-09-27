@@ -356,6 +356,17 @@ def detect_immich_version(env):
     return None
 
 
+def supports_structured_search(env):
+    """Whether the server version supports the v3.2 cursor/filter search shape."""
+    version = detect_immich_version(env)
+    if not version:
+        return False
+    match = re.search(r"(\d+)\.(\d+)(?:\.(\d+))?", version)
+    if not match:
+        return False
+    return tuple(int(part or 0) for part in match.groups()) >= (3, 2, 0)
+
+
 def asset_codec(asset):
     info = asset.get("exifInfo") or {}
     media = asset.get("originalMimeType")
@@ -492,7 +503,7 @@ def motion_summary(env, still, vasset, vsize):
 
 
 def collect_motion_photos(env, key_indices, min_bytes, user_filter, search_filter,
-                          capture_filter=None):
+                          capture_filter=None, legacy_capture_filter=None):
     """List Live/motion photos. The still IMAGE asset carries livePhotoVideoId;
     the reclaimable bytes live on the hidden VIDEO component. Returns summaries
     whose `size` is the motion-video size (what stripping would free)."""
@@ -500,7 +511,8 @@ def collect_motion_photos(env, key_indices, min_bytes, user_filter, search_filte
     # extra request per photo. A capture-date filter applies to the still, not
     # its linked clip, so only fetch the linked clips for matching stills.
     video_map = {}
-    if capture_filter is None:
+    has_capture_filter = capture_filter is not None or legacy_capture_filter is not None
+    if not has_capture_filter:
         for key_idx in key_indices:
             key_env = env_for_key(env, key_idx)
             for v in search_metadata_all(key_env, {"type": "VIDEO", "visibility": "hidden",
@@ -516,6 +528,8 @@ def collect_motion_photos(env, key_indices, min_bytes, user_filter, search_filte
             body = {"type": "IMAGE", "isMotion": True, "withExif": True}
             if user_filter:
                 body["ownerId"] = user_filter
+            if legacy_capture_filter:
+                body.update(legacy_capture_filter)
             stills = search_metadata_all(key_env, body)
         else:
             motion_filter = {**capture_filter, "isMotion": {"eq": True}}

@@ -31,7 +31,8 @@ from backend.immich_api import (
     env_for_asset_verified, env_for_key, fetch_asset, fetch_key_owners,
     fetch_users, immich_headers, motion_summary, norm_media, owner_name_for,
     paginate_summaries, parse_key_indices, search_metadata_all, video_summary,
-    search_metadata_filtered, StructuredSearchError, _key_env_for_asset,
+    search_metadata_filtered, StructuredSearchError, supports_structured_search,
+    _key_env_for_asset,
 )
 from backend.jobs import (
     broadcast, broadcast_queue_update, cleanup_temp, compute_stats,
@@ -102,13 +103,25 @@ def _normalise_capture_dates(args):
         local = datetime.combine(day, datetime_time.min, tzinfo=selected_timezone)
         return local.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
+    end_exclusive = (
+        datetime.combine(date_to + timedelta(days=1), datetime_time.min, tzinfo=selected_timezone)
+        .astimezone(timezone.utc)
+        if date_to else None
+    )
+
     return {
         "date_from": date_from_raw,
         "date_to": date_to_raw,
         "timezone": timezone_name,
         "start": utc_start(date_from) if date_from else None,
         # Calendar arithmetic retains midnight across daylight-saving changes.
-        "end": utc_start(date_to + timedelta(days=1)) if date_to else None,
+        "end": end_exclusive.isoformat().replace("+00:00", "Z") if end_exclusive else None,
+        # Legacy Immich's takenBefore comparison is inclusive, unlike the
+        # structured filter's half-open `lt` bound.
+        "legacy_end": (
+            (end_exclusive - timedelta(microseconds=1)).isoformat().replace("+00:00", "Z")
+            if end_exclusive else None
+        ),
     }, None
 
 
@@ -121,6 +134,16 @@ def _structured_capture_filter(immich_type, capture_dates):
     if capture_dates["end"]:
         taken_at["lt"] = capture_dates["end"]
     asset_filter["takenAt"] = taken_at
+    return asset_filter
+
+
+def _legacy_capture_filter(capture_dates):
+    """Build the pre-v3.2 date parameters, whose upper bound is inclusive."""
+    asset_filter = {}
+    if capture_dates["start"]:
+        asset_filter["takenAfter"] = capture_dates["start"]
+    if capture_dates["legacy_end"]:
+        asset_filter["takenBefore"] = capture_dates["legacy_end"]
     return asset_filter
 
 
@@ -255,12 +278,14 @@ def api_assets():
         return paginate_summaries(summaries, sort, order, page, per_page)
 
     fetch_users(env)
+    use_structured_search = capture_dates and supports_structured_search(env)
 
     if media == "motionphoto":
         try:
             summaries = collect_motion_photos(
                 env, key_indices, min_bytes, user_filter, search_filter,
-                _structured_capture_filter("IMAGE", capture_dates) if capture_dates else None)
+                _structured_capture_filter("IMAGE", capture_dates) if use_structured_search else None,
+                _legacy_capture_filter(capture_dates) if capture_dates and not use_structured_search else None)
         except StructuredSearchError as exc:
             return jsonify({"error": str(exc)}), 502
         _cache_asset_summaries(cache_key, summaries)
@@ -270,7 +295,7 @@ def api_assets():
     collected: list = []
     for key_idx in key_indices:
         key_env = env_for_key(env, key_idx)
-        if capture_dates:
+        if capture_dates and use_structured_search:
             try:
                 for asset in search_metadata_filtered(
                     key_env, _structured_capture_filter(immich_type, capture_dates)):
@@ -282,6 +307,8 @@ def api_assets():
         while True:
             body = {"type": immich_type, "size": IMMICH_PER_PAGE, "page": immich_page,
                     "withExif": True}
+            if capture_dates:
+                body.update(_legacy_capture_filter(capture_dates))
             if user_filter:
                 body["ownerId"] = user_filter
             try:
