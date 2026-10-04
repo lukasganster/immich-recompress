@@ -1,0 +1,42 @@
+name: Feature request
+description: Suggest a new feature or an improvement
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: What you would like to happen
+      description: Describe it from your side as a user. Implementation ideas are welcome but optional.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or workarounds
+      description: Anything you tried or considered instead.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - Browse and filters
+        - Video encoding
+        - Photo recompression
+        - Live Photos
+        - Review and replace
+        - Job queue and history
+        - Deployment and configuration
+        - Other
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: Screenshots, mockups, links, or details about your library that matter here.
