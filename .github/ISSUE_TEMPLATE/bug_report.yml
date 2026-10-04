@@ -1,0 +1,86 @@
+name: Bug report
+description: Something is broken or behaves differently than expected
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this. Please leave your Immich API key and other secrets out of logs and screenshots.
+
+        Security problems should be reported privately. See the security policy for how.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you do, and what went wrong?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Browse and filter by ...
+        2. Select ...
+        3. Start a recompress with ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Immich Recompress version
+      description: The image tag or git commit you are running.
+      placeholder: "1.3.0"
+    validations:
+      required: true
+  - type: input
+    id: immich-version
+    attributes:
+      label: Immich server version
+      description: Shown under `immich_version` at `/api/status` in Immich Recompress.
+      placeholder: "3.2.2"
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: How you run it
+      options:
+        - Docker, published image
+        - Docker, built from source
+        - Local (pnpm start)
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: media
+    attributes:
+      label: Affected media
+      multiple: true
+      options:
+        - Video
+        - Photo (JPEG)
+        - Photo (RAW)
+        - Live Photo
+        - Not specific to a media type
+  - type: input
+    id: encoder
+    attributes:
+      label: Encoder and hardware
+      description: Only for encoding problems. The encoder you picked and what it runs on.
+      placeholder: x265 on CPU, NVENC on an RTX 3060, VideoToolbox on an M2
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Server or container output from around the time of the problem, for example from `docker logs immich-recompress`.
+      render: shell
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: Screenshots, browser and OS for UI problems, or anything unusual about your setup.

@@ -23,6 +23,9 @@ pnpm test                       # unit tests
 
 - Keep the UI **in English**.
 - Open an issue first for larger changes so we can agree on direction.
+- Write commit messages and PR titles as
+  [Conventional Commits](https://www.conventionalcommits.org/), for example
+  `fix(api): handle 429 from Immich with backoff`.
 - Run the frontend tests (`pnpm test`) and make sure the Python server still
   starts before opening a PR.
 - Be mindful of the security model (see [SECURITY.md](SECURITY.md)) — this app

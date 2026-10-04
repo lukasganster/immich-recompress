@@ -41,3 +41,17 @@ immich_recompress.db
 
 # Local environment files
 .env
+
+# Local agent state. .claude is a symlink to .agents, so the files Claude Code
+# writes land here and its own .claude ignore rules do not match them.
+.agents/settings.local.json
+.agents/scheduled_tasks.lock
+.agents/scheduled_tasks.json
+.agents/routines/.state/
+.agents/worktrees/
+.agents/checkpoints/
+.agents/mailbox/
+.agents/agent-registry.json
+.agents/agent-memory-local
+.agents/first-run
+.agents/assistant-daemon-state.json
