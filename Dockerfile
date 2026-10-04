@@ -23,23 +23,51 @@ RUN pnpm run build
 
 
 # --------------------------------------------------------------------------- #
-# Stage 2 — Python runtime with media tooling
+# Stage 2 — build current HandBrake CLI with metadata passthrough
+# --------------------------------------------------------------------------- #
+FROM python:3.12-slim AS handbrake-build
+
+ARG HANDBRAKE_VERSION=1.11.2
+ARG HANDBRAKE_SHA256=12b046350f2422dc28783ff94229aff4ba5fe5e683431e057355d36163b2593a
+# HandBrake's C/C++ build can use substantial memory per compiler job. Keep the
+# default low so multi-platform Buildx builds don't exhaust runner memory.
+ARG HANDBRAKE_BUILD_JOBS=2
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        autoconf automake build-essential cmake curl git libass-dev libbz2-dev \
+        libfontconfig-dev libfreetype6-dev libfribidi-dev \
+        libharfbuzz-dev libjansson-dev liblzma-dev libmp3lame-dev libnuma-dev \
+        libogg-dev libopus-dev libsamplerate0-dev libspeex-dev libtheora-dev \
+        libtool libtool-bin libturbojpeg0-dev libvorbis-dev \
+        libvpx-dev libx264-dev libxml2-dev m4 make meson nasm ninja-build patch pkg-config \
+        python3 tar zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /tmp/handbrake-src
+RUN curl -fsSLO "https://github.com/HandBrake/HandBrake/releases/download/${HANDBRAKE_VERSION}/HandBrake-${HANDBRAKE_VERSION}-source.tar.bz2" \
+    && echo "${HANDBRAKE_SHA256}  HandBrake-${HANDBRAKE_VERSION}-source.tar.bz2" | sha256sum -c - \
+    && tar -xjf "HandBrake-${HANDBRAKE_VERSION}-source.tar.bz2" --strip-components=1 \
+    && ./configure --disable-gtk --launch-jobs="${HANDBRAKE_BUILD_JOBS}" \
+    && make --directory=build --jobs="${HANDBRAKE_BUILD_JOBS}" \
+    && make --directory=build install
+
+
+# --------------------------------------------------------------------------- #
+# Stage 3 — Python runtime with media tooling
 # --------------------------------------------------------------------------- #
 FROM python:3.12-slim AS runtime
 
-# ffmpeg/ffprobe (photo recompression + codec probing) and HandBrakeCLI
-# (video re-encoding, software x265 works everywhere). `sips` is macOS-only and
-# intentionally absent here — the app degrades gracefully (RAW compression off).
-#
-# Debian's handbrake-cli is built WITHOUT the GPU encoders (NVENC/QSV), so only
-# the CPU encoders are detected at runtime here — software multi-core x265/AV1 is
-# the out-of-the-box path. To enable hardware encoding, swap in a HandBrake build
-# compiled with NVENC/QSV and pass the GPU device into the container (see the
-# "Hardware acceleration" section of the README and docker-compose.yml).
+# ffmpeg/ffprobe (photo recompression + codec probing) and timezone data.
+# HandBrakeCLI is built from the pinned upstream release above because distro
+# packages may not support --keep-metadata.
+# `sips` is macOS-only and intentionally absent here — RAW compression degrades
+# gracefully when it is unavailable.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ffmpeg \
-        handbrake-cli \
+        libjansson4 \
+        libturbojpeg0 \
         tzdata \
     && rm -rf /var/lib/apt/lists/*
 
@@ -49,6 +77,10 @@ WORKDIR /app
 # from the source so code edits don't reinstall packages.
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt gunicorn
+
+# Upstream HandBrake install includes its CLI and libhb shared library.
+COPY --from=handbrake-build /usr/local/ /usr/local/
+RUN ldconfig
 
 # Backend source (all package modules) + the frontend bundle built in stage 1.
 COPY backend/*.py ./backend/

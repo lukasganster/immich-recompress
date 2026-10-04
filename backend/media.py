@@ -170,7 +170,7 @@ def build_handbrake_cmd(src, out, encoder, quality, preset, resolution="original
     edge = RESOLUTION_LONG_EDGE.get(str(resolution))
     if edge:
         cmd += ["--maxWidth", str(edge), "--maxHeight", str(edge)]
-    cmd += ["--optimize"]
+    cmd += ["--keep-metadata", "--optimize"]
     return cmd
 
 
