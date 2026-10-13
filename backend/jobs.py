@@ -27,7 +27,7 @@ from backend.media import (
     has_free_space,
 )
 from backend.immich_api import (
-    asset_codec, copy_asset_metadata, copy_asset_tags, download_original,
+    asset_codec, capture_metadata_fields, copy_asset_metadata, copy_asset_tags, download_original,
     env_for_asset_verified, env_for_key, fetch_asset, get_asset_meta,
     get_asset_tag_ids, immich_headers, set_live_photo_link, trash_asset,
     update_asset, upload_new_asset,
@@ -300,7 +300,8 @@ def do_replace(env, asset_id, name, out_path, old_size, new_size, savings, codec
       1. upload the compressed file as a NEW asset,
       2. copy metadata (albums / favorite / shared links / stack / sidecar) from
          the old asset to it via copyAsset,
-      3. move the OLD asset to the trash (recoverable for the retention period).
+      3. restore the original capture date and location on the new asset,
+      4. move the OLD asset to the trash (recoverable for the retention period).
 
     The original's capture date is set on the new asset so it keeps its place in
     the timeline. Returns True on success. Used by the worker and the confirm
@@ -313,6 +314,10 @@ def do_replace(env, asset_id, name, out_path, old_size, new_size, savings, codec
                               "Encoded file missing")
 
     meta = get_asset_meta(env, asset_id)
+    capture_fields = capture_metadata_fields(meta)
+    if not capture_fields:
+        return _replace_error(asset_id, name, codec, old_size, new_size, savings,
+                              "Could not read original capture date", out_path)
     new_id, status = upload_new_asset(env, out_path, name,
                                       meta.get("fileCreatedAt"),
                                       meta.get("fileModifiedAt"), mime)
@@ -333,6 +338,13 @@ def do_replace(env, asset_id, name, out_path, old_size, new_size, savings, codec
         # New asset exists but metadata copy failed — leave the original intact.
         return _replace_error(asset_id, name, codec, old_size, new_size, savings,
                               "Metadata copy failed – new asset created, original kept", out_path)
+
+    update_job(asset_id, log="Restoring capture date and location…")
+    emit_job_update(asset_id)
+    if not update_asset(env, new_id, **capture_fields):
+        return _replace_error(asset_id, name, codec, old_size, new_size, savings,
+                              "Capture metadata update failed – new asset created, original kept",
+                              out_path)
 
     update_job(asset_id, log="Moving original to trash…")
     emit_job_update(asset_id)
