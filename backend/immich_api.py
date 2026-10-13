@@ -4,6 +4,8 @@ parsing/summary helpers that turn Immich responses into UI rows.
 import re
 import threading
 import time
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
 from flask import jsonify
@@ -207,18 +209,52 @@ def download_original(env, asset_id, dest):
 
 
 def get_asset_meta(env, asset_id):
-    """Fetch an asset's capture/modify dates so a new upload keeps its place in
-    the timeline (these are NOT copied by copyAsset). Best-effort."""
+    """Fetch dates and capture metadata that copyAsset does not copy."""
     try:
         r = requests.get(f"{env['url']}/api/assets/{asset_id}",
                          headers=immich_headers(env), timeout=HTTP_TIMEOUT)
         if r.status_code == 200:
             a = r.json()
             return {"fileCreatedAt": a.get("fileCreatedAt"),
-                    "fileModifiedAt": a.get("fileModifiedAt")}
+                    "fileModifiedAt": a.get("fileModifiedAt"),
+                    "exifInfo": a.get("exifInfo") or {}}
     except (requests.RequestException, ValueError):
         pass
     return {}
+
+
+def capture_metadata_fields(meta):
+    """Build updateAsset fields from the original Immich record."""
+    exif = meta.get("exifInfo") or {}
+    date = exif.get("dateTimeOriginal") or meta.get("fileCreatedAt")
+    if not date:
+        return {}
+
+    # Immich returns the instant in UTC and the original offset separately.
+    # The single-asset update API derives its timezone from the date's offset.
+    try:
+        captured = datetime.fromisoformat(date.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return {}
+    zone_name = exif.get("timeZone")
+    if zone_name and captured.tzinfo is not None:
+        match = re.fullmatch(r"UTC([+-])(\d{1,2})(?::?(\d{2}))?", zone_name)
+        if match:
+            hours, minutes = int(match[2]), int(match[3] or 0)
+            if hours <= 23 and minutes < 60:
+                delta = timedelta(hours=hours, minutes=minutes)
+                captured = captured.astimezone(timezone(delta if match[1] == "+" else -delta))
+        else:
+            try:
+                captured = captured.astimezone(ZoneInfo(zone_name))
+            except ZoneInfoNotFoundError:
+                pass
+
+    fields = {"dateTimeOriginal": captured.isoformat()}
+    for key in ("latitude", "longitude"):
+        if exif.get(key) is not None:
+            fields[key] = exif[key]
+    return fields
 
 
 def upload_new_asset(env, path, name, file_created_at, file_modified_at, mime):
