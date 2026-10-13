@@ -26,8 +26,9 @@ live progress.
   persistent job history.
 
 Replacement uploads the compressed file as a new asset, copies the original's
-metadata / tags / albums, and moves the original to the Immich trash
-(recoverable for the retention period). A local backup is also kept.
+metadata / tags / albums, restores its capture date and location, and moves
+the original to the Immich trash (recoverable for the retention period). A
+local backup is also kept.
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/lukasganster)
 
@@ -93,7 +94,7 @@ docker compose up -d
 ```
 
 For reproducible deploys, pin a version instead of `latest`, e.g.
-`ghcr.io/lukasganster/immich-recompress:1.0.0`.
+`ghcr.io/lukasganster/immich-recompress:1.3.1`.
 
 #### Building from source
 
