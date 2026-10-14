@@ -96,13 +96,17 @@ docker compose up -d
 For reproducible deploys, pin a version instead of `latest`, e.g.
 `ghcr.io/lukasganster/immich-recompress:1.3.1`.
 
-Releases are approved by merging the release PR maintained by Release Please.
-It updates the root version and changelog, then creates the GitHub release and
-publishes the container for AMD64 and ARM64. `latest` follows stable releases;
+Development PRs target the default branch, `development`. Promote the collected
+changes to `main` through a PR with a merge commit when preparing a release.
+Release Please then maintains a release PR against `main`.
+It prepares the root version and changelog in that PR. Merging the release PR
+creates the GitHub release and publishes the container for AMD64 and ARM64.
+`latest` follows stable releases;
 ordinary merges and prereleases do not change it. The container build runs
 after the GitHub release is created, so check that the Release workflow has
-finished before pulling a new version. Maintainer setup and recovery steps are
-in the [release skill](.agents/skills/release-docker/SKILL.md).
+finished before pulling a new version. After release, synchronize `main` back
+to `development` through a PR with a merge commit. Maintainer setup and recovery
+steps are in the [release skill](.agents/skills/release-docker/SKILL.md).
 
 #### Building from source
 

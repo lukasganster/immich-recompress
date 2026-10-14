@@ -29,14 +29,23 @@ and prepare its fix through a PR.
 4. Verify the GitHub release, workflow result, and image manifest before
    reporting that the release and container are ready. The GitHub release is
    created before the container build, so its existence alone is insufficient.
+5. Synchronize the release back to `development` through a PR using the merge
+   method described in `AGENTS.md`, carrying the released root version,
+   changelog, and manifest back to development.
 
 ## Repository setup
 
-- Protect `main` with an active ruleset requiring PRs and the checks named in
+- Set `development` as the default branch and protect both `development` and
+  `main` with active rulesets requiring PRs and the checks named in
   `.github/workflows/ci.yml`. Block force pushes and deletion. Keep the bypass
-  list empty. A solo maintainer can require PRs with zero review approvals.
-- Enable squash merging with the PR title as the commit title. This preserves
-  the Conventional Commit used to calculate the release version.
+  lists empty. A solo maintainer can require PRs with zero review approvals.
+- Allow squash merges and merge commits at repository level. Restrict `main`
+  to merge commits so promotion PRs retain individual Conventional Commits.
+  Allow both methods on `development`: squash ordinary PRs using the PR title,
+  and merge synchronization PRs from `main` to preserve the shared history.
+- Keep the Release workflow's trigger and Release Please's `target-branch` on
+  `main`. CI runs for PRs and pushes to both long-lived branches. Merges into
+  `development` collect work for a future promotion PR; they do not release it.
 - Under Settings > Actions > General, enable "Allow GitHub Actions to create
   and approve pull requests". Keep the default token permissions read-only;
   the workflows grant the write permissions needed by each job.
