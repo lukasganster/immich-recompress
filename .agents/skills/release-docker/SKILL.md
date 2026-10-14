@@ -1,76 +1,91 @@
 ---
 name: release-docker
-description: Use when cutting a release or publishing the Docker image to GHCR — bumping the version, tagging, what the publish workflow produces, how to pull the image, and how to verify a publish run. Covers ghcr.io/lukasganster/immich-recompress.
+description: Configure or operate release PRs, GitHub releases, and GHCR publishing for immich-recompress, including failed publish recovery.
 ---
 
-# Release & Docker publishing
+# Releases and Docker publishing
 
-The Docker image is published to the GitHub Container Registry at
-**`ghcr.io/lukasganster/immich-recompress`** by `.github/workflows/publish.yml`.
-The package is **public** — anyone can pull without authenticating.
+## Release flow
 
-## What triggers a publish
+Follow the PR rules in the root `AGENTS.md`. Release Please maintains a release
+PR against `main`, collecting changes since the previous release. Its merge is
+the release button: `.github/workflows/release.yml` creates the tag and GitHub
+release, then calls `.github/workflows/publish.yml` directly to publish GHCR.
 
-`.github/workflows/publish.yml` runs on:
+Before releasing, inspect those workflows and the repository settings. The
+documented flow becomes active when the setup PR is merged and the GitHub
+settings below are enabled. If setup is incomplete, report the missing piece
+and prepare its fix through a PR.
 
-- **push to `main`** → tags `latest`, `main`, and `sha-<commit>`
-- **push of a `v*` git tag** → the semver tags below
-- **manual** (`workflow_dispatch` from the Actions tab)
+1. Use Conventional Commits in ordinary PR titles. `fix:` increments patch,
+   `feat:` increments minor, and a breaking change increments major. A PR that
+   contains only documentation or maintenance need not produce a release.
+2. Leave version bumps to the release PR. The root `package.json` is the app
+   version; `frontend/package.json` describes the internal frontend package.
+   `.release-please-manifest.json` tracks the last released version. The initial
+   bootstrap commit in `release-please-config.json` bounds the first changelog.
+3. Review the release PR's version and changelog. Merge it when publication is
+   requested. Publishing starts automatically after that merge.
+4. Verify the GitHub release, workflow result, and image manifest before
+   reporting that the release and container are ready. The GitHub release is
+   created before the container build, so its existence alone is insufficient.
 
-It uses the built-in `GITHUB_TOKEN` (`permissions: packages: write`) to log in —
-no PAT or repo secret to manage. Build cache is shared via `type=gha`.
+## Repository setup
 
-## Tag behaviour (docker/metadata-action)
+- Protect `main` with an active ruleset requiring PRs and the checks named in
+  `.github/workflows/ci.yml`. Block force pushes and deletion. Keep the bypass
+  list empty. A solo maintainer can require PRs with zero review approvals.
+- Enable squash merging with the PR title as the commit title. This preserves
+  the Conventional Commit used to calculate the release version.
+- Under Settings > Actions > General, enable "Allow GitHub Actions to create
+  and approve pull requests". Keep the default token permissions read-only;
+  the workflows grant the write permissions needed by each job.
+- The default `GITHUB_TOKEN` needs no additional secret. CI on an automatically
+  created release PR requires the maintainer to select "Approve workflows to
+  run". A GitHub App installation token can remove that additional step if the
+  user wants it; app credentials must be configured before changing the token.
+- Tags or releases created with `GITHUB_TOKEN` do not start another push or
+  release workflow. Preserve the direct reusable-workflow call for publishing.
 
-- The `v` prefix is stripped, so the image tag matches `package.json` exactly:
-  git tag `v0.1.0-beta.1` → image tag `0.1.0-beta.1`.
-- **Prereleases** (e.g. `-beta.1`) deliberately do **not** get the moving
-  `latest`, `{{major}}.{{minor}}`, or `{{major}}` tags — a beta won't hijack
-  them. Those only move on a stable tag like `v0.1.0`.
+## Image contract
 
-## Cutting a release (the flow)
+The public image is `ghcr.io/lukasganster/immich-recompress`, built for
+`linux/amd64` and `linux/arm64`. The publisher verifies that the release is
+published, the tag matches the root version, and the commit belongs to `main`.
+It runs CI for that exact commit before building the image.
 
-The version lives in the root `package.json` (`"version"`). To release:
+Stable releases publish the full version, major.minor, `latest`, and a commit
+tag. Prereleases publish the full prerelease version and commit tag only. The
+`v` prefix is stripped from image version tags. Ordinary merges do not publish
+images. Keep `latest` reserved for stable releases.
+
+Prefer a full version or digest for deployments. The README's Docker section
+has the compose template. Preserve its loopback port binding unless an
+authenticating reverse proxy protects this app's media replacement operations.
+
+## Verification and recovery
+
+Use `gh run list --workflow release.yml` and `gh run view <run-id> --log-failed`
+to inspect the release workflow. Check the release with
+`gh release view <tag> --json tagName,isDraft,isPrerelease,url` and inspect both
+image platforms with
+`docker buildx imagetools inspect ghcr.io/lukasganster/immich-recompress:<version>`.
+
+For a failed container publish, inspect and fix the failure, then use
+Actions > Publish Docker image > Run workflow on `main`, supplying the existing
+release tag. The CLI equivalent is:
 
 ```bash
-# 1. Bump the version in package.json, then commit it.
-git commit -am "chore: release vX.Y.Z"
-
-# 2. Tag with a leading v matching package.json, and push the tag.
-git tag -a vX.Y.Z -m "Release vX.Y.Z"
-git push origin vX.Y.Z          # this fires the publish workflow
+gh workflow run publish.yml --ref main -f tag=vX.Y.Z
 ```
 
-Pushing to `main` also publishes (`latest`/`sha-*`); the git tag is what
-produces the immutable, pinnable version tag.
+This recovery republishes an existing release; it does not bump the version
+or create another release. Only the latest stable GitHub release can update
+stable image tags, preventing an older recovery from downgrading `latest`.
+If recovery fails again for the same reason, report the failure and required
+fix instead of repeatedly publishing. Keep release tags in place and prepare
+source or workflow fixes through a PR.
 
-Conventions for this repo: keep `main` and `development` in sync (fast-forward
-`main` to `development`); commit messages follow Conventional Commits
-(`ci:`, `chore:`, `docs:`…); **do not** add Claude attribution to commits/tags.
-
-## Pulling / running the image
-
-```bash
-docker pull ghcr.io/lukasganster/immich-recompress:latest
-# or pin a version for reproducible deploys:
-docker pull ghcr.io/lukasganster/immich-recompress:0.1.0-beta.1
-```
-
-A ready-to-run `docker-compose.yml` template using the published image is in the
-README "Docker → Using the published image" section. The app has **no auth** and
-can replace/trash Immich media, so the compose port is bound to `127.0.0.1` —
-keep it that way unless it sits behind an authenticating reverse proxy.
-
-## Verifying a publish (no `gh`/token needed — repo is public)
-
-```bash
-# Were the runs successful?
-curl -s "https://api.github.com/repos/lukasganster/immich-recompress/actions/runs?per_page=5" \
-  | grep -E '"(display_title|head_branch|status|conclusion)"'
-
-# What tags actually landed on GHCR? (anonymous pull token works for public pkgs)
-TOKEN=$(curl -s "https://ghcr.io/token?scope=repository:lukasganster/immich-recompress:pull" \
-  | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
-curl -s -H "Authorization: Bearer $TOKEN" \
-  "https://ghcr.io/v2/lukasganster/immich-recompress/tags/list"
-```
+If the release workflow fails before creating a GitHub release, inspect the
+failure and rerun the Release workflow on `main` after fixing it. If the release
+already exists, use the publisher recovery above.

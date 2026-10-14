@@ -1,21 +1,100 @@
 name: Publish Docker image
 
 on:
-  push:
-    branches: [main]
-    tags: ["v*"]
+  workflow_call:
+    inputs:
+      tag:
+        description: Existing GitHub release tag to publish
+        type: string
+        required: true
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to retry, for example v1.3.2
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-docker
+  cancel-in-progress: false
 
 jobs:
+  prepare:
+    name: Verify release
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.release.outputs.sha }}
+      version: ${{ steps.release.outputs.version }}
+      short-sha: ${{ steps.release.outputs.short-sha }}
+      prerelease: ${{ steps.release.outputs.prerelease }}
+    steps:
+      - uses: actions/github-script@v7
+        id: release
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        with:
+          script: |
+            if (context.ref !== 'refs/heads/main') {
+              throw new Error('Run the publisher from main.');
+            }
+            const tag = process.env.RELEASE_TAG;
+            const identifier = '(?:0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)';
+            const semver = new RegExp(`^v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-${identifier}(?:\\.${identifier})*)?$`);
+            if (!semver.test(tag)) {
+              throw new Error('Expected a v-prefixed SemVer tag without build metadata.');
+            }
+            const repo = context.repo;
+            const { data: release } = await github.rest.repos.getReleaseByTag({ ...repo, tag });
+            const prerelease = tag.includes('-');
+            if (release.draft || release.prerelease !== prerelease) {
+              throw new Error('The release must be published and its prerelease flag must match the tag.');
+            }
+            if (!prerelease) {
+              const { data: latest } = await github.rest.repos.getLatestRelease(repo);
+              if (latest.tag_name !== tag) {
+                throw new Error('Only the latest stable release may update moving image tags.');
+              }
+            }
+            const { data: commit } = await github.rest.repos.getCommit({ ...repo, ref: `refs/tags/${tag}` });
+            const { data: comparison } = await github.rest.repos.compareCommitsWithBasehead({
+              ...repo, basehead: `${commit.sha}...main`,
+            });
+            if (!['ahead', 'identical'].includes(comparison.status)) {
+              throw new Error('The release commit must be on main.');
+            }
+            const { data: file } = await github.rest.repos.getContent({
+              ...repo, path: 'package.json', ref: commit.sha,
+            });
+            const version = JSON.parse(Buffer.from(file.content, 'base64').toString('utf8')).version;
+            if (`v${version}` !== tag) {
+              throw new Error('The release tag must match the root package.json version.');
+            }
+            core.setOutput('sha', commit.sha);
+            core.setOutput('short-sha', commit.sha.slice(0, 12));
+            core.setOutput('version', version);
+            core.setOutput('prerelease', String(prerelease));
+
+  checks:
+    needs: prepare
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.prepare.outputs.sha }}
+
   publish:
     name: Build + push to GHCR
+    needs: [prepare, checks]
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write          # required to push to GHCR
+      packages: write
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3   # enables arm64 emulation for cross-build
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -26,12 +105,15 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
+          flavor: latest=false
           tags: |
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}},value=${{ inputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ inputs.tag }}
+            type=raw,value=sha-${{ needs.prepare.outputs.short-sha }}
+            type=raw,value=latest,enable=${{ needs.prepare.outputs.prerelease == 'false' }}
+          labels: |
+            org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
+            org.opencontainers.image.revision=${{ needs.prepare.outputs.sha }}
       - uses: docker/build-push-action@v6
         with:
           context: .
