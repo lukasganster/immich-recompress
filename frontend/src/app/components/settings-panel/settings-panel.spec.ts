@@ -3,6 +3,12 @@ import { SettingsPanelComponent } from './settings-panel';
 import { StoreService } from '../../services/store.service';
 
 describe('Photo output settings', () => {
+  beforeEach(() => {
+    for (const key of ['immich_browse', 'immich_processed', 'immich_settings']) {
+      try { localStorage.removeItem(key); } catch { /* not available here */ }
+    }
+  });
+
   it('switches to lossless JPEG XL without showing JPEG quality or RAW controls', async () => {
     TestBed.configureTestingModule({ imports: [SettingsPanelComponent] });
     const fixture = TestBed.createComponent(SettingsPanelComponent);
