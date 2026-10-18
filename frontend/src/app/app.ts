@@ -58,7 +58,8 @@ export class App implements OnInit {
     const dates = dateFrom || dateTo
       ? ` · taken ${dateFrom || 'any time'} to ${dateTo || 'any time'}`
       : '';
-    return `${noun} · ${threshold}${dates}`;
+    const metadata = this.store.metadataDescription();
+    return `${noun} · ${threshold}${dates}${metadata ? ` · ${metadata}` : ''}`;
   }
 
   get statusText(): string {

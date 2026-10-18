@@ -14,7 +14,8 @@ live progress.
 
 ## Features
 
-- Browse videos, photos or Live Photos, filtered by size and capture date.
+- Browse videos, photos or Live Photos, filtered by size, capture date, album,
+  people and location.
 - Re-encode videos (HandBrake: x264 / x265 / AV1, optional resolution cap).
 - Hardware (GPU) encoding when available, auto-detected at runtime, plus a
   selectable CPU-core count. See [Hardware acceleration](#hardware-acceleration).
@@ -45,6 +46,23 @@ local backup is also kept.
 Capture-date filters use Immich's structured metadata search API. Dates are
 interpreted as whole calendar days in the browser's timezone, including both
 selected endpoints. The selected timezone is saved with the filter.
+
+In Select media, search for one album or select people by name. People match any
+selected person; album, people, city, state, country and dates are combined.
+Location values must match the metadata stored in Immich. Album, people and
+location filters require a detected Immich version of 3.2 or later. Older servers
+retain size and capture-date browsing.
+
+With multiple API keys, selected libraries define which asset owners are eligible.
+Shared albums are available through keys that can read them, but their results
+include only assets owned by the selected libraries. Each asset appears once and
+uses its owner's API key for processing. Distinct people with the same name stay
+separate and show their library labels.
+
+Filters are saved locally. An album or person that becomes unavailable must be
+cleared or selected again. Failed or capped scans display an error instead of
+partial counts or an apparently complete selection. Narrow the filters and retry
+if a scan exceeds the 100-page limit.
 
 ## Quick start
 
