@@ -414,8 +414,13 @@ def do_recompress_motion(env, image_id, old_video_id, out_path, video_name,
         return _replace_error(image_id, video_name, "MOTION", old_size, new_size, savings,
                               f"Upload detected as '{status}' – nothing changed", out_path)
 
-    # Keep the motion video off the main timeline.
-    update_asset(env, new_id, visibility="hidden")
+    update_job(image_id, new_id=new_id)
+
+    # Keep the motion video off the main timeline before changing the original.
+    if not update_asset(env, new_id, visibility="hidden"):
+        return _replace_error(image_id, video_name, "MOTION", old_size, new_size, savings,
+                              f"Could not hide uploaded video {new_id}; original kept. "
+                              "Uploaded clip needs manual cleanup", out_path)
 
     update_job(image_id, log="Linking new motion video…")
     emit_job_update(image_id)
