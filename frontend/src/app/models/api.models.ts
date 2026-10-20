@@ -4,6 +4,7 @@ export type JobStatus =
   | 'error' | 'cancelled' | 'discarded' | 'processed';
 
 export type MediaType = 'video' | 'image' | 'motionphoto';
+export type PhotoFormat = 'jpeg' | 'jxl';
 export type SortField = 'size' | 'savings' | 'date' | 'name' | 'duration';
 export type SortOrder = 'asc' | 'desc';
 
@@ -112,6 +113,7 @@ export interface JobPublic {
   quality: number;
   threads: number | null;
   photo_target_savings: number;
+  photo_format: PhotoFormat;
   compress_raw: boolean;
   preset: string;
   resolution: string;
@@ -178,6 +180,7 @@ export interface Settings {
   quality: number;
   threads: number;
   photo_target_savings: number;
+  photo_format: PhotoFormat;
   compress_raw: boolean;
   preset: string;
   resolution: string;
@@ -205,6 +208,7 @@ export interface EncoderInfo {
 export interface Capabilities {
   encoders: EncoderInfo[];
   cpu_count: number;
+  jpeg_xl?: boolean;
 }
 
 export interface ProcessedEntry {

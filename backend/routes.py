@@ -36,11 +36,11 @@ from backend.immich_api import (
 )
 from backend.browse import collect_filtered, discover, metadata_filters
 from backend.jobs import (
-    broadcast, broadcast_queue_update, cleanup_temp, compute_stats,
+    broadcast, broadcast_queue_update, cleanup_encoded_file, cleanup_temp, compute_stats,
     do_recompress_motion, do_replace, do_strip_motion, emit_job_update,
     new_job, persist_if_terminal, public_job, update_job,
 )
-from backend.media import available_encoders, cpu_count
+from backend.media import available_encoders, cpu_count, image_preview_path
 
 bp = Blueprint("main", __name__)
 
@@ -203,12 +203,13 @@ def api_status():
 
 @bp.route("/api/capabilities")
 def api_capabilities():
-    """Video encoders the running HandBrake build supports, plus the CPU-core
+    """Video encoders, JPEG XL tools, and the CPU-core
     preflight max. Static for the process lifetime; the UI fetches it once to
     populate the encoder dropdown and cap the CPU-cores control."""
     return jsonify({
         "encoders": available_encoders(),
         "cpu_count": cpu_count(),
+        "jpeg_xl": bool(shutil.which("cjxl") and shutil.which("djxl")),
     })
 
 
@@ -655,12 +656,16 @@ def api_enqueue():
     # different type than the current browse mode, so each job uses its own type.
     medias = body.get("medias") if isinstance(body.get("medias"), dict) else {}
     default_media = norm_media(body.get("media"))
+    photo_format = body.get("photo_format", "jpeg")
+    if photo_format not in ("jpeg", "jxl"):
+        return jsonify({"error": "Photo format must be jpeg or jxl"}), 400
 
     params = {
         "media": default_media,
         "encoder": body.get("encoder", "x265"),
         "quality": body.get("quality", 24),
         "photo_target_savings": body.get("photo_target_savings", 40),
+        "photo_format": photo_format,
         "compress_raw": bool(body.get("compress_raw", False)),
         "preset": body.get("preset", "medium"),
         "threads": _clamp_threads(body.get("threads")),
@@ -753,13 +758,13 @@ def api_confirm(asset_id):
                           else "Confirmed – motion video will be removed")
         else:
             out_path = job.get("_out_path")
-            # RAW→JPEG conversions upload under a .jpg name (set during processing).
+            # Format conversions use the filename and MIME set during encoding.
             name = job.get("_upload_name") or job.get("name") or asset_id
             old_size = job.get("old_size")
             new_size = job.get("new_size")
             savings = job.get("savings")
             codec = job.get("codec")
-            mime = "image/jpeg" if media == "image" else "video/mp4"
+            mime = job.get("_output_mime") or ("image/jpeg" if media == "image" else "video/mp4")
             job["status"] = "replacing"
             job["log"] = "Confirmed – original will be replaced"
     env = env_for_key(_env, key_idx)
@@ -799,7 +804,7 @@ def api_discard(asset_id):
         job["log"] = "Discarded – original unchanged"
         job["_out_path"] = None
         job["_backup_path"] = None
-    cleanup_temp(out_path)
+    cleanup_encoded_file(out_path)
     if backup_path:
         cleanup_temp(backup_path)
     persist_if_terminal(asset_id)
@@ -815,9 +820,16 @@ def api_preview(asset_id):
         job = _jobs.get(asset_id)
         out_path = job.get("_out_path") if job else None
         media = job.get("media") if job else "video"
+        output_mime = job.get("_output_mime") if job else None
     if not out_path or not os.path.isfile(out_path):
         return Response("Preview unavailable", status=404)
     if media == "image":
+        if output_mime == "image/jxl":
+            preview_path = image_preview_path(out_path)
+            if not os.path.isfile(preview_path):
+                return Response("Preview unavailable", status=404)
+            return send_file(preview_path, mimetype="image/png", conditional=True,
+                             download_name=f"{asset_id}_preview.png")
         return send_file(out_path, mimetype="image/jpeg", conditional=True,
                          download_name=f"{asset_id}_preview.jpg")
     return send_file(out_path, mimetype="video/mp4", conditional=True,
@@ -827,15 +839,20 @@ def api_preview(asset_id):
 @bp.route("/api/clear", methods=["POST"])
 def api_clear():
     removed = []
+    outputs = []
     finished = {"done", "downloaded", "encoded", "skipped",
                 "error", "cancelled", "discarded"}
     with _state_lock:
         for asset_id in list(_jobs.keys()):
             if _jobs[asset_id]["status"] in finished:
+                outputs.append(_jobs[asset_id].get("_out_path"))
                 del _jobs[asset_id]
                 if asset_id in _queue_order:
                     _queue_order.remove(asset_id)
                 removed.append(asset_id)
+    for out_path in outputs:
+        if out_path:
+            cleanup_temp(image_preview_path(out_path))
     db_delete_jobs(removed)   # also drop them from the persisted history
     broadcast_queue_update()
     return jsonify({"removed": removed})

@@ -112,6 +112,7 @@ export class StoreService {
   // --- encoder/CPU capabilities (from /api/capabilities) ---
   readonly encoders = signal<EncoderInfo[]>([]);
   readonly cpuCount = signal(1);
+  readonly jpegXlAvailable = signal(false);
   /** The encoder spec for the current settings, or undefined until caps load. */
   readonly selectedEncoder = computed(() =>
     this.encoders().find(e => e.id === this.settings().encoder));
@@ -134,6 +135,7 @@ export class StoreService {
     quality: 24,
     threads: 0,  // 0 = use all cores; set to the detected max once caps load
     photo_target_savings: 40,
+    photo_format: 'jpeg',
     compress_raw: false,
     preset: 'medium',
     resolution: 'original',
@@ -178,7 +180,7 @@ export class StoreService {
   readonly estimatedSavingsFraction = computed(() => {
     const s = this.settings();
     if (this.media() === 'motionphoto') return 1;
-    if (this.media() === 'image') return s.photo_target_savings / 100;
+    if (this.media() === 'image') return s.photo_format === 'jxl' ? null : s.photo_target_savings / 100;
     const anchors: [number, number][] = [
       [18, 0.20], [20, 0.30], [22, 0.38], [24, 0.45],
       [26, 0.52], [28, 0.60], [30, 0.66], [32, 0.72],
@@ -196,9 +198,10 @@ export class StoreService {
     return Math.max(0, Math.min(0.95, frac * mult));
   });
 
-  readonly estimatedSavingsBytes = computed(() =>
-    Math.round(this.selectionBytes() * this.estimatedSavingsFraction())
-  );
+  readonly estimatedSavingsBytes = computed(() => {
+    const fraction = this.estimatedSavingsFraction();
+    return fraction === null ? null : Math.round(this.selectionBytes() * fraction);
+  });
 
   readonly estimatedSeconds = computed(() => {
     const s = this.settings();
@@ -286,6 +289,7 @@ export class StoreService {
         // backup_dir is no longer user-configurable; drop any value persisted by
         // older versions so a stale path can't be sent on enqueue.
         delete saved.backup_dir;
+        if (saved.photo_format !== 'jxl') saved.photo_format = 'jpeg';
         this.settings.update(s => ({ ...s, ...saved }));
       }
     } catch { /* ignore */ }
@@ -322,6 +326,7 @@ export class StoreService {
     const cpu = Math.max(1, caps.cpu_count || 1);
     this.encoders.set(encoders);
     this.cpuCount.set(cpu);
+    this.jpegXlAvailable.set(caps.jpeg_xl === true);
     this.settings.update(s => {
       const next = { ...s };
       // Default/clamp the CPU-core count to the detected max (0 = unset → all).

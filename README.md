@@ -2,7 +2,7 @@
 
 Browse, inspect and **recompress** the videos and photos in your
 [Immich](https://immich.app/) library to reclaim storage, all from a small web
-dashboard. Re-encode videos with HandBrake, recompress JPEGs with ffmpeg, or
+dashboard. Re-encode videos with HandBrake, recompress JPEGs with ffmpeg or JPEG XL, or
 strip the motion clip from Live Photos, with a review-before-replace step and
 live progress.
 
@@ -21,6 +21,8 @@ live progress.
   selectable CPU-core count. See [Hardware acceleration](#hardware-acceleration).
 - Recompress JPEGs to a target size (ffmpeg, with a macOS `sips` fallback);
   optional opt-in RAW → JPEG.
+- Convert JPEGs to lossless JPEG XL, preserving original JPEG reconstruction.
+  Review uses a PNG preview; the file uploaded to Immich remains JPEG XL.
 - Strip the hidden motion video from Live Photos.
 - **Review** the result (new size, savings, preview) before replacing the original.
 - Sequential queue with live progress (SSE), proxied thumbnails/downloads and
@@ -36,6 +38,9 @@ local backup is also kept.
 ## Requirements
 
 - [`HandBrakeCLI`](https://handbrake.fr/) and [`ffmpeg` / `ffprobe`](https://ffmpeg.org/) on `PATH`
+- For JPEG XL: [`cjxl` and `djxl`](https://github.com/libjxl/libjxl) on `PATH`
+  (included in Docker; locally install `libjxl-tools` on Debian/Ubuntu or
+  `jpeg-xl` with Homebrew).
 - An Immich server (tested with **v3.2.2**) and an **admin** API key
 - Docker, or for local dev: Python 3.9+ and Node 22 + [pnpm](https://pnpm.io/)
 
@@ -46,6 +51,12 @@ local backup is also kept.
 Capture-date filters use Immich's structured metadata search API. Dates are
 interpreted as whole calendar days in the browser's timezone, including both
 selected endpoints. The selected timezone is saved with the filter.
+
+Choose **JPEG XL (lossless)** under **Photo Settings → Output format** to convert
+JPEG originals without additional quality loss. Savings depend on the source;
+this mode uses the minimum-savings threshold rather than a target percentage.
+RAW, other image formats, and existing JPEG XL files are skipped in this mode.
+The original JPEG can be reconstructed with `djxl photo.jxl restored.jpg`.
 
 In Select media, search for one album or select people by name. People match any
 selected person; album, people, city, state, country and dates are combined.
