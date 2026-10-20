@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [development, main]
   pull_request:
-    branches: [main]
+    branches: [development, main]
   workflow_call:
     inputs:
       ref:
@@ -51,6 +51,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt ruff
+      - name: Install JPEG XL integration test tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libjxl-tools ffmpeg
       # Fail only on real errors (syntax, undefined names) — not style.
       - run: ruff check --select E9,F63,F7,F82 backend/
       - run: python -m compileall backend/

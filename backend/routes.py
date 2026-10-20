@@ -18,7 +18,7 @@ from flask import (
 
 from backend.config import (
     ASSET_CACHE_TTL, BACKUP_DIR, FRONTEND_PER_PAGE, HTTP_TIMEOUT,
-    IMMICH_PER_PAGE, MAX_PER_PAGE, STATIC_DIR,
+    MAX_PER_PAGE, STATIC_DIR,
     get_env, human_duration, human_size, parse_duration, utcnow_iso,
 )
 from backend.state import (
@@ -30,16 +30,17 @@ from backend.immich_api import (
     UUID_RE, asset_codec, collect_motion_photos, detect_immich_version,
     env_for_asset_verified, env_for_key, fetch_asset, fetch_key_owners,
     fetch_users, immich_headers, motion_summary, norm_media, owner_name_for,
-    paginate_summaries, parse_key_indices, search_metadata_all, video_summary,
+    paginate_summaries, search_metadata_all, video_summary,
     search_metadata_filtered, StructuredSearchError, supports_structured_search,
     _key_env_for_asset,
 )
+from backend.browse import collect_filtered, discover, metadata_filters
 from backend.jobs import (
-    broadcast, broadcast_queue_update, cleanup_temp, compute_stats,
+    broadcast, broadcast_queue_update, cleanup_encoded_file, cleanup_temp, compute_stats,
     do_recompress_motion, do_replace, do_strip_motion, emit_job_update,
     new_job, persist_if_terminal, public_job, update_job,
 )
-from backend.media import available_encoders, cpu_count
+from backend.media import available_encoders, cpu_count, image_preview_path
 
 bp = Blueprint("main", __name__)
 
@@ -202,18 +203,47 @@ def api_status():
 
 @bp.route("/api/capabilities")
 def api_capabilities():
-    """Video encoders the running HandBrake build supports, plus the CPU-core
+    """Video encoders, JPEG XL tools, and the CPU-core
     preflight max. Static for the process lifetime; the UI fetches it once to
     populate the encoder dropdown and cap the CPU-cores control."""
     return jsonify({
         "encoders": available_encoders(),
         "cpu_count": cpu_count(),
+        "jpeg_xl": bool(shutil.which("cjxl") and shutil.which("djxl")),
     })
 
 
 # --------------------------------------------------------------------------- #
 # Routes: videos
 # --------------------------------------------------------------------------- #
+
+def _browse_key_indices(env):
+    raw = request.args.get("keys")
+    count = len(env.get("api_keys") or [])
+    if raw is None:
+        return list(range(count))
+    parts = raw.split(",")
+    if any(not part.strip().isdigit() or not 0 <= int(part) < count for part in parts):
+        raise ValueError("Select at least one valid library.")
+    return sorted(set(int(part) for part in parts))
+
+
+@bp.route("/api/browse/<kind>")
+def api_browse_metadata(kind):
+    if kind not in ("albums", "people"):
+        return jsonify({"error": "Unknown browse metadata."}), 404
+    env = get_env()
+    if not env["url"] or not env.get("api_keys"):
+        return jsonify({"error": "Immich not configured"}), 400
+    try:
+        indices = _browse_key_indices(env)
+        items = discover(env, indices, kind, (request.args.get("search") or "").strip())
+        return jsonify({"items": items})
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except StructuredSearchError as exc:
+        return jsonify({"error": str(exc)}), 502
+
 
 @bp.route("/api/assets")
 def api_assets():
@@ -228,6 +258,11 @@ def api_assets():
     search_filter = (request.args.get("search") or "").strip().lower()
     min_gb_param = request.args.get("min_gb")
     min_mb_param = request.args.get("min_mb")
+    try:
+        metadata = metadata_filters(request.args)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    has_metadata = any(metadata.values())
     capture_dates, date_error = _normalise_capture_dates(request.args)
     if date_error:
         return jsonify({"error": date_error}), 400
@@ -265,19 +300,38 @@ def api_assets():
                         "assets": [], "error": "Immich not configured"})
 
     # `keys` restricts the scan to a subset of API keys (by index); empty = all.
-    key_indices = parse_key_indices(request.args.get("keys"), len(api_keys))
+    try:
+        key_indices = _browse_key_indices(env)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    if has_metadata and not supports_structured_search(env):
+        return jsonify({"error": "Album, people and location filters require a verified Immich 3.2+ server. Check /api/status or clear these filters."}), 400
 
     cache_key = (
         env["url"], tuple(api_keys), tuple(key_indices), media, min_bytes,
         codec_filter, user_filter, search_filter,
         (capture_dates or {}).get("start"), (capture_dates or {}).get("end"),
         (capture_dates or {}).get("timezone"),
+        metadata["album_id"], tuple(metadata["person_ids"]), metadata["city"], metadata["state"], metadata["country"],
     )
     summaries = _cached_asset_summaries(cache_key)
     if summaries is not None:
         return paginate_summaries(summaries, sort, order, page, per_page)
 
     fetch_users(env)
+    if has_metadata:
+        try:
+            summaries, assignments = collect_filtered(
+                env, key_indices, media, metadata, capture_dates,
+                min_bytes, user_filter, search_filter, codec_filter)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        except StructuredSearchError as exc:
+            return jsonify({"error": str(exc)}), 502
+        with _asset_key_lock:
+            _asset_key_map.update(assignments)
+        _cache_asset_summaries(cache_key, summaries)
+        return paginate_summaries(summaries, sort, order, page, per_page)
     use_structured_search = capture_dates and supports_structured_search(env)
 
     if media == "motionphoto":
@@ -303,35 +357,15 @@ def api_assets():
             except StructuredSearchError as exc:
                 return jsonify({"error": str(exc)}), 502
             continue
-        immich_page = 1
-        while True:
-            body = {"type": immich_type, "size": IMMICH_PER_PAGE, "page": immich_page,
-                    "withExif": True}
-            if capture_dates:
-                body.update(_legacy_capture_filter(capture_dates))
-            if user_filter:
-                body["ownerId"] = user_filter
-            try:
-                resp = requests.post(env["url"] + "/api/search/metadata",
-                                     headers=immich_headers(key_env), json=body,
-                                     timeout=HTTP_TIMEOUT)
-            except requests.RequestException as exc:
-                # If all keys fail we'll return an empty list; partial results are
-                # still useful so continue to the next key instead of aborting.
-                break
-            if resp.status_code != 200:
-                break
-            data = resp.json()
-            assets_block = (data.get("assets") or {}) if isinstance(data, dict) else {}
-            items = assets_block.get("items", [])
-            next_page = assets_block.get("nextPage")
-            for asset in items:
-                collected.append((asset, key_idx))
-            if not next_page or not items:
-                break
-            immich_page += 1
-            if immich_page > 100:
-                break
+        body = {"type": immich_type, "withExif": True}
+        if capture_dates:
+            body.update(_legacy_capture_filter(capture_dates))
+        if user_filter:
+            body["ownerId"] = user_filter
+        try:
+            collected.extend((asset, key_idx) for asset in search_metadata_all(key_env, body))
+        except StructuredSearchError as exc:
+            return jsonify({"error": str(exc)}), 502
 
     # Populate the asset→key map so per-asset operations use the right key.
     with _asset_key_lock:
@@ -622,12 +656,16 @@ def api_enqueue():
     # different type than the current browse mode, so each job uses its own type.
     medias = body.get("medias") if isinstance(body.get("medias"), dict) else {}
     default_media = norm_media(body.get("media"))
+    photo_format = body.get("photo_format", "jpeg")
+    if photo_format not in ("jpeg", "jxl"):
+        return jsonify({"error": "Photo format must be jpeg or jxl"}), 400
 
     params = {
         "media": default_media,
         "encoder": body.get("encoder", "x265"),
         "quality": body.get("quality", 24),
         "photo_target_savings": body.get("photo_target_savings", 40),
+        "photo_format": photo_format,
         "compress_raw": bool(body.get("compress_raw", False)),
         "preset": body.get("preset", "medium"),
         "threads": _clamp_threads(body.get("threads")),
@@ -720,13 +758,13 @@ def api_confirm(asset_id):
                           else "Confirmed – motion video will be removed")
         else:
             out_path = job.get("_out_path")
-            # RAW→JPEG conversions upload under a .jpg name (set during processing).
+            # Format conversions use the filename and MIME set during encoding.
             name = job.get("_upload_name") or job.get("name") or asset_id
             old_size = job.get("old_size")
             new_size = job.get("new_size")
             savings = job.get("savings")
             codec = job.get("codec")
-            mime = "image/jpeg" if media == "image" else "video/mp4"
+            mime = job.get("_output_mime") or ("image/jpeg" if media == "image" else "video/mp4")
             job["status"] = "replacing"
             job["log"] = "Confirmed – original will be replaced"
     env = env_for_key(_env, key_idx)
@@ -766,7 +804,7 @@ def api_discard(asset_id):
         job["log"] = "Discarded – original unchanged"
         job["_out_path"] = None
         job["_backup_path"] = None
-    cleanup_temp(out_path)
+    cleanup_encoded_file(out_path)
     if backup_path:
         cleanup_temp(backup_path)
     persist_if_terminal(asset_id)
@@ -782,9 +820,16 @@ def api_preview(asset_id):
         job = _jobs.get(asset_id)
         out_path = job.get("_out_path") if job else None
         media = job.get("media") if job else "video"
+        output_mime = job.get("_output_mime") if job else None
     if not out_path or not os.path.isfile(out_path):
         return Response("Preview unavailable", status=404)
     if media == "image":
+        if output_mime == "image/jxl":
+            preview_path = image_preview_path(out_path)
+            if not os.path.isfile(preview_path):
+                return Response("Preview unavailable", status=404)
+            return send_file(preview_path, mimetype="image/png", conditional=True,
+                             download_name=f"{asset_id}_preview.png")
         return send_file(out_path, mimetype="image/jpeg", conditional=True,
                          download_name=f"{asset_id}_preview.jpg")
     return send_file(out_path, mimetype="video/mp4", conditional=True,
@@ -794,15 +839,20 @@ def api_preview(asset_id):
 @bp.route("/api/clear", methods=["POST"])
 def api_clear():
     removed = []
+    outputs = []
     finished = {"done", "downloaded", "encoded", "skipped",
                 "error", "cancelled", "discarded"}
     with _state_lock:
         for asset_id in list(_jobs.keys()):
             if _jobs[asset_id]["status"] in finished:
+                outputs.append(_jobs[asset_id].get("_out_path"))
                 del _jobs[asset_id]
                 if asset_id in _queue_order:
                     _queue_order.remove(asset_id)
                 removed.append(asset_id)
+    for out_path in outputs:
+        if out_path:
+            cleanup_temp(image_preview_path(out_path))
     db_delete_jobs(removed)   # also drop them from the persisted history
     broadcast_queue_update()
     return jsonify({"removed": removed})

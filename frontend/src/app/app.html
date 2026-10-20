@@ -24,6 +24,10 @@
       ({{ store.captureTimezone() }})
     </span>
   }
+  @if (store.metadataDescription()) {
+    <button type="button" class="link active-filter" (click)="browse().show()"
+      aria-label="Edit album and metadata filters">{{ store.metadataDescription() }}</button>
+  }
   <select aria-label="Filter by user" (change)="setUser($any($event.target).value)">
     <option value="">All users</option>
     @for (u of store.users(); track u.id) {

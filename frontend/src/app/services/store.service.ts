@@ -1,6 +1,6 @@
 import { computed, effect, Injectable, signal } from '@angular/core';
 import {
-  Capabilities, CaptureDateFilter, EncoderInfo, JobPublic, JobStatus, KeyOwner, MediaType, ProcessedEntry,
+  Capabilities, CaptureDateFilter, MetadataFilter, emptyMetadataFilter, EncoderInfo, JobPublic, JobStatus, KeyOwner, MediaType, ProcessedEntry,
   Settings, SortField, SortOrder, SseJobUpdate, User, VideoSummary,
 } from '../models/api.models';
 
@@ -78,6 +78,13 @@ export class StoreService {
   readonly videoMinGb = signal(0.5);
   readonly photoMinMb = signal(10);
   /** Dates entered in this IANA timezone describe whole calendar days. */
+  readonly metadata = signal<MetadataFilter>(emptyMetadataFilter());
+  readonly metadataDescription = computed(() => {
+    const m = this.metadata();
+    return [m.albumId ? 'Album selected' : '',
+      m.personIds.length ? `${m.personIds.length} ${m.personIds.length === 1 ? 'person' : 'people'} selected` : '',
+      m.city, m.state, m.country].filter(Boolean).join(' · ');
+  });
   readonly captureDateFrom = signal('');
   readonly captureDateTo = signal('');
   readonly captureTimezone = signal(browserTimezone());
@@ -105,6 +112,7 @@ export class StoreService {
   // --- encoder/CPU capabilities (from /api/capabilities) ---
   readonly encoders = signal<EncoderInfo[]>([]);
   readonly cpuCount = signal(1);
+  readonly jpegXlAvailable = signal(false);
   /** The encoder spec for the current settings, or undefined until caps load. */
   readonly selectedEncoder = computed(() =>
     this.encoders().find(e => e.id === this.settings().encoder));
@@ -127,6 +135,7 @@ export class StoreService {
     quality: 24,
     threads: 0,  // 0 = use all cores; set to the detected max once caps load
     photo_target_savings: 40,
+    photo_format: 'jpeg',
     compress_raw: false,
     preset: 'medium',
     resolution: 'original',
@@ -171,7 +180,7 @@ export class StoreService {
   readonly estimatedSavingsFraction = computed(() => {
     const s = this.settings();
     if (this.media() === 'motionphoto') return 1;
-    if (this.media() === 'image') return s.photo_target_savings / 100;
+    if (this.media() === 'image') return s.photo_format === 'jxl' ? null : s.photo_target_savings / 100;
     const anchors: [number, number][] = [
       [18, 0.20], [20, 0.30], [22, 0.38], [24, 0.45],
       [26, 0.52], [28, 0.60], [30, 0.66], [32, 0.72],
@@ -189,9 +198,10 @@ export class StoreService {
     return Math.max(0, Math.min(0.95, frac * mult));
   });
 
-  readonly estimatedSavingsBytes = computed(() =>
-    Math.round(this.selectionBytes() * this.estimatedSavingsFraction())
-  );
+  readonly estimatedSavingsBytes = computed(() => {
+    const fraction = this.estimatedSavingsFraction();
+    return fraction === null ? null : Math.round(this.selectionBytes() * fraction);
+  });
 
   readonly estimatedSeconds = computed(() => {
     const s = this.settings();
@@ -253,6 +263,16 @@ export class StoreService {
       if (typeof b.captureTimezone === 'string' && b.captureTimezone) {
         this.captureTimezone.set(b.captureTimezone);
       }
+      if (b.metadata && typeof b.metadata === 'object') {
+        const m = b.metadata;
+        this.metadata.set({
+          albumId: typeof m.albumId === 'string' ? m.albumId : '',
+          personIds: Array.isArray(m.personIds) ? m.personIds.filter((id: unknown) => typeof id === 'string') : [],
+          city: typeof m.city === 'string' ? m.city : '',
+          state: typeof m.state === 'string' ? m.state : '',
+          country: typeof m.country === 'string' ? m.country : '',
+        });
+      }
       // Only the fixed steps are restored. A remembered "show everything" size
       // belongs to the library it was chosen for, not to the next session's.
       if ((PER_PAGE_OPTIONS as readonly number[]).includes(+b.perPage)) this.perPage.set(+b.perPage);
@@ -269,6 +289,7 @@ export class StoreService {
         // backup_dir is no longer user-configurable; drop any value persisted by
         // older versions so a stale path can't be sent on enqueue.
         delete saved.backup_dir;
+        if (saved.photo_format !== 'jxl') saved.photo_format = 'jpeg';
         this.settings.update(s => ({ ...s, ...saved }));
       }
     } catch { /* ignore */ }
@@ -279,7 +300,7 @@ export class StoreService {
       localStorage.setItem(LS_BROWSE, JSON.stringify({
         media: this.media(), videoMinGb: this.videoMinGb(),
         photoMinMb: this.photoMinMb(), perPage: this.perPage(),
-        selectedKeys: this.selectedKeys(),
+        selectedKeys: this.selectedKeys(), metadata: this.metadata(),
         captureDateFrom: this.captureDateFrom(), captureDateTo: this.captureDateTo(),
         captureTimezone: this.captureTimezone(),
       }));
@@ -305,6 +326,7 @@ export class StoreService {
     const cpu = Math.max(1, caps.cpu_count || 1);
     this.encoders.set(encoders);
     this.cpuCount.set(cpu);
+    this.jpegXlAvailable.set(caps.jpeg_xl === true);
     this.settings.update(s => {
       const next = { ...s };
       // Default/clamp the CPU-core count to the detected max (0 = unset → all).

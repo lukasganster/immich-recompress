@@ -39,6 +39,7 @@ export class App implements OnInit {
   readonly drawer = viewChild.required(DetailDrawerComponent);
   readonly review = viewChild.required(ReviewModalComponent);
   readonly browse = viewChild.required(BrowseDialogComponent);
+  readonly settingsPanel = viewChild.required(SettingsPanelComponent);
 
   readonly codecs = ['', 'h264', 'hevc', 'av1', '__other__'];
   readonly codecLabels: Record<string, string> = {
@@ -58,7 +59,8 @@ export class App implements OnInit {
     const dates = dateFrom || dateTo
       ? ` · taken ${dateFrom || 'any time'} to ${dateTo || 'any time'}`
       : '';
-    return `${noun} · ${threshold}${dates}`;
+    const metadata = this.store.metadataDescription();
+    return `${noun} · ${threshold}${dates}${metadata ? ` · ${metadata}` : ''}`;
   }
 
   get statusText(): string {
@@ -136,6 +138,11 @@ export class App implements OnInit {
     const medias: Record<string, string> = {};
     for (const v of this.store.videos()) {
       if (ids.includes(v.id)) { names[v.id] = v.name; sizes[v.id] = v.size; medias[v.id] = v.media; }
+    }
+    if (this.store.settings().photo_format === 'jxl' && !this.store.jpegXlAvailable()
+      && ids.some(id => (medias[id] ?? this.store.media()) === 'image')) {
+      this.settingsPanel().open.set(true);
+      return;
     }
     this.api.enqueue(ids, names, sizes, { ...this.store.settings(), media: this.store.media() }, medias).subscribe(() => {
       this.api.jobs().subscribe(data => {

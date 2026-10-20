@@ -23,8 +23,8 @@ from backend.state import (
 )
 from backend.db import db_load_jobs, db_save_job
 from backend.media import (
-    append_csv_log, build_ffmpeg_image_cmd, build_handbrake_cmd, ffprobe_info,
-    has_free_space,
+    append_csv_log, build_cjxl_cmd, build_ffmpeg_image_cmd, build_handbrake_cmd,
+    ffprobe_info, has_free_space, image_preview_path,
 )
 from backend.immich_api import (
     asset_codec, capture_metadata_fields, copy_asset_metadata, copy_asset_tags, download_original,
@@ -71,6 +71,7 @@ def new_job(asset_id, params):
         "encoder": params.get("encoder", "x265"),
         "quality": params.get("quality", 24),
         "photo_target_savings": params.get("photo_target_savings", 40),
+        "photo_format": params.get("photo_format", "jpeg"),
         "compress_raw": params.get("compress_raw", False),
         "preset": params.get("preset", "medium"),
         "threads": params.get("threads"),
@@ -86,6 +87,7 @@ def new_job(asset_id, params):
         "_out_path": None,
         "_backup_path": None,
         "_upload_name": None,
+        "_output_mime": None,
         "_video_id": None,
         "_video_name": None,
     }
@@ -282,12 +284,18 @@ def cleanup_temp(*paths):
                 pass
 
 
+def cleanup_encoded_file(out_path):
+    """Remove an encoded result together with its derived review preview."""
+    if out_path:
+        cleanup_temp(out_path, image_preview_path(out_path))
+
+
 def _replace_error(asset_id, name, codec, old_size, new_size, savings, log, out_path=None):
     update_job(asset_id, status="error", log=log)
     emit_job_update(asset_id)
     append_csv_log([utcnow_iso(), asset_id, name, codec or "",
                     old_size, new_size, savings, "error"])
-    cleanup_temp(out_path)
+    cleanup_encoded_file(out_path)
     persist_if_terminal(asset_id)
     broadcast_queue_update()
     return False
@@ -311,7 +319,7 @@ def do_replace(env, asset_id, name, out_path, old_size, new_size, savings, codec
     emit_job_update(asset_id)
     if not out_path or not os.path.isfile(out_path):
         return _replace_error(asset_id, name, codec, old_size, new_size, savings,
-                              "Encoded file missing")
+                              "Encoded file missing", out_path)
 
     meta = get_asset_meta(env, asset_id)
     capture_fields = capture_metadata_fields(meta)
@@ -357,7 +365,7 @@ def do_replace(env, asset_id, name, out_path, old_size, new_size, savings, codec
     emit_job_update(asset_id)
     append_csv_log([utcnow_iso(), asset_id, name, codec or "",
                     old_size, new_size, savings, "done"])
-    cleanup_temp(out_path)
+    cleanup_encoded_file(out_path)
     persist_if_terminal(asset_id)
     broadcast_queue_update()
     return True
@@ -414,8 +422,13 @@ def do_recompress_motion(env, image_id, old_video_id, out_path, video_name,
         return _replace_error(image_id, video_name, "MOTION", old_size, new_size, savings,
                               f"Upload detected as '{status}' – nothing changed", out_path)
 
-    # Keep the motion video off the main timeline.
-    update_asset(env, new_id, visibility="hidden")
+    update_job(image_id, new_id=new_id)
+
+    # Keep the motion video off the main timeline before changing the original.
+    if not update_asset(env, new_id, visibility="hidden"):
+        return _replace_error(image_id, video_name, "MOTION", old_size, new_size, savings,
+                              f"Could not hide uploaded video {new_id}; original kept. "
+                              "Uploaded clip needs manual cleanup", out_path)
 
     update_job(image_id, log="Linking new motion video…")
     emit_job_update(image_id)
@@ -488,12 +501,16 @@ def _inject_jpeg_exif(path, exif_segment):
 def _run_killable(cmd, asset_id, timeout=300):
     """Run a command via Popen, registered so cancel can kill it.
     Returns (returncode, combined_output)."""
+    if is_cancelled(asset_id):
+        return 1, "Cancelled"
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT, text=True)
     except (OSError, ValueError) as exc:
         return 1, str(exc)
     register_proc(asset_id, proc)
+    if is_cancelled(asset_id):
+        proc.kill()
     try:
         out, _ = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
@@ -625,8 +642,32 @@ def compress_image_to_target(src, out, old_size, target_pct, asset_id):
     return False, None, 0.0
 
 
+def _encode_jxl_image(src, out, asset_id, threads=None, preview=True):
+    """Losslessly transcode JPEG, optionally rendering the result for review."""
+    # cjxl ignores --lossless_jpeg for non-JPEG input and defaults to a lossy
+    # pixel encode. Check the actual file before promising JPEG reconstruction.
+    try:
+        with open(src, "rb") as source:
+            if source.read(2) != b"\xff\xd8":
+                return False, "Lossless JPEG XL requires JPEG file contents"
+    except OSError as exc:
+        return False, str(exc)
+    commands = [build_cjxl_cmd(src, out, threads)]
+    if preview:
+        commands.append(["djxl", out, image_preview_path(out)])
+    for cmd in commands:
+        rc, output = _run_killable(cmd, asset_id)
+        if rc != 0 or is_cancelled(asset_id):
+            tail = [line for line in output.splitlines() if line.strip()]
+            return False, tail[-1] if tail else f"{cmd[0]} failed"
+        destination = cmd[2]
+        if not os.path.isfile(destination) or os.path.getsize(destination) == 0:
+            return False, f"{cmd[0]} produced no output"
+    return True, ""
+
+
 def process_image_job(env, asset_id, params):
-    """Download, recompress (JPEG) and optionally replace an image asset."""
+    """Download, recompress to JPEG or lossless JPEG XL, and optionally replace."""
     name = params.get("name") or asset_id
     download_only = params.get("download_only", False)
     replace = params.get("replace", True)
@@ -634,6 +675,11 @@ def process_image_job(env, asset_id, params):
     backup_dir = params.get("backup_dir") or BACKUP_DIR
     target_savings = params.get("photo_target_savings", 40)
     compress_raw = params.get("compress_raw", False)
+    photo_format = params.get("photo_format", "jpeg")
+    is_jxl = photo_format == "jxl"
+    output_ext = ".jxl" if is_jxl else ".jpg"
+    output_mime = "image/jxl" if is_jxl else "image/jpeg"
+    output_codec = "JPEG XL" if is_jxl else "JPEG"
 
     os.makedirs(WORK_DIR, exist_ok=True)
     os.makedirs(backup_dir, exist_ok=True)
@@ -641,19 +687,24 @@ def process_image_job(env, asset_id, params):
     ext = os.path.splitext(name)[1] or ".jpg"
     src_fmt = (os.path.splitext(name)[1].lstrip(".") or "img").upper()
     src_path = os.path.join(WORK_DIR, f"{asset_id}_src{ext}")
-    out_path = os.path.join(WORK_DIR, f"{asset_id}_out.jpg")
+    out_path = os.path.join(WORK_DIR, f"{asset_id}_out{output_ext}")
 
     fmt = src_fmt.lower()
     is_raw = fmt in RAW_PHOTO_EXTS
-    # RAW conversions upload as .jpg; JPEG keeps its original filename.
-    upload_name = (os.path.splitext(name)[0] + ".jpg") if is_raw else name
+    # Format conversions need the output extension in the uploaded filename.
+    upload_name = (os.path.splitext(name)[0] + output_ext) if is_raw or is_jxl else name
 
-    # JPEG is recompressed in place (no format change). RAW can optionally be
-    # converted to JPEG (opt-in) — that needs sips and *replaces* the RAW. Every
-    # other format is skipped so nothing is silently converted.
+    # JPEG XL accepts JPEG originals only. RAW conversion remains a separate
+    # opt-in for JPEG output; no other input formats are silently converted.
     if not download_only:
         skip_msg = None
-        if is_raw and not compress_raw:
+        if photo_format not in ("jpeg", "jxl"):
+            skip_msg = "Unsupported photo output format"
+        elif is_jxl and fmt not in JPEG_PHOTO_EXTS:
+            skip_msg = f"{src_fmt}: lossless JPEG XL requires a JPEG original"
+        elif is_jxl and not (shutil.which("cjxl") and shutil.which("djxl")):
+            skip_msg = "JPEG XL requires cjxl and djxl (install libjxl-tools)"
+        elif is_raw and not compress_raw:
             skip_msg = f"{src_fmt}: RAW is not compressed (enable it in settings)"
         elif is_raw and not shutil.which("sips"):
             skip_msg = f"{src_fmt}: RAW compression requires 'sips' (macOS only)"
@@ -705,20 +756,30 @@ def process_image_job(env, asset_id, params):
         return
 
     update_job(asset_id, status="encoding", progress=0.0,
-               log=f"Compressing photo (target ~{float(target_savings):.0f}%)")
+               log=("Compressing photo to lossless JPEG XL" if is_jxl else
+                    f"Compressing photo (target ~{float(target_savings):.0f}%)"))
     emit_job_update(asset_id)
 
-    ok, used_q, achieved = compress_image_to_target(
-        src_path, out_path, old_size, target_savings, asset_id)
-    if not ok or not os.path.isfile(out_path):
+    if is_jxl:
+        ok, err = _encode_jxl_image(
+            src_path, out_path, asset_id, params.get("threads"),
+            preview=confirm or not replace)
+        used_q = "lossless JPEG reconstruction"
+        if not ok:
+            update_job(asset_id, log=f"JPEG XL: {err}")
+    else:
+        ok, used_q, achieved = compress_image_to_target(
+            src_path, out_path, old_size, target_savings, asset_id)
+    if not ok or not os.path.isfile(out_path) or is_cancelled(asset_id):
         cancelled = is_cancelled(asset_id)
-        # keep the detailed ffmpeg message unless the user cancelled
+        # Keep the encoder's error message unless the user cancelled.
         update_job(asset_id, status="cancelled" if cancelled else "error",
                    **({"log": "Cancelled"} if cancelled else {}))
         emit_job_update(asset_id)
         append_csv_log([utcnow_iso(), asset_id, name, src_fmt, old_size, None,
                         None, "cancelled" if cancelled else "error"])
-        cleanup_temp(src_path, out_path)
+        cleanup_temp(src_path)
+        cleanup_encoded_file(out_path)
         return
 
     new_size = os.path.getsize(out_path)
@@ -726,20 +787,24 @@ def process_image_job(env, asset_id, params):
     savings_pct = (savings / old_size * 100.0) if old_size else 0.0
     min_savings = params.get("min_savings", 10)
 
-    if savings_pct < float(min_savings):
+    if savings <= 0 or savings_pct < float(min_savings):
         update_job(asset_id, status="skipped", new_size=new_size,
                    savings=max(savings, 0), savings_human=human_size(max(savings, 0)),
-                   log=f"Savings {savings_pct:.1f}% < {min_savings}%")
+                   log=("Output is not smaller than the original" if savings <= 0 else
+                        f"Savings {savings_pct:.1f}% < {min_savings}%"))
         emit_job_update(asset_id)
         append_csv_log([utcnow_iso(), asset_id, name, src_fmt,
                         old_size, new_size, savings, "skipped"])
-        cleanup_temp(src_path, out_path)
+        cleanup_temp(src_path)
+        cleanup_encoded_file(out_path)
         return
 
     update_job(asset_id, status="encoded", progress=100.0, new_size=new_size,
                savings=savings, savings_human=human_size(savings),
-               new_codec="JPEG",
-               log=f"Compressed: {savings_pct:.0f}% saved (target ~{float(target_savings):.0f}%, {used_q})")
+               new_codec=output_codec, _output_mime=output_mime,
+               _upload_name=upload_name,
+               log=(f"Compressed: {savings_pct:.0f}% saved ({used_q})" if is_jxl else
+                    f"Compressed: {savings_pct:.0f}% saved (target ~{float(target_savings):.0f}%, {used_q})"))
     emit_job_update(asset_id)
 
     if not replace:
@@ -768,7 +833,7 @@ def process_image_job(env, asset_id, params):
         return
 
     do_replace(env, asset_id, upload_name, out_path, old_size, new_size,
-               savings, src_fmt, mime="image/jpeg")
+               savings, src_fmt, mime=output_mime)
 
 
 def process_motionphoto_job(env, asset_id, params):
