@@ -25,8 +25,9 @@
       @if (selectionCount() > 0) {
         <li class="legend-sel">
           <span class="num">{{ selectionEstimate }}</span>
-          <span class="lbl">selected</span>
-          <span class="band-of">{{ selectionTime }} to encode</span>
+          @if (selectionTime) {
+            <span class="band-of">{{ selectionTime }} to encode</span>
+          }
         </li>
       }
     </ul>

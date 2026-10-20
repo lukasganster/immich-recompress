@@ -70,7 +70,11 @@ export class ReviewModalComponent {
         ? 'Live Photo motion → recompressed (HEVC)'
         : 'Live Photo → still (motion video removed)';
     }
-    if (j.media === 'image') return `${from} → JPEG · .jpg`;
+    if (j.media === 'image') {
+      return j.new_codec === 'JPEG XL' || j.photo_format === 'jxl'
+        ? `${from} → JPEG XL · .jxl`
+        : `${from} → JPEG · .jpg`;
+    }
     return `${from} → ${this.store.encoderLabel(j.encoder)} · .mp4`;
   }
 

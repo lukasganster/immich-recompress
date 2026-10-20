@@ -122,6 +122,34 @@ class ReplacementTest(unittest.TestCase):
             )
         )
 
+    def test_jxl_replacement_uploads_correct_format_and_cleans_preview(self):
+        self.output = self.output.with_suffix(".jxl")
+        self.output.write_bytes(b"encoded jxl")
+        preview = Path(str(self.output) + ".preview.png")
+        preview.write_bytes(b"preview")
+        self.assertTrue(do_replace(
+            self.env, "original", "photo.jxl", str(self.output),
+            100, 50, 50, "JPEG", mime="image/jxl"))
+        upload = self.post.call_args.kwargs["files"]["assetData"]
+        self.assertEqual(upload[0], "photo.jxl")
+        self.assertEqual(upload[2], "image/jxl")
+        self.assertEqual(self.events, ["upload", "copy", "restore", "trash"])
+        self.assertFalse(self.output.exists())
+        self.assertFalse(preview.exists())
+
+    def test_jxl_metadata_failure_keeps_original_and_cleans_output(self):
+        self.update_status = 403
+        self.output = self.output.with_suffix(".jxl")
+        self.output.write_bytes(b"encoded jxl")
+        preview = Path(str(self.output) + ".preview.png")
+        preview.write_bytes(b"preview")
+        self.assertFalse(do_replace(
+            self.env, "original", "photo.jxl", str(self.output),
+            100, 50, 50, "JPEG", mime="image/jxl"))
+        self.delete.assert_not_called()
+        self.assertFalse(self.output.exists())
+        self.assertFalse(preview.exists())
+
     def test_missing_source_date_stops_before_upload(self):
         self.source = {"exifInfo": {}}
         self.assertFalse(self.replace())

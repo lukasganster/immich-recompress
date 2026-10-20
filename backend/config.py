@@ -63,9 +63,8 @@ MIN_FREE_BYTES = 200 * 1024 ** 2   # safety buffer for the work dir
 TERMINAL_STATES = {"done", "downloaded", "encoded", "skipped",
                    "error", "cancelled", "discarded"}
 
-# Photos are only *compressed*, never converted: we recompress JPEG in place and
-# skip every other format (so the on-disk format never changes). RAW gets its
-# own message since converting it would also destroy the original.
+# JPEG inputs support JPEG recompression or reversible JPEG XL conversion.
+# RAW conversion to JPEG is separately opt-in; other inputs are skipped.
 JPEG_PHOTO_EXTS = {"jpg", "jpeg", "jpe", "jfif"}
 RAW_PHOTO_EXTS = {
     "dng", "cr2", "cr3", "crw", "nef", "nrw", "arw", "srf", "sr2", "raf",

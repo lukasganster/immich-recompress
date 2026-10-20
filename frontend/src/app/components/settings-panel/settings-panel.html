@@ -101,6 +101,33 @@
         <h3 class="section-head">Photo Settings</h3>
 
         <div class="field full">
+          <label for="photoFormat">Output format</label>
+          <select id="photoFormat" [ngModel]="s.photo_format"
+            (ngModelChange)="update({photo_format: $event})" aria-describedby="photoFormatHelp">
+            <option value="jpeg">JPEG</option>
+            <option value="jxl" [disabled]="!store.jpegXlAvailable()">JPEG XL (lossless)</option>
+          </select>
+          <small id="photoFormatHelp">
+            @if (s.photo_format === 'jxl') {
+              Converts JPEG originals to JPEG XL without additional quality loss.
+              Savings vary by photo; files below the minimum savings are skipped.
+              Other formats, including RAW and existing JPEG XL files, are skipped.
+            } @else {
+              Recompresses JPEG originals to a target size.
+            }
+          </small>
+          @if (!store.jpegXlAvailable()) {
+            @if (s.photo_format === 'jxl') {
+              <small class="warn" role="alert">JPEG XL is unavailable on this server.
+                Choose JPEG or install libjxl-tools to compress photos.</small>
+            } @else {
+              <small>JPEG XL requires cjxl and djxl. Install libjxl-tools on the server to enable it.</small>
+            }
+          }
+        </div>
+
+        @if (s.photo_format === 'jpeg') {
+        <div class="field full">
           <label>Target Savings: {{ s.photo_target_savings }}%</label>
           <div class="rangewrap">
             <input type="range" min="5" max="90"
@@ -119,6 +146,7 @@
           </div>
           <small class="warn">Converts RAW → JPEG and replaces the original. Requires sips (macOS).</small>
         </div>
+        }
 
         <h3 class="section-head">Live Photo Settings</h3>
 

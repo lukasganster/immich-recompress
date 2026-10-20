@@ -27,7 +27,7 @@ RUN pnpm run build
 # --------------------------------------------------------------------------- #
 FROM python:3.12-slim AS runtime
 
-# ffmpeg/ffprobe (photo recompression + codec probing) and HandBrakeCLI
+# ffmpeg/ffprobe (JPEG recompression + codec probing), libjxl-tools (JPEG XL), and HandBrakeCLI
 # (video re-encoding, software x265 works everywhere). `sips` is macOS-only and
 # intentionally absent here — the app degrades gracefully (RAW compression off).
 #
@@ -40,6 +40,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ffmpeg \
         handbrake-cli \
+        libjxl-tools \
         tzdata \
     && rm -rf /var/lib/apt/lists/*
 

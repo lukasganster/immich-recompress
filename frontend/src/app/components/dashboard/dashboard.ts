@@ -61,11 +61,14 @@ export class DashboardComponent {
   /** The selection's own estimate, shown beside the library's. */
   get selectionEstimate(): string {
     const bytes = this.store.estimatedSavingsBytes();
-    const frac = Math.round(this.store.estimatedSavingsFraction() * 100);
+    const fraction = this.store.estimatedSavingsFraction();
+    if (bytes === null || fraction === null) return `Savings measured after encoding (${this.selectionCount()} selected)`;
+    const frac = Math.round(fraction * 100);
     return `${this.humanMB(bytes)} from ${this.selectionCount()} selected (−${frac}%)`;
   }
 
   get selectionTime(): string {
+    if (this.store.media() === 'image' && this.store.settings().photo_format === 'jxl') return '';
     return this.humanTime(this.store.estimatedSeconds());
   }
 }
