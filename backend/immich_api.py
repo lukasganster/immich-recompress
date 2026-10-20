@@ -38,36 +38,21 @@ def _key_env_for_asset(env, asset_id):
 
 
 def env_for_asset_verified(base_env, asset_id, preferred_idx=0):
-    """Return an env using the API key that actually OWNS asset_id.
-
-    With multiple keys (one per user), the key captured at enqueue time can be
-    wrong — e.g. it defaulted to 0 because the asset wasn't in the key map yet
-    (after a restart). Immich gates GET /api/assets/{id} by owner (non-owner →
-    400), so probe it starting with the preferred key, cache the winner in
-    _asset_key_map, and return that env. Falls back to the preferred key if none
-    verify (or Immich is unreachable). No probe for single-key setups."""
-    api_keys = base_env.get("api_keys") or []
-    n = len(api_keys)
-    try:
-        preferred_idx = int(preferred_idx)
-    except (TypeError, ValueError):
-        preferred_idx = 0
-    if not (0 <= preferred_idx < n):
-        preferred_idx = 0
-    if n <= 1:
-        return env_for_key(base_env, preferred_idx)
-    for idx in [preferred_idx] + [i for i in range(n) if i != preferred_idx]:
+    """Resolve ownership explicitly; shared readability never grants replacement rights."""
+    keys = base_env.get("api_keys") or []
+    owners = {item["key_idx"]: item["id"] for item in fetch_key_owners(base_env)}
+    candidates = list(range(len(keys)))
+    if preferred_idx in candidates:
+        candidates.remove(preferred_idx)
+        candidates.insert(0, preferred_idx)
+    for idx in candidates:
         env = env_for_key(base_env, idx)
-        try:
-            r = requests.get(f"{base_env['url']}/api/assets/{asset_id}",
-                             headers=immich_headers(env), timeout=HTTP_TIMEOUT)
-        except requests.RequestException:
-            continue
-        if r.status_code == 200:
+        asset = fetch_asset(env, asset_id)
+        if asset and asset.get("ownerId") and asset["ownerId"] == owners.get(idx):
             with _asset_key_lock:
                 _asset_key_map[asset_id] = idx
             return env
-    return env_for_key(base_env, preferred_idx)
+    raise StructuredSearchError("No configured owner API key can access this asset.")
 
 
 _user_cache = {"ts": 0.0, "users": [], "by_id": {}}
@@ -128,7 +113,9 @@ def fetch_key_owners(env, force=False):
     offer a per-key (per-user) selection of which libraries to scan."""
     now = time.time()
     with _user_lock:
-        if not force and _key_owner_cache["owners"] and (now - _key_owner_cache["ts"]) < USER_CACHE_TTL:
+        if (not force and _key_owner_cache.get("scope") == (env["url"], tuple(env.get("api_keys") or []))
+                and _key_owner_cache["owners"] and all(owner["id"] for owner in _key_owner_cache["owners"])
+                and (now - _key_owner_cache["ts"]) < USER_CACHE_TTL):
             return _key_owner_cache["owners"]
 
     owners = []
@@ -142,9 +129,11 @@ def fetch_key_owners(env, force=False):
                     resp = requests.get(env["url"] + path, headers=immich_headers(key_env),
                                         timeout=HTTP_TIMEOUT)
                     if resp.status_code == 200:
-                        info = resp.json() or {}
-                        break
-                except requests.RequestException:
+                        candidate = resp.json()
+                        if isinstance(candidate, dict) and candidate.get("id"):
+                            info = candidate
+                            break
+                except (requests.RequestException, ValueError):
                     continue
         owners.append({
             "key_idx": idx,
@@ -153,6 +142,7 @@ def fetch_key_owners(env, force=False):
             "email": info.get("email") or "",
         })
     with _user_lock:
+        _key_owner_cache["scope"] = (env["url"], tuple(env.get("api_keys") or []))
         _key_owner_cache["ts"] = now
         _key_owner_cache["owners"] = owners
     return owners
@@ -440,28 +430,47 @@ def parse_key_indices(value, n):
     return out or list(range(n))
 
 
+def _search_page(env, body):
+    """Read and validate a search page; never turn an invalid response into zero matches."""
+    try:
+        response = requests.post(env["url"] + "/api/search/metadata",
+                                 headers=immich_headers(env), json=body, timeout=HTTP_TIMEOUT)
+        if response.status_code != 200:
+            raise StructuredSearchError(f"Immich metadata search returned HTTP {response.status_code}. Check the server version and API-key permissions.")
+        data = response.json()
+    except (requests.RequestException, ValueError) as exc:
+        raise StructuredSearchError("Could not complete the Immich metadata search. Check the server and API-key permissions.") from exc
+    block = data.get("assets") if isinstance(data, dict) else None
+    if not isinstance(block, dict) or not isinstance(block.get("items"), list):
+        raise StructuredSearchError("Immich returned an invalid metadata-search response.")
+    if any(not isinstance(item, dict) or not item.get("id") for item in block["items"]):
+        raise StructuredSearchError("Immich returned an invalid metadata-search asset.")
+    return block
+
+
 def search_metadata_all(env, body, max_pages=100):
-    """Page through POST /api/search/metadata and return all items (best-effort)."""
-    items = []
+    """Return a complete legacy scan or fail, including on page-limit exhaustion."""
+    items, seen = [], set()
     page = 1
-    while page <= max_pages:
+    for _ in range(max_pages):
         req = dict(body, page=page)
         req.setdefault("size", IMMICH_PER_PAGE)
+        block = _search_page(env, req)
+        items.extend(block["items"])
+        next_page = block.get("nextPage")
+        if "nextPage" not in block:
+            raise StructuredSearchError("Immich omitted metadata-search pagination.")
+        if next_page is None:
+            return items
         try:
-            resp = requests.post(env["url"] + "/api/search/metadata",
-                                 headers=immich_headers(env), json=req, timeout=HTTP_TIMEOUT)
-        except requests.RequestException:
-            break
-        if resp.status_code != 200:
-            break
-        data = resp.json()
-        block = (data.get("assets") or {}) if isinstance(data, dict) else {}
-        page_items = block.get("items", [])
-        items.extend(page_items)
-        if not block.get("nextPage") or not page_items:
-            break
-        page += 1
-    return items
+            next_page = int(next_page)
+        except (ValueError, TypeError) as exc:
+            raise StructuredSearchError("Immich returned an invalid search page token.") from exc
+        if next_page <= page or next_page in seen or not block["items"]:
+            raise StructuredSearchError("Immich metadata-search pagination did not advance.")
+        seen.add(next_page)
+        page = next_page
+    raise StructuredSearchError(f"The search exceeded the {max_pages}-page scan limit. Narrow the filters.")
 
 
 def search_metadata_filtered(env, asset_filter, max_pages=100):
@@ -471,37 +480,24 @@ def search_metadata_filtered(env, asset_filter, max_pages=100):
     Date-constrained scans use this helper so their requested constraints are
     never silently dropped when a server rejects the newer API shape.
     """
-    items = []
+    items, seen = [], set()
     cursor = None
-    for page in range(1, max_pages + 1):
-        body = {"filter": asset_filter, "withExif": True,
-                "size": IMMICH_PER_PAGE}
+    for _ in range(max_pages):
+        body = {"filter": asset_filter, "withExif": True, "size": IMMICH_PER_PAGE}
         if cursor:
             body["cursor"] = cursor
-        try:
-            resp = requests.post(env["url"] + "/api/search/metadata",
-                                 headers=immich_headers(env), json=body,
-                                 timeout=HTTP_TIMEOUT)
-        except requests.RequestException as exc:
-            raise StructuredSearchError(f"Could not search Immich: {exc}") from exc
-        if resp.status_code != 200:
-            raise StructuredSearchError(
-                f"Immich metadata search returned HTTP {resp.status_code}. "
-                "Capture-date filtering requires an Immich version that supports structured search.")
-        try:
-            data = resp.json()
-        except ValueError as exc:
-            raise StructuredSearchError("Immich returned an invalid metadata-search response.") from exc
-        block = (data.get("assets") or {}) if isinstance(data, dict) else {}
-        page_items = block.get("items", [])
-        if not isinstance(page_items, list):
-            raise StructuredSearchError("Immich returned an invalid metadata-search result list.")
-        items.extend(page_items)
-        cursor = block.get("nextCursor")
-        if not cursor:
+        block = _search_page(env, body)
+        items.extend(block["items"])
+        if "nextCursor" not in block:
+            raise StructuredSearchError("Immich omitted structured-search pagination. Immich 3.2+ is required.")
+        cursor = block["nextCursor"]
+        if cursor is None:
             return items
+        if not isinstance(cursor, str) or not cursor or cursor in seen or not block["items"]:
+            raise StructuredSearchError("Immich metadata-search pagination did not advance.")
+        seen.add(cursor)
     raise StructuredSearchError(
-        f"The capture-date search exceeded the {max_pages}-page scan limit. Narrow the date range.")
+        f"The search exceeded the {max_pages}-page scan limit. Narrow the filters.")
 
 
 def motion_summary(env, still, vasset, vsize):

@@ -32,6 +32,10 @@ def set_active_id(value):
 _asset_key_map: dict = {}
 _asset_key_lock = threading.Lock()
 
+# --- browse metadata discovery cache ---
+_discovery_cache = {}
+_discovery_lock = threading.Lock()
+
 # --- SSE subscribers ---
 _subscribers = []
 _sub_lock = threading.Lock()

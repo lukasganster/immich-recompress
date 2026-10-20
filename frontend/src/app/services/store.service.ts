@@ -1,6 +1,6 @@
 import { computed, effect, Injectable, signal } from '@angular/core';
 import {
-  Capabilities, CaptureDateFilter, EncoderInfo, JobPublic, JobStatus, KeyOwner, MediaType, ProcessedEntry,
+  Capabilities, CaptureDateFilter, MetadataFilter, emptyMetadataFilter, EncoderInfo, JobPublic, JobStatus, KeyOwner, MediaType, ProcessedEntry,
   Settings, SortField, SortOrder, SseJobUpdate, User, VideoSummary,
 } from '../models/api.models';
 
@@ -78,6 +78,13 @@ export class StoreService {
   readonly videoMinGb = signal(0.5);
   readonly photoMinMb = signal(10);
   /** Dates entered in this IANA timezone describe whole calendar days. */
+  readonly metadata = signal<MetadataFilter>(emptyMetadataFilter());
+  readonly metadataDescription = computed(() => {
+    const m = this.metadata();
+    return [m.albumId ? 'Album selected' : '',
+      m.personIds.length ? `${m.personIds.length} ${m.personIds.length === 1 ? 'person' : 'people'} selected` : '',
+      m.city, m.state, m.country].filter(Boolean).join(' · ');
+  });
   readonly captureDateFrom = signal('');
   readonly captureDateTo = signal('');
   readonly captureTimezone = signal(browserTimezone());
@@ -256,6 +263,16 @@ export class StoreService {
       if (typeof b.captureTimezone === 'string' && b.captureTimezone) {
         this.captureTimezone.set(b.captureTimezone);
       }
+      if (b.metadata && typeof b.metadata === 'object') {
+        const m = b.metadata;
+        this.metadata.set({
+          albumId: typeof m.albumId === 'string' ? m.albumId : '',
+          personIds: Array.isArray(m.personIds) ? m.personIds.filter((id: unknown) => typeof id === 'string') : [],
+          city: typeof m.city === 'string' ? m.city : '',
+          state: typeof m.state === 'string' ? m.state : '',
+          country: typeof m.country === 'string' ? m.country : '',
+        });
+      }
       // Only the fixed steps are restored. A remembered "show everything" size
       // belongs to the library it was chosen for, not to the next session's.
       if ((PER_PAGE_OPTIONS as readonly number[]).includes(+b.perPage)) this.perPage.set(+b.perPage);
@@ -283,7 +300,7 @@ export class StoreService {
       localStorage.setItem(LS_BROWSE, JSON.stringify({
         media: this.media(), videoMinGb: this.videoMinGb(),
         photoMinMb: this.photoMinMb(), perPage: this.perPage(),
-        selectedKeys: this.selectedKeys(),
+        selectedKeys: this.selectedKeys(), metadata: this.metadata(),
         captureDateFrom: this.captureDateFrom(), captureDateTo: this.captureDateTo(),
         captureTimezone: this.captureTimezone(),
       }));

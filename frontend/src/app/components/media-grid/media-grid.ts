@@ -251,7 +251,7 @@ export class MediaGridComponent implements OnInit, OnDestroy {
       media: s.media(), min_mb: s.effectiveMinMb(),
       codec: s.codec() || undefined, user: s.userFilter() || undefined,
       search: s.search() || undefined, keys: s.selectedKeys(),
-      captureDates: s.captureDates(),
+      captureDates: s.captureDates(), metadata: s.metadata(),
     }).subscribe({
       next: data => {
         s.videos.set(data.assets ?? []);
@@ -270,6 +270,7 @@ export class MediaGridComponent implements OnInit, OnDestroy {
         s.loadError.set(response.error?.error
           ?? 'Could not reach the backend to list assets. Check that Immich is up and the API key is still valid, then try again.');
         s.videos.set([]);
+        s.clearSelection();
         s.total.set(0);
         s.totalSize.set(0);
         s.totalPotential.set(0);

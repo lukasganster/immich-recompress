@@ -1,3 +1,11 @@
+<!--
+  THESIS: Extend Select media with composable constraints before a scan.
+  OWN-WORLD: Keep the existing ruled sheet, neutral fields and compact type.
+  STORY: Choose libraries, refine media, then apply a complete selection.
+  FIRST VIEWPORT: Media and filters on the left, libraries on the right;
+  the footer stays available while the body scrolls on smaller screens.
+  FORM: Local extension of the established dialog, with native form controls.
+-->
 @if (open()) {
   <div class="modal-overlay" (click)="hide()"></div>
   <div class="modal" cdkTrapFocus [cdkTrapFocusAutoCapture]="true"
@@ -61,6 +69,78 @@
       }
 
       @if (localTab() !== 'link') {
+        <section class="metadata-fields" aria-label="Album, people and location filters">
+          <div class="date-label-row">
+            <span class="side-label">Album and metadata</span>
+            @if (hasMetadata()) {
+              <button type="button" class="link" (click)="localMetadata.set({ albumId: '', personIds: [], city: '', state: '', country: '' })">Clear metadata</button>
+            }
+          </div>
+          @if (!supportsMetadata()) {
+            <p class="hint">Album, people and location filters require Immich 3.2 or later. Wait for the server version to load or check your connection.</p>
+          } @else {
+            @if (discoveryBusy()) { <p class="hint" role="status">Loading browse options...</p> }
+            @if (discoveryError()) {
+              <p class="date-error" role="alert">{{ discoveryError() }}</p>
+              <button type="button" class="link" (click)="loadDiscovery()">Retry loading albums and people</button>
+            }
+            @if (unavailable()) {
+              <p class="date-error" role="alert">A saved album or person is unavailable in these libraries. Clear metadata or select it again.</p>
+            }
+            <div class="field">
+              <label for="album-search">Album</label>
+              <input id="album-search" type="search" placeholder="Search albums"
+                [ngModel]="albumSearch()" (ngModelChange)="albumSearch.set($event)" />
+              <select aria-label="Select album" [ngModel]="localMetadata().albumId"
+                (ngModelChange)="setMetadata('albumId', $event)" [disabled]="albumsBusy() || !!albumError()">
+                <option value="">All albums</option>
+                @for (album of albums(); track album.id) {
+                  @if (album.id === localMetadata().albumId || filteredAlbums().includes(album)) {
+                    <option [value]="album.id">{{ album.name }} ({{ optionLibraries(album) }})</option>
+                  }
+                }
+                @if (localMetadata().albumId && !selectedAlbumAvailable()) {
+                  <option [value]="localMetadata().albumId">Saved album unavailable</option>
+                }
+              </select>
+              @if (!albumsBusy() && !albumError() && !filteredAlbums().length) {
+                <p class="hint">No albums match this search.</p>
+              }
+              <p class="hint">Shared albums are searched within the selected libraries. Only assets owned by those libraries are included.</p>
+            </div>
+            <div class="field">
+              <label for="people-search">People: match any selected person</label>
+              <input id="people-search" type="search" placeholder="Search people"
+                [ngModel]="peopleSearch()" (ngModelChange)="peopleSearch.set($event)" />
+              <div class="metadata-options" role="group" aria-label="People">
+                @for (person of filteredPeople(); track person.id) {
+                  <label class="key-row">
+                    <input type="checkbox" [checked]="localMetadata().personIds.includes(person.id)"
+                      (change)="togglePerson(person.id)" />
+                    <span>{{ person.name }} <small>({{ optionLibraries(person) }})</small></span>
+                  </label>
+                }
+              </div>
+              @if (!peopleBusy() && !peopleError() && !filteredPeople().length) {
+                <p class="hint">No people match this search.</p>
+              }
+              @if (matchingPeople().length > filteredPeople().length) {
+                <p class="hint">Showing the first 50 of {{ matchingPeople().length }} people. Search by name to narrow the list.</p>
+              }
+              @if (localMetadata().personIds.length) {
+                <p class="hint">{{ localMetadata().personIds.length }} selected, including choices outside this search.
+                  <button type="button" class="link" (click)="setMetadata('personIds', [])">Clear people</button>
+                </p>
+              }
+            </div>
+            <div class="location-inputs">
+              <label>City<input type="text" [ngModel]="localMetadata().city" (ngModelChange)="setMetadata('city', $event)" /></label>
+              <label>State<input type="text" [ngModel]="localMetadata().state" (ngModelChange)="setMetadata('state', $event)" /></label>
+              <label>Country<input type="text" [ngModel]="localMetadata().country" (ngModelChange)="setMetadata('country', $event)" /></label>
+            </div>
+            <p class="hint">Optional. Location values must match the metadata in Immich. Album, people, location and dates are combined.</p>
+          }
+        </section>
         <div class="field date-field">
           <div class="date-label-row">
             <label>Date taken</label>
@@ -84,7 +164,7 @@
       }
       </div>
 
-      @if (store.keyOwners().length > 1 && localTab() !== 'link') {
+      @if (store.keyOwners().length > 0 && localTab() !== 'link') {
         <div class="browse-side">
           <label class="side-label">Libraries (API keys)</label>
           <p class="hint side-hint">Scan only the selected users' libraries.</p>
@@ -100,11 +180,14 @@
         </div>
       }
      </div>
+     @if (localTab() !== 'link' && !localKeys().size) {
+       <p class="date-error" role="alert">Select at least one library.</p>
+     }
     </div>
     <div class="modal-actions">
       <button class="btn ghost push-left" (click)="clearHistory()">Clear history</button>
       <button class="btn ghost" (click)="hide()">Cancel</button>
-      <button class="btn" [disabled]="localTab() === 'link' && addBusy()" (click)="onApply()">
+      <button class="btn" [disabled]="localTab() === 'link' ? addBusy() : !localKeys().size || (hasMetadata() && (!supportsMetadata() || discoveryBlocked()))" (click)="onApply()">
         {{ localTab() === 'link' ? '＋ Add' : 'Apply' }}
       </button>
     </div>

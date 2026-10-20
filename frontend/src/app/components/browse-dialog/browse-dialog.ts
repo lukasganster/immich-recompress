@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, Component, HostListener, inject, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, OnDestroy, computed, effect, untracked, inject, output, signal } from '@angular/core';
 import { CdkTrapFocus } from '@angular/cdk/a11y';
 import { FormsModule } from '@angular/forms';
 import { StoreService } from '../../services/store.service';
 import { ApiService } from '../../services/api.service';
-import { MediaType } from '../../models/api.models';
+import { Subscription } from 'rxjs';
+import { BrowseOption, MediaType, MetadataFilter, emptyMetadataFilter } from '../../models/api.models';
 
 @Component({
   selector: 'app-browse-dialog',
@@ -13,7 +14,7 @@ import { MediaType } from '../../models/api.models';
   templateUrl: './browse-dialog.html',
   styleUrl: './browse-dialog.css',
 })
-export class BrowseDialogComponent {
+export class BrowseDialogComponent implements OnDestroy {
   readonly store = inject(StoreService);
   private readonly api = inject(ApiService);
   readonly apply = output<void>();
@@ -28,6 +29,100 @@ export class BrowseDialogComponent {
   localDateTo = signal('');
   localTimezone = signal('UTC');
   dateError = signal('');
+  localMetadata = signal<MetadataFilter>(emptyMetadataFilter());
+  albumSearch = signal('');
+  peopleSearch = signal('');
+  albums = signal<BrowseOption[]>([]);
+  people = signal<BrowseOption[]>([]);
+  albumsBusy = signal(false);
+  peopleBusy = signal(false);
+  albumError = signal('');
+  peopleError = signal('');
+  readonly discoveryBusy = computed(() => this.albumsBusy() || this.peopleBusy());
+  readonly discoveryError = computed(() => [this.albumError(), this.peopleError()].filter(Boolean).join(' '));
+  private discoveryRequest?: Subscription;
+  private awaitingLibraries = false;
+  readonly filteredAlbums = computed(() => this.albums().filter(a =>
+    a.name.toLocaleLowerCase().includes(this.albumSearch().trim().toLocaleLowerCase())));
+  readonly matchingPeople = computed(() => this.people().filter(p =>
+    p.name.toLocaleLowerCase().includes(this.peopleSearch().trim().toLocaleLowerCase())));
+  readonly filteredPeople = computed(() => this.matchingPeople().slice(0, 50));
+  readonly selectedAlbumAvailable = computed(() => this.albums().some(a => a.id === this.localMetadata().albumId));
+  readonly unavailable = computed(() => {
+    const m = this.localMetadata();
+    return (!!m.albumId && !this.albumsBusy() && !this.albumError() && !this.selectedAlbumAvailable()) ||
+      (!this.peopleBusy() && !this.peopleError() && m.personIds.some(id => !this.people().some(p => p.id === id)));
+  });
+  readonly discoveryBlocked = computed(() => {
+    const m = this.localMetadata();
+    return (!!m.albumId && (this.albumsBusy() || !!this.albumError() || !this.selectedAlbumAvailable())) ||
+      (!!m.personIds.length && (this.peopleBusy() || !!this.peopleError() || m.personIds.some(id => !this.people().some(p => p.id === id))));
+  });
+  readonly hasMetadata = computed(() => {
+    const m = this.localMetadata();
+    return !!(m.albumId || m.personIds.length || m.city || m.state || m.country);
+  });
+  readonly supportsMetadata = computed(() => {
+    const match = this.store.immichVersion().match(/(\d+)\.(\d+)(?:\.(\d+))?/);
+    return !!match && (+match[1] > 3 || (+match[1] === 3 && +match[2] >= 2));
+  });
+
+  constructor() {
+    effect(() => {
+      if (!this.open()) return;
+      const available = this.store.keyOwners().map(o => o.key_idx);
+      if (this.awaitingLibraries && available.length) {
+        const saved = this.store.selectedKeys();
+        this.localKeys.set(new Set(saved.length ? saved.filter(i => available.includes(i)) : available));
+        this.awaitingLibraries = false;
+      }
+      this.localKeys();
+      this.supportsMetadata();
+      untracked(() => this.loadDiscovery());
+    });
+  }
+
+  setMetadata<K extends keyof MetadataFilter>(field: K, value: MetadataFilter[K]): void {
+    this.localMetadata.update(m => ({ ...m, [field]: value }));
+  }
+
+  togglePerson(id: string): void {
+    this.localMetadata.update(m => ({ ...m, personIds: m.personIds.includes(id)
+      ? m.personIds.filter(p => p !== id) : [...m.personIds, id] }));
+  }
+
+  optionLibraries(option: BrowseOption): string {
+    return option.key_indices.map(idx => this.store.keyOwners().find(o => o.key_idx === idx)?.name || `Key ${idx + 1}`).join(', ');
+  }
+
+  loadDiscovery(): void {
+    this.discoveryRequest?.unsubscribe();
+    this.albums.set([]);
+    this.people.set([]);
+    this.albumError.set('');
+    this.peopleError.set('');
+    this.albumsBusy.set(false);
+    this.peopleBusy.set(false);
+    if (!this.supportsMetadata() || !this.localKeys().size) return;
+    const keys = [...this.localKeys()].sort((a, b) => a - b);
+    this.discoveryRequest = new Subscription();
+    for (const kind of ['albums', 'people'] as const) {
+      const items = kind === 'albums' ? this.albums : this.people;
+      const busy = kind === 'albums' ? this.albumsBusy : this.peopleBusy;
+      const error = kind === 'albums' ? this.albumError : this.peopleError;
+      busy.set(true);
+      this.discoveryRequest.add(this.api.browseOptions(kind, keys).subscribe({
+        next: data => { items.set(data.items); busy.set(false); },
+        error: response => {
+          const detail = response.error?.error || 'Check the API keys and try again.';
+          error.set(`Could not load ${kind}. ${detail}`);
+          busy.set(false);
+        },
+      }));
+    }
+  }
+
+  ngOnDestroy(): void { this.discoveryRequest?.unsubscribe(); }
 
   // --- add by link / ID ---
   addInput = signal('');
@@ -45,9 +140,13 @@ export class BrowseDialogComponent {
     this.localDateTo.set(this.store.captureDateTo());
     this.localTimezone.set(this.store.captureTimezone());
     this.dateError.set('');
+    this.localMetadata.set({ ...this.store.metadata(), personIds: [...this.store.metadata().personIds] });
+    this.albumSearch.set('');
+    this.peopleSearch.set('');
     const sel = this.store.selectedKeys();
     const all = this.store.keyOwners().map(o => o.key_idx);
-    this.localKeys.set(new Set(sel.length ? sel : all));  // empty stored = all
+    this.awaitingLibraries = !all.length;
+    this.localKeys.set(new Set(sel.length ? sel.filter(i => all.includes(i)) : all));  // empty stored = all
     this.addInput.set('');
     this.addMsg.set('');
     this.open.set(true);
@@ -63,7 +162,12 @@ export class BrowseDialogComponent {
     });
   }
 
-  hide(): void { this.open.set(false); }
+  hide(): void {
+    this.discoveryRequest?.unsubscribe();
+    this.albumsBusy.set(false);
+    this.peopleBusy.set(false);
+    this.open.set(false);
+  }
 
   clearDates(): void {
     this.localDateFrom.set('');
@@ -100,11 +204,16 @@ export class BrowseDialogComponent {
 
   onApply(): void {
     if (this.localTab() === 'link') { this.addByLink(); return; }
+    if (!this.localKeys().size || (this.hasMetadata() &&
+        (!this.supportsMetadata() || this.discoveryBlocked()))) return;
     if (this.localDateFrom() && this.localDateTo()
         && this.localDateFrom() > this.localDateTo()) {
       this.dateError.set('The start date must not be after the end date.');
       return;
     }
+    const metadata = this.localMetadata();
+    this.store.metadata.set({ ...metadata, city: metadata.city.trim(),
+      state: metadata.state.trim(), country: metadata.country.trim() });
     this.store.media.set(this.localTab() as MediaType);
     this.store.videoMinGb.set(this.localVideoGb());
     this.store.photoMinMb.set(this.localPhotoMb());

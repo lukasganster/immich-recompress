@@ -4,7 +4,7 @@ import { Observable } from 'rxjs';
 import {
   Capabilities, JobsResponse, Settings, StatusResponse, VideoDetail,
   VideosResponse, VideoSummary, User, KeyOwner, MediaType, SortField, SortOrder,
-  CaptureDateFilter,
+  CaptureDateFilter, BrowseOption, MetadataFilter,
 } from '../models/api.models';
 
 @Injectable({ providedIn: 'root' })
@@ -22,7 +22,7 @@ export class ApiService {
   assets(params: {
     page: number; per_page: number; sort: SortField; order: SortOrder;
     media: MediaType; min_mb: number; codec?: string; user?: string; search?: string;
-    keys?: number[]; captureDates?: CaptureDateFilter;
+    keys?: number[]; captureDates?: CaptureDateFilter; metadata?: MetadataFilter;
   }): Observable<VideosResponse> {
     const p: Record<string, string> = {
       page: String(params.page), per_page: String(params.per_page),
@@ -38,7 +38,18 @@ export class ApiService {
     if (params.captureDates && (params.captureDates.dateFrom || params.captureDates.dateTo)) {
       p['timezone'] = params.captureDates.timezone;
     }
-    return this.http.get<VideosResponse>('/api/assets', { params: p });
+    if (params.metadata?.albumId) p['album_id'] = params.metadata.albumId;
+    for (const field of ['city', 'state', 'country'] as const) {
+      if (params.metadata?.[field]) p[field] = params.metadata[field];
+    }
+    return this.http.get<VideosResponse>('/api/assets', {
+      params: { ...p, ...(params.metadata?.personIds.length ? { person_id: params.metadata.personIds } : {}) },
+    });
+  }
+
+  browseOptions(kind: 'albums' | 'people', keys: number[]): Observable<{ items: BrowseOption[] }> {
+    const params: Record<string, string> = keys.length ? { keys: keys.join(',') } : {};
+    return this.http.get<{ items: BrowseOption[] }>(`/api/browse/${kind}`, { params });
   }
 
   keyOwners(): Observable<{ owners: KeyOwner[] }> {

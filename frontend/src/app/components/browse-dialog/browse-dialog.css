@@ -121,7 +121,25 @@
 
 .push-left { margin-right: auto; }
 
+.metadata-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--rule);
+}
+
+.metadata-fields .side-label { margin: 0; }
+.metadata-fields select { width: 100%; min-width: 0; }
+.metadata-options { max-height: 144px; overflow-y: auto; }
+.metadata-options:empty { display: none; }
+.metadata-options small { color: var(--ink-dim); }
+.location-inputs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.location-inputs label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 600; }
+.location-inputs input { width: 100%; min-width: 0; }
+
 @media (max-width: 720px) {
   .browse-cols { grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .browse-side { padding-left: 0; border-left: 0; border-top: 1px solid var(--rule); padding-top: 14px; }
+  .location-inputs { grid-template-columns: minmax(0, 1fr); }
 }
