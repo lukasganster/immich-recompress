@@ -1,0 +1,19 @@
+# Changelog
+
+## [1.3.2](https://github.com/lukasganster/immich-recompress/compare/v1.3.1...v1.3.2) (2026-10-20)
+
+
+### Features
+
+* **browse:** add album and metadata filters ([756921b](https://github.com/lukasganster/immich-recompress/commit/756921b155f4b373853ee9a8f594c3ee656c5a92)), closes [#13](https://github.com/lukasganster/immich-recompress/issues/13)
+* **photos:** add lossless jpeg xl output ([3485471](https://github.com/lukasganster/immich-recompress/commit/348547161e727ed84228b5bb048326250c1c70ab))
+
+
+### Bug Fixes
+
+* **live-photo:** abort when hiding motion clip fails ([ff53a1e](https://github.com/lukasganster/immich-recompress/commit/ff53a1eef2de817e3e304b7ffcb1c3d17c8f587f)), closes [#15](https://github.com/lukasganster/immich-recompress/issues/15)
+
+
+### Miscellaneous Chores
+
+* **release:** prepare 1.3.2 patch release ([b355164](https://github.com/lukasganster/immich-recompress/commit/b3551649762a73f961660283b7a0689fceb53903))
