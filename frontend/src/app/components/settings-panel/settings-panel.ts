@@ -70,7 +70,8 @@ export class SettingsPanelComponent {
   }
 
   get photoSummary(): string {
-    return `−${this.s.photo_target_savings}% target${this.s.compress_raw ? ' · RAW→JPEG' : ''}`;
+    if (this.s.photo_format === 'jxl') return 'JPEG XL · lossless';
+    return `JPEG · −${this.s.photo_target_savings}% target${this.s.compress_raw ? ' · RAW→JPEG' : ''}`;
   }
 
   get modeSummary(): string {

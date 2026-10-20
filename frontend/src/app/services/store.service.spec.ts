@@ -82,6 +82,21 @@ describe('StoreService', () => {
     expect(store.estimatedSavingsFraction()).toBeCloseTo(0.4, 5);
   });
 
+  it('does not promise target savings for lossless JPEG XL', () => {
+    store.media.set('image');
+    store.settings.update(s => ({ ...s, photo_format: 'jxl', photo_target_savings: 90 }));
+    expect(store.estimatedSavingsFraction()).toBeNull();
+    expect(store.estimatedSavingsBytes()).toBeNull();
+  });
+
+  it('keeps JPEG as the default and exposes JPEG XL tool availability', () => {
+    expect(store.settings().photo_format).toBe('jpeg');
+    store.applyCapabilities({ encoders: [], cpu_count: 2, jpeg_xl: true });
+    expect(store.jpegXlAvailable()).toBe(true);
+    store.applyCapabilities({ encoders: [], cpu_count: 2, jpeg_xl: false });
+    expect(store.jpegXlAvailable()).toBe(false);
+  });
+
   it('applyJobUpdate stores the job and tracks the active id', () => {
     store.applyJobUpdate({
       id: 'x', status: 'encoding', progress: 0.5, log: 'working',
