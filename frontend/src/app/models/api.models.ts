@@ -14,6 +14,25 @@ export interface CaptureDateFilter {
   timezone: string;
 }
 
+export interface MetadataFilter {
+  albumId: string;
+  personIds: string[];
+  city: string;
+  state: string;
+  country: string;
+}
+
+export interface BrowseOption {
+  id: string;
+  name: string;
+  owner_id: string;
+  key_indices: number[];
+}
+
+export function emptyMetadataFilter(): MetadataFilter {
+  return { albumId: '', personIds: [], city: '', state: '', country: '' };
+}
+
 export interface VideoSummary {
   id: string;
   media: MediaType;
