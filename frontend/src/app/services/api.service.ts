@@ -103,6 +103,10 @@ export class ApiService {
     return `/api/download/${encodeURIComponent(id)}${name ? '?name=' + encodeURIComponent(name) : ''}`;
   }
 
+  playbackUrl(id: string): string {
+    return `/api/playback/${encodeURIComponent(id)}`;
+  }
+
   previewUrl(id: string): string {
     return `/api/preview/${encodeURIComponent(id)}`;
   }

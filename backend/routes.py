@@ -1,5 +1,5 @@
 """HTTP routes (Flask blueprint): static serving, status, asset listing,
-thumbnail/download proxies, queue management and the SSE stream.
+thumbnail/playback/download proxies, queue management and the SSE stream.
 """
 import json
 import os
@@ -585,6 +585,44 @@ def api_thumbnail(asset_id):
             return Response(stream_with_context(resp.iter_content(chunk_size=65536)),
                             content_type=content_type)
     return Response("Thumbnail unavailable", status=502)
+
+
+@bp.route("/api/playback/<asset_id>")
+def api_playback(asset_id):
+    """Stream a video for in-browser viewing. Immich serves its web-friendly
+    transcode when it has one and the original otherwise. Range is passed
+    through both ways so the player can seek without fetching the whole file.
+    """
+    env = get_env()
+    if not env["url"] or not env.get("api_keys"):
+        return Response("Not configured", status=503)
+    key_env = _key_env_for_asset(env, asset_id)
+
+    headers = {**immich_headers(key_env), "Accept": "*/*"}
+    if request.headers.get("Range"):
+        headers["Range"] = request.headers["Range"]
+    url = env["url"] + f"/api/assets/{asset_id}/video/playback"
+    try:
+        upstream = requests.get(url, headers=headers, stream=True,
+                                timeout=(HTTP_TIMEOUT, 600))
+    except requests.RequestException as exc:
+        return Response(f"Playback failed: {exc}", status=502)
+    if upstream.status_code not in (200, 206):
+        status = upstream.status_code
+        upstream.close()
+        return Response(f"Immich {status}", status=status)
+
+    passthrough = {name: upstream.headers[name]
+                   for name in ("Accept-Ranges", "Content-Length", "Content-Range")
+                   if upstream.headers.get(name)}
+    result = Response(stream_with_context(upstream.iter_content(chunk_size=1024 * 1024)),
+                      status=upstream.status_code,
+                      content_type=upstream.headers.get("Content-Type", "video/mp4"),
+                      headers=passthrough)
+    # Players abandon range requests constantly while seeking. Release the
+    # upstream connection as soon as the client goes away.
+    result.call_on_close(upstream.close)
+    return result
 
 
 @bp.route("/api/download/<asset_id>")
