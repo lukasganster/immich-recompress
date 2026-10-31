@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.4.0](https://github.com/lukasganster/immich-recompress/compare/v1.3.2...v1.4.0) (2026-10-31)
+
+
+### Features
+
+* **brand:** replace logo ([7b760d8](https://github.com/lukasganster/immich-recompress/commit/7b760d88eb9d5fda308bc91d41e4fd3b0638a697))
+* **browse:** collapse metadata filters into sections ([7b760d8](https://github.com/lukasganster/immich-recompress/commit/7b760d88eb9d5fda308bc91d41e4fd3b0638a697))
+* **detail:** play videos in the details drawer ([7b760d8](https://github.com/lukasganster/immich-recompress/commit/7b760d88eb9d5fda308bc91d41e4fd3b0638a697))
+* **queue:** add replace all media action ([7b760d8](https://github.com/lukasganster/immich-recompress/commit/7b760d88eb9d5fda308bc91d41e4fd3b0638a697))
+* **settings:** move settings to the rail and group them by media type ([7b760d8](https://github.com/lukasganster/immich-recompress/commit/7b760d88eb9d5fda308bc91d41e4fd3b0638a697))
+
+
+### Bug Fixes
+
+* **deps:** pin node to 22.23.4 ([7b760d8](https://github.com/lukasganster/immich-recompress/commit/7b760d88eb9d5fda308bc91d41e4fd3b0638a697))
+* **grid:** fill available width and keep state on one line ([7b760d8](https://github.com/lukasganster/immich-recompress/commit/7b760d88eb9d5fda308bc91d41e4fd3b0638a697))
+
 ## [1.3.2](https://github.com/lukasganster/immich-recompress/compare/v1.3.1...v1.3.2) (2026-10-20)
 
 
