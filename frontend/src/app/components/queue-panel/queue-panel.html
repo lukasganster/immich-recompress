@@ -87,6 +87,24 @@
       </div>
     </article>
   }
+
+  @if (review.length > 1) {
+    <!-- Two steps, per product principle 2. The second step's buttons sit
+         clear of the first one, so a double click cannot confirm. -->
+    <div class="replace-all">
+      @if (confirmingAll()) {
+        <span class="replace-all-q">Replace {{ review.length }} originals in Immich?</span>
+        <span class="spacer"></span>
+        <button class="btn destruct" (click)="replaceAll()">Replace {{ review.length }}</button>
+        <button class="btn ghost" (click)="confirmingAll.set(false)">Cancel</button>
+      } @else {
+        <button class="btn destruct" (click)="confirmingAll.set(true)">Replace all media ({{ review.length }})</button>
+        <span class="spacer"></span>
+        <span class="lbl">Reclaims</span>
+        <span class="num">{{ humanMB(reviewSavedBytes) }}</span>
+      }
+    </div>
+  }
 </section>
 
 @if (running.length) {
