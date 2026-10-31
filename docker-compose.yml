@@ -40,7 +40,7 @@ services:
       # Job-history SQLite DB.
       - immich-recompress-data:/data
       # Local backups taken before any replace / RAW conversion / Live-Photo
-      # strip — the only recovery path once the Immich trash is emptied.
+      # strip. Deleted once the replacement succeeds, kept if it fails.
       - immich-recompress-backups:/tmp/immich_recompress_backup
       # Scratch space for downloads/encodes. Mounted so very large videos don't
       # bloat the container writable layer; cleared automatically per job.

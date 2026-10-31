@@ -74,13 +74,14 @@ class PhotoOutputTest(unittest.TestCase):
         self.assertEqual(work.args[2:4], ("holiday.jxl", str(self.output)))
         self.assertEqual(work.keywords, {"mime": "image/jxl"})
 
-    def test_automatic_replacement_uploads_jxl_and_keeps_backup(self):
-        self.process(confirm=False)
+    def test_automatic_replacement_uploads_jxl_and_records_backup(self):
+        job = self.process(confirm=False)
         self.assertEqual(self.replace.call_args.args[2:4], ("holiday.jxl", str(self.output)))
         self.assertEqual(self.replace.call_args.kwargs["mime"], "image/jxl")
         self.assertFalse(self.preview.exists())
         backup = self.directory / "backup" / f"{self.asset_id}_holiday.JPEG"
         self.assertEqual(backup.read_bytes(), b"original jpeg" * 100)
+        self.assertEqual(job["_backup_path"], str(backup))
 
     def test_keep_original_retains_jxl_and_preview_until_discarded(self):
         job = self.process(replace=False, confirm=False)

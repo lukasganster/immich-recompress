@@ -27,9 +27,10 @@ running it:
   kept on the server side. Never commit `.env`, and rotate the key in Immich if
   you suspect it has leaked.
 - **It can change or delete media.** Replacing an asset uploads a new copy and
-  moves the original to the Immich trash (recoverable for the retention period),
-  writing a local backup first. Bugs could still cause data loss, so keep your
-  own backups.
+  moves the original to the Immich trash (recoverable for the retention period).
+  The local backup written first is deleted once the replacement succeeds, so
+  the trash is the only way back after that. Bugs could still cause data loss,
+  so keep your own backups.
 
 ## Deploying safely
 

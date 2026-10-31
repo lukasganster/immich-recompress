@@ -290,6 +290,22 @@ def cleanup_encoded_file(out_path):
         cleanup_temp(out_path, image_preview_path(out_path))
 
 
+def record_backup(asset_id, backup_path):
+    """Attach a backup to its job, or drop it if the job was cleared meanwhile."""
+    if update_job(asset_id, _backup_path=backup_path) is None:
+        cleanup_temp(backup_path)
+
+
+def discard_backup(asset_id):
+    """Delete a job's local original once Immich holds its replacement."""
+    with _state_lock:
+        job = _jobs.get(asset_id)
+        backup_path = job.get("_backup_path") if job else None
+        if job:
+            job["_backup_path"] = None
+    cleanup_temp(backup_path)
+
+
 def _replace_error(asset_id, name, codec, old_size, new_size, savings, log, out_path=None):
     update_job(asset_id, status="error", log=log)
     emit_job_update(asset_id)
@@ -360,6 +376,8 @@ def do_replace(env, asset_id, name, out_path, old_size, new_size, savings, codec
         return _replace_error(asset_id, name, codec, old_size, new_size, savings,
                               "Could not move original to trash", out_path)
 
+    # Before "done": a finished job can be cleared, which would lose the path.
+    discard_backup(asset_id)
     update_job(asset_id, status="done",
                log="Done – new asset created, original in trash")
     emit_job_update(asset_id)
@@ -389,6 +407,7 @@ def do_strip_motion(env, image_id, video_id, name, video_size):
     if not trash_asset(env, video_id):
         return _replace_error(image_id, name, "MOTION", video_size, video_size, 0,
                               "Link removed, but video could not be deleted")
+    discard_backup(image_id)
     update_job(image_id, status="done", new_size=0, savings=video_size,
                savings_human=human_size(video_size),
                log="Done – motion video removed, photo unchanged")
@@ -442,6 +461,7 @@ def do_recompress_motion(env, image_id, old_video_id, out_path, video_name,
         return _replace_error(image_id, video_name, "MOTION", old_size, new_size, savings,
                               "Linked, but old video could not be deleted", out_path)
 
+    discard_backup(image_id)
     update_job(image_id, status="done", new_size=new_size, savings=savings,
                savings_human=human_size(savings),
                log="Done – motion video recompressed, photo unchanged")
@@ -824,10 +844,11 @@ def process_image_job(env, asset_id, params):
     except OSError:
         backup_path = None
     cleanup_temp(src_path)
+    record_backup(asset_id, backup_path)
 
     if confirm:
         update_job(asset_id, status="review", _out_path=out_path,
-                   _backup_path=backup_path, _upload_name=upload_name,
+                   _upload_name=upload_name,
                    log="Ready for confirmation – review the result and approve")
         emit_job_update(asset_id)
         return
@@ -936,7 +957,7 @@ def process_motionphoto_job(env, asset_id, params):
             emit_job_update(asset_id)
             append_csv_log([utcnow_iso(), asset_id, name, "MOTION", video_size, None, None,
                             "cancelled" if cancelled else "error"])
-            cleanup_temp(src_path, out_path)
+            cleanup_temp(src_path, out_path, backup_path)
             return
 
         new_size = os.path.getsize(out_path)
@@ -950,7 +971,7 @@ def process_motionphoto_job(env, asset_id, params):
                        log=f"Savings {savings_pct:.1f}% < {min_savings}%")
             emit_job_update(asset_id)
             append_csv_log([utcnow_iso(), asset_id, name, "MOTION", video_size, new_size, savings, "skipped"])
-            cleanup_temp(out_path)
+            cleanup_temp(out_path, backup_path)
             return
 
         update_job(asset_id, status="encoded", progress=100.0, new_size=new_size,
@@ -963,11 +984,13 @@ def process_motionphoto_job(env, asset_id, params):
                        log=f"Compressed, saved to {out_path}")
             emit_job_update(asset_id)
             append_csv_log([utcnow_iso(), asset_id, name, "MOTION", video_size, new_size, savings, "encoded"])
+            cleanup_temp(backup_path)
             return
 
+        record_backup(asset_id, backup_path)
         if confirm:
             update_job(asset_id, status="review", _out_path=out_path, _video_id=video_id,
-                       _video_name=video_name, _backup_path=backup_path,
+                       _video_name=video_name,
                        log="Ready for confirmation – review the result and approve")
             emit_job_update(asset_id)
             return
@@ -997,9 +1020,10 @@ def process_motionphoto_job(env, asset_id, params):
         append_csv_log([utcnow_iso(), asset_id, name, "MOTION", video_size, 0, video_size, "encoded"])
         return
 
+    record_backup(asset_id, backup_path)
     if confirm:
         update_job(asset_id, status="review", _video_id=video_id,
-                   _video_name=video_name, _backup_path=backup_path,
+                   _video_name=video_name,
                    log="Ready – motion video will be removed (photo is preserved)")
         emit_job_update(asset_id)
         return
@@ -1163,10 +1187,10 @@ def process_job(asset_id):
     except OSError:
         backup_path = None
     cleanup_temp(src_path)
+    record_backup(asset_id, backup_path)
 
     if confirm:
         update_job(asset_id, status="review", _out_path=out_path,
-                   _backup_path=backup_path,
                    log="Ready for confirmation – review the result and approve")
         emit_job_update(asset_id)
         return

@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch
 
 import requests
 
-from backend.jobs import do_recompress_motion, new_job
+from backend.jobs import do_recompress_motion, do_strip_motion, new_job
 from backend.state import _jobs
 
 
@@ -19,6 +19,8 @@ class MotionReplacementTest(unittest.TestCase):
         directory = self.stack.enter_context(tempfile.TemporaryDirectory())
         self.output = Path(directory) / "encoded.mp4"
         self.output.write_bytes(b"encoded motion clip")
+        self.backup = Path(directory) / "motion.mp4"
+        self.backup.write_bytes(b"original motion clip")
         self.env = {"url": "https://immich.test", "api_key": "test-key"}
         self.hide_status = 200
         self.hide_error = None
@@ -28,7 +30,10 @@ class MotionReplacementTest(unittest.TestCase):
         self.link = "old-clip"
         self.trashed = []
         self.stack.enter_context(
-            patch.dict(_jobs, {"still": new_job("still", {"media": "motionphoto"})})
+            patch.dict(_jobs, {"still": {
+                **new_job("still", {"media": "motionphoto"}),
+                "_backup_path": str(self.backup),
+            }})
         )
         self.stack.enter_context(
             patch(
@@ -96,6 +101,7 @@ class MotionReplacementTest(unittest.TestCase):
         self.assertEqual(self.save.call_args.args[0]["new_id"], "new-clip")
         self.assertEqual(self.csv_log.call_args.args[0][-1], "error")
         self.assertFalse(self.output.exists())
+        self.assertTrue(self.backup.exists())
 
     def test_rejected_hide_preserves_original_and_reports_uploaded_clip(self):
         self.hide_status = 403
@@ -116,6 +122,12 @@ class MotionReplacementTest(unittest.TestCase):
         self.assertEqual(self.link, "new-clip")
         self.assertEqual(self.trashed, ["old-clip"])
         self.assertEqual(_jobs["still"]["status"], "done")
+        self.assertFalse(self.backup.exists())
+
+    def test_strip_removes_local_backup(self):
+        self.assertTrue(do_strip_motion(self.env, "still", "old-clip", "motion.mp4", 100))
+        self.assertEqual(self.trashed, ["old-clip"])
+        self.assertFalse(self.backup.exists())
 
     def test_duplicate_upload_does_not_modify_existing_clip(self):
         self.upload_status = "duplicate"
