@@ -1,5 +1,5 @@
 """HTTP routes (Flask blueprint): static serving, status, asset listing,
-thumbnail/download proxies, queue management and the SSE stream.
+thumbnail/playback/download proxies, queue management and the SSE stream.
 """
 import json
 import os
@@ -8,6 +8,7 @@ import shutil
 import threading
 import time
 from datetime import date, datetime, time as datetime_time, timedelta, timezone
+from functools import partial
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
@@ -587,6 +588,44 @@ def api_thumbnail(asset_id):
     return Response("Thumbnail unavailable", status=502)
 
 
+@bp.route("/api/playback/<asset_id>")
+def api_playback(asset_id):
+    """Stream a video for in-browser viewing. Immich serves its web-friendly
+    transcode when it has one and the original otherwise. Range is passed
+    through both ways so the player can seek without fetching the whole file.
+    """
+    env = get_env()
+    if not env["url"] or not env.get("api_keys"):
+        return Response("Not configured", status=503)
+    key_env = _key_env_for_asset(env, asset_id)
+
+    headers = {**immich_headers(key_env), "Accept": "*/*"}
+    if request.headers.get("Range"):
+        headers["Range"] = request.headers["Range"]
+    url = env["url"] + f"/api/assets/{asset_id}/video/playback"
+    try:
+        upstream = requests.get(url, headers=headers, stream=True,
+                                timeout=(HTTP_TIMEOUT, 600))
+    except requests.RequestException as exc:
+        return Response(f"Playback failed: {exc}", status=502)
+    if upstream.status_code not in (200, 206):
+        status = upstream.status_code
+        upstream.close()
+        return Response(f"Immich {status}", status=status)
+
+    passthrough = {name: upstream.headers[name]
+                   for name in ("Accept-Ranges", "Content-Length", "Content-Range")
+                   if upstream.headers.get(name)}
+    result = Response(stream_with_context(upstream.iter_content(chunk_size=1024 * 1024)),
+                      status=upstream.status_code,
+                      content_type=upstream.headers.get("Content-Type", "video/mp4"),
+                      headers=passthrough)
+    # Players abandon range requests constantly while seeking. Release the
+    # upstream connection as soon as the client goes away.
+    result.call_on_close(upstream.close)
+    return result
+
+
 @bp.route("/api/download/<asset_id>")
 def api_download(asset_id):
     env = get_env()
@@ -732,16 +771,18 @@ def api_cancel(asset_id):
     return jsonify({"ok": True})
 
 
-@bp.route("/api/confirm/<asset_id>", methods=["POST"])
-def api_confirm(asset_id):
-    """Confirm a reviewed job and replace the original on Immich (async)."""
-    _env = get_env()
+def _claim_confirmation(env_base, asset_id):
+    """Move a reviewed job to replacing, so it can only be confirmed once.
+
+    Returns (work, None, None), where work performs the replacement, or
+    (None, error, status) when the job cannot be confirmed.
+    """
     with _state_lock:
         job = _jobs.get(asset_id)
         if not job:
-            return jsonify({"ok": False, "error": "Unknown job"}), 404
+            return None, "Unknown job", 404
         if job["status"] != "review":
-            return jsonify({"ok": False, "error": "Job not awaiting confirmation"}), 409
+            return None, "Job not awaiting confirmation", 409
         media = job.get("media")
         key_idx = job.get("_key_idx", 0)
         if media == "motionphoto":
@@ -767,26 +808,74 @@ def api_confirm(asset_id):
             mime = job.get("_output_mime") or ("image/jpeg" if media == "image" else "video/mp4")
             job["status"] = "replacing"
             job["log"] = "Confirmed – original will be replaced"
-    env = env_for_key(_env, key_idx)
+    env = env_for_key(env_base, key_idx)
     emit_job_update(asset_id)
-    broadcast_queue_update()
 
-    if media == "motionphoto":
-        target, args = ((do_recompress_motion,
-                         (env, asset_id, video_id, out_path, video_name,
-                          video_size, new_size, savings))
-                        if motion_action == "recompress"
-                        else (do_strip_motion, (env, asset_id, video_id, video_name, video_size)))
-        threading.Thread(target=target, args=args,
-                         name=f"confirm-{asset_id}", daemon=True).start()
+    if media != "motionphoto":
+        work = partial(do_replace, env, asset_id, name, out_path, old_size,
+                       new_size, savings, codec, mime=mime)
+    elif motion_action == "recompress":
+        work = partial(do_recompress_motion, env, asset_id, video_id, out_path,
+                       video_name, video_size, new_size, savings)
     else:
-        threading.Thread(
-            target=do_replace,
-            args=(env, asset_id, name, out_path, old_size, new_size, savings, codec),
-            kwargs={"mime": mime},
-            name=f"confirm-{asset_id}", daemon=True,
-        ).start()
+        work = partial(do_strip_motion, env, asset_id, video_id, video_name, video_size)
+    return work, None, None
+
+
+@bp.route("/api/confirm/<asset_id>", methods=["POST"])
+def api_confirm(asset_id):
+    """Confirm a reviewed job and replace the original on Immich (async)."""
+    work, error, status = _claim_confirmation(get_env(), asset_id)
+    if error:
+        return jsonify({"ok": False, "error": error}), status
+    broadcast_queue_update()
+    threading.Thread(target=work, name=f"confirm-{asset_id}", daemon=True).start()
     return jsonify({"ok": True})
+
+
+def _replace_in_order(claimed):
+    """Run confirmed replacements one at a time. A failure stays on its own
+    job, so the ones behind it still run."""
+    for asset_id, work in claimed:
+        try:
+            work()
+        except Exception as exc:
+            update_job(asset_id, status="error", log=f"Replace failed: {exc}")
+            emit_job_update(asset_id)
+            persist_if_terminal(asset_id)
+            broadcast_queue_update()
+
+
+@bp.route("/api/confirm-all", methods=["POST"])
+def api_confirm_all():
+    """Confirm the reviewed jobs the client listed, replacing them in order.
+
+    The ids come from the client rather than from every job in review, so a
+    job that reached review after the user decided is not replaced unseen.
+    Replacing one by one keeps a large batch from uploading to Immich at once.
+    """
+    ids = (request.get_json(silent=True) or {}).get("ids")
+    if not isinstance(ids, list):
+        return jsonify({"ok": False, "error": "ids must be a list"}), 400
+    env = get_env()
+    claimed, skipped = [], []
+    for asset_id in dict.fromkeys(ids):
+        if not isinstance(asset_id, str) or not UUID_RE.fullmatch(asset_id):
+            skipped.append(asset_id)
+            continue
+        work, error, _ = _claim_confirmation(env, asset_id)
+        if error:
+            skipped.append(asset_id)
+            continue
+        update_job(asset_id, log="Confirmed, waiting for its turn")
+        emit_job_update(asset_id)
+        claimed.append((asset_id, work))
+    if claimed:
+        broadcast_queue_update()
+        threading.Thread(target=_replace_in_order, args=(claimed,),
+                         name="confirm-all", daemon=True).start()
+    return jsonify({"ok": True, "confirmed": [asset_id for asset_id, _ in claimed],
+                    "skipped": skipped})
 
 
 @bp.route("/api/discard/<asset_id>", methods=["POST"])

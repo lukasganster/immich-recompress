@@ -57,4 +57,40 @@ describe('Photo output settings', () => {
       'Choose JPEG or install libjxl-tools');
     expect(store.settings().photo_format).toBe('jxl');
   });
+
+  it('starts every section closed and states its value in the summary line', () => {
+    TestBed.configureTestingModule({ imports: [SettingsPanelComponent] });
+    const fixture = TestBed.createComponent(SettingsPanelComponent);
+    fixture.componentInstance.show();
+    fixture.detectChanges();
+    const sections = [...(fixture.nativeElement as HTMLElement).querySelectorAll('details')];
+    expect(sections.map(d => d.querySelector('summary')!.firstChild!.textContent!.trim()))
+      .toEqual(['Video', 'Photo', 'Live Photo', 'General']);
+    expect(sections.some(d => d.open)).toBe(false);
+    expect(sections.map(d => d.querySelector('.disclosure-value')!.textContent)).toEqual([
+      fixture.componentInstance.videoSummary,
+      fixture.componentInstance.photoSummary,
+      fixture.componentInstance.liveSummary,
+      fixture.componentInstance.generalSummary,
+    ]);
+  });
+
+  it('opens the photo section when a saved JPEG XL choice cannot run, and keeps it open', async () => {
+    TestBed.configureTestingModule({ imports: [SettingsPanelComponent] });
+    const fixture = TestBed.createComponent(SettingsPanelComponent);
+    const store = TestBed.inject(StoreService);
+    store.settings.update(s => ({ ...s, photo_format: 'jxl' }));
+    fixture.componentInstance.show();
+    fixture.detectChanges();
+    const element: HTMLElement = fixture.nativeElement;
+    const photo = element.querySelector<HTMLDetailsElement>('#photoFormat')!.closest('details')!;
+    expect(photo.open).toBe(true);
+    expect(photo.querySelector('.disclosure-value')!.textContent).toBe('JPEG XL unavailable');
+
+    fixture.componentInstance.update({ photo_format: 'jpeg' });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(photo.open).toBe(true);
+    expect(photo.querySelector('.disclosure-value')!.classList.contains('warn')).toBe(false);
+  });
 });
