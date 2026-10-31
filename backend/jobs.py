@@ -290,6 +290,12 @@ def cleanup_encoded_file(out_path):
         cleanup_temp(out_path, image_preview_path(out_path))
 
 
+def record_backup(asset_id, backup_path):
+    """Attach a backup to its job, or drop it if the job was cleared meanwhile."""
+    if update_job(asset_id, _backup_path=backup_path) is None:
+        cleanup_temp(backup_path)
+
+
 def discard_backup(asset_id):
     """Delete a job's local original once Immich holds its replacement."""
     with _state_lock:
@@ -838,7 +844,7 @@ def process_image_job(env, asset_id, params):
     except OSError:
         backup_path = None
     cleanup_temp(src_path)
-    update_job(asset_id, _backup_path=backup_path)
+    record_backup(asset_id, backup_path)
 
     if confirm:
         update_job(asset_id, status="review", _out_path=out_path,
@@ -951,7 +957,7 @@ def process_motionphoto_job(env, asset_id, params):
             emit_job_update(asset_id)
             append_csv_log([utcnow_iso(), asset_id, name, "MOTION", video_size, None, None,
                             "cancelled" if cancelled else "error"])
-            cleanup_temp(src_path, out_path)
+            cleanup_temp(src_path, out_path, backup_path)
             return
 
         new_size = os.path.getsize(out_path)
@@ -965,7 +971,7 @@ def process_motionphoto_job(env, asset_id, params):
                        log=f"Savings {savings_pct:.1f}% < {min_savings}%")
             emit_job_update(asset_id)
             append_csv_log([utcnow_iso(), asset_id, name, "MOTION", video_size, new_size, savings, "skipped"])
-            cleanup_temp(out_path)
+            cleanup_temp(out_path, backup_path)
             return
 
         update_job(asset_id, status="encoded", progress=100.0, new_size=new_size,
@@ -978,9 +984,10 @@ def process_motionphoto_job(env, asset_id, params):
                        log=f"Compressed, saved to {out_path}")
             emit_job_update(asset_id)
             append_csv_log([utcnow_iso(), asset_id, name, "MOTION", video_size, new_size, savings, "encoded"])
+            cleanup_temp(backup_path)
             return
 
-        update_job(asset_id, _backup_path=backup_path)
+        record_backup(asset_id, backup_path)
         if confirm:
             update_job(asset_id, status="review", _out_path=out_path, _video_id=video_id,
                        _video_name=video_name,
@@ -1013,7 +1020,7 @@ def process_motionphoto_job(env, asset_id, params):
         append_csv_log([utcnow_iso(), asset_id, name, "MOTION", video_size, 0, video_size, "encoded"])
         return
 
-    update_job(asset_id, _backup_path=backup_path)
+    record_backup(asset_id, backup_path)
     if confirm:
         update_job(asset_id, status="review", _video_id=video_id,
                    _video_name=video_name,
@@ -1180,7 +1187,7 @@ def process_job(asset_id):
     except OSError:
         backup_path = None
     cleanup_temp(src_path)
-    update_job(asset_id, _backup_path=backup_path)
+    record_backup(asset_id, backup_path)
 
     if confirm:
         update_job(asset_id, status="review", _out_path=out_path,

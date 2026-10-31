@@ -128,7 +128,7 @@ class ReplacementTest(unittest.TestCase):
         self.assertFalse(self.replace())
         self.assertTrue(self.backup.exists())
 
-    def test_failed_upload_keeps_local_backup(self):
+    def test_duplicate_upload_keeps_local_backup(self):
         self.upload_status = "duplicate"
         self.assertFalse(self.replace())
         self.assertTrue(self.backup.exists())
