@@ -1,3 +1,5 @@
+<img src="frontend/public/logo.svg" alt="Immich Recompress logo" width="72" />
+
 # Immich Recompress
 
 Browse, inspect and **recompress** the videos and photos in your
