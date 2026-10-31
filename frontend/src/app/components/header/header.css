@@ -36,6 +36,15 @@
   background: var(--rule);
 }
 
+.rail-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.label-short { display: none; }
+
 .header-spacer { flex: 1; min-width: 0; }
 
 .deps {
@@ -57,4 +66,6 @@
 @media (max-width: 860px) {
   .rail > .pill.plain { display: none; }
   .rail > .sep:last-of-type { display: none; }
+  .label-full { display: none; }
+  .label-short { display: inline; }
 }

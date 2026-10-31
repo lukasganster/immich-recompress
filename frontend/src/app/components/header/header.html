@@ -4,7 +4,13 @@
 
   <span class="sep"></span>
 
-  <button class="btn" (click)="browseClick.emit()">Select media</button>
+  <div class="rail-actions">
+    <button class="btn" (click)="browseClick.emit()">Select media</button>
+    <button class="btn ghost" aria-label="Edit compression settings" (click)="settingsClick.emit()">
+      <span class="label-full">Edit compression settings</span>
+      <span class="label-short">Settings</span>
+    </button>
+  </div>
 
   <span class="header-spacer"></span>
 
