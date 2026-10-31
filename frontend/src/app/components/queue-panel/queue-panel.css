@@ -134,6 +134,24 @@
   padding: 11px var(--pad) 13px;
 }
 
+/* Stays in reach while the reviews scroll underneath it. */
+.replace-all {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 9px var(--pad);
+  border-top: 1px solid var(--rule-hard);
+  background: var(--sheet-2);
+}
+
+.replace-all .spacer { flex: 1; }
+.replace-all .num { font-size: 14px; color: var(--reclaimed); }
+.replace-all-q { font-size: 12px; font-weight: 600; }
+
 /* ── running ────────────────────────────────────────────────────────── */
 
 .job { padding: 11px var(--pad) 12px; }

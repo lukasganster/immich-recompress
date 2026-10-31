@@ -11,4 +11,5 @@ import { StoreService } from '../../services/store.service';
 export class HeaderComponent {
   readonly store = inject(StoreService);
   readonly browseClick = output<void>();
+  readonly settingsClick = output<void>();
 }

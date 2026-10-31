@@ -12,8 +12,8 @@
 }
 
 .logo {
-  width: 42px;
-  height: 42px;
+  width: 30px;
+  height: 30px;
   aspect-ratio: 1;
   object-fit: contain;
   display: block;
@@ -26,7 +26,7 @@
   letter-spacing: -0.01em;
   margin: 0;
   white-space: nowrap;
-  margin-left: -10px;
+  margin-left: -6px;
 }
 
 .sep {
@@ -35,6 +35,15 @@
   flex: none;
   background: var(--rule);
 }
+
+.rail-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.label-short { display: none; }
 
 .header-spacer { flex: 1; min-width: 0; }
 
@@ -57,4 +66,6 @@
 @media (max-width: 860px) {
   .rail > .pill.plain { display: none; }
   .rail > .sep:last-of-type { display: none; }
+  .label-full { display: none; }
+  .label-short { display: inline; }
 }

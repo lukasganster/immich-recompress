@@ -69,78 +69,6 @@
       }
 
       @if (localTab() !== 'link') {
-        <section class="metadata-fields" aria-label="Album, people and location filters">
-          <div class="date-label-row">
-            <span class="side-label">Album and metadata</span>
-            @if (hasMetadata()) {
-              <button type="button" class="link" (click)="localMetadata.set({ albumId: '', personIds: [], city: '', state: '', country: '' })">Clear metadata</button>
-            }
-          </div>
-          @if (!supportsMetadata()) {
-            <p class="hint">Album, people and location filters require Immich 3.2 or later. Wait for the server version to load or check your connection.</p>
-          } @else {
-            @if (discoveryBusy()) { <p class="hint" role="status">Loading browse options...</p> }
-            @if (discoveryError()) {
-              <p class="date-error" role="alert">{{ discoveryError() }}</p>
-              <button type="button" class="link" (click)="loadDiscovery()">Retry loading albums and people</button>
-            }
-            @if (unavailable()) {
-              <p class="date-error" role="alert">A saved album or person is unavailable in these libraries. Clear metadata or select it again.</p>
-            }
-            <div class="field">
-              <label for="album-search">Album</label>
-              <input id="album-search" type="search" placeholder="Search albums"
-                [ngModel]="albumSearch()" (ngModelChange)="albumSearch.set($event)" />
-              <select aria-label="Select album" [ngModel]="localMetadata().albumId"
-                (ngModelChange)="setMetadata('albumId', $event)" [disabled]="albumsBusy() || !!albumError()">
-                <option value="">All albums</option>
-                @for (album of albums(); track album.id) {
-                  @if (album.id === localMetadata().albumId || filteredAlbums().includes(album)) {
-                    <option [value]="album.id">{{ album.name }} ({{ optionLibraries(album) }})</option>
-                  }
-                }
-                @if (localMetadata().albumId && !selectedAlbumAvailable()) {
-                  <option [value]="localMetadata().albumId">Saved album unavailable</option>
-                }
-              </select>
-              @if (!albumsBusy() && !albumError() && !filteredAlbums().length) {
-                <p class="hint">No albums match this search.</p>
-              }
-              <p class="hint">Shared albums are searched within the selected libraries. Only assets owned by those libraries are included.</p>
-            </div>
-            <div class="field">
-              <label for="people-search">People: match any selected person</label>
-              <input id="people-search" type="search" placeholder="Search people"
-                [ngModel]="peopleSearch()" (ngModelChange)="peopleSearch.set($event)" />
-              <div class="metadata-options" role="group" aria-label="People">
-                @for (person of filteredPeople(); track person.id) {
-                  <label class="key-row">
-                    <input type="checkbox" [checked]="localMetadata().personIds.includes(person.id)"
-                      (change)="togglePerson(person.id)" />
-                    <span>{{ person.name }} <small>({{ optionLibraries(person) }})</small></span>
-                  </label>
-                }
-              </div>
-              @if (!peopleBusy() && !peopleError() && !filteredPeople().length) {
-                <p class="hint">No people match this search.</p>
-              }
-              @if (matchingPeople().length > filteredPeople().length) {
-                <p class="hint">Showing the first 50 of {{ matchingPeople().length }} people. Search by name to narrow the list.</p>
-              }
-              @if (localMetadata().personIds.length) {
-                <p class="hint">{{ localMetadata().personIds.length }} selected, including choices outside this search.
-                  <button type="button" class="link" (click)="setMetadata('personIds', [])">Clear people</button>
-                </p>
-              }
-            </div>
-            <div class="location-inputs">
-              <label>City<input type="text" [ngModel]="localMetadata().city" (ngModelChange)="setMetadata('city', $event)" /></label>
-              <label>State<input type="text" [ngModel]="localMetadata().state" (ngModelChange)="setMetadata('state', $event)" /></label>
-              <label>Country<input type="text" [ngModel]="localMetadata().country" (ngModelChange)="setMetadata('country', $event)" /></label>
-            </div>
-            <p class="hint">Optional. Location values must match the metadata in Immich. Album, people, location and dates are combined.</p>
-          }
-        </section>
         <div class="field date-field">
           <div class="date-label-row">
             <label>Date taken</label>
@@ -161,6 +89,102 @@
           <p class="hint">Optional. Dates use {{ localTimezone() }} and include both endpoints.</p>
           @if (dateError()) { <p class="date-error" role="alert">{{ dateError() }}</p> }
         </div>
+        <section class="metadata-fields" aria-label="Album, people and location filters">
+          <div class="date-label-row">
+            <span class="side-label">Album and metadata</span>
+            @if (hasMetadata()) {
+              <button type="button" class="link" (click)="localMetadata.set({ albumId: '', personIds: [], city: '', state: '', country: '' })">Clear metadata</button>
+            }
+          </div>
+          @if (!supportsMetadata()) {
+            <p class="hint">Album, people and location filters require Immich 3.2 or later. Wait for the server version to load or check your connection.</p>
+          } @else {
+            @if (discoveryBusy()) { <p class="hint" role="status">Loading browse options...</p> }
+            @if (discoveryError()) {
+              <p class="date-error" role="alert">{{ discoveryError() }}</p>
+              <button type="button" class="link" (click)="loadDiscovery()">Retry loading albums and people</button>
+            }
+            @if (unavailable()) {
+              <p class="date-error" role="alert">A saved album or person is unavailable in these libraries. Clear metadata or select it again.</p>
+            }
+            <div class="disclosures">
+            <details class="disclosure">
+              <summary>
+                <span>Album</span>
+                @if (albumSummary()) { <span class="disclosure-value">{{ albumSummary() }}</span> }
+              </summary>
+              <div class="field disclosure-body">
+              <input type="search" placeholder="Search albums" aria-label="Search albums"
+                [ngModel]="albumSearch()" (ngModelChange)="albumSearch.set($event)" />
+              <select aria-label="Select album" [ngModel]="localMetadata().albumId"
+                (ngModelChange)="setMetadata('albumId', $event)" [disabled]="albumsBusy() || !!albumError()">
+                <option value="">All albums</option>
+                @for (album of albums(); track album.id) {
+                  @if (album.id === localMetadata().albumId || filteredAlbums().includes(album)) {
+                    <option [value]="album.id">{{ album.name }} ({{ optionLibraries(album) }})</option>
+                  }
+                }
+                @if (localMetadata().albumId && !selectedAlbumAvailable()) {
+                  <option [value]="localMetadata().albumId">Saved album unavailable</option>
+                }
+              </select>
+              @if (!albumsBusy() && !albumError() && !filteredAlbums().length) {
+                <p class="hint">No albums match this search.</p>
+              }
+              <p class="hint">Shared albums are searched within the selected libraries. Only assets owned by those libraries are included.</p>
+              </div>
+            </details>
+            <details class="disclosure">
+              <summary>
+                <span>People</span>
+                @if (localMetadata().personIds.length) {
+                  <span class="disclosure-value">{{ localMetadata().personIds.length }} selected</span>
+                }
+              </summary>
+              <div class="field disclosure-body">
+              <input type="search" placeholder="Search people" aria-label="Search people"
+                [ngModel]="peopleSearch()" (ngModelChange)="peopleSearch.set($event)" />
+              <p class="hint">Matches assets with any selected person.</p>
+              <div class="metadata-options" role="group" aria-label="People">
+                @for (person of filteredPeople(); track person.id) {
+                  <label class="key-row">
+                    <input type="checkbox" [checked]="localMetadata().personIds.includes(person.id)"
+                      (change)="togglePerson(person.id)" />
+                    <span>{{ person.name }} <small>({{ optionLibraries(person) }})</small></span>
+                  </label>
+                }
+              </div>
+              @if (!peopleBusy() && !peopleError() && !filteredPeople().length) {
+                <p class="hint">No people match this search.</p>
+              }
+              @if (matchingPeople().length > filteredPeople().length) {
+                <p class="hint">Showing the first 50 of {{ matchingPeople().length }} people. Search by name to narrow the list.</p>
+              }
+              @if (localMetadata().personIds.length) {
+                <p class="hint">{{ localMetadata().personIds.length }} selected, including choices outside this search.
+                  <button type="button" class="link" (click)="setMetadata('personIds', [])">Clear people</button>
+                </p>
+              }
+              </div>
+            </details>
+            <details class="disclosure">
+              <summary>
+                <span>Location</span>
+                @if (locationSummary()) { <span class="disclosure-value">{{ locationSummary() }}</span> }
+              </summary>
+              <div class="field disclosure-body">
+              <div class="location-inputs">
+                <label>City<input type="text" [ngModel]="localMetadata().city" (ngModelChange)="setMetadata('city', $event)" /></label>
+                <label>State<input type="text" [ngModel]="localMetadata().state" (ngModelChange)="setMetadata('state', $event)" /></label>
+                <label>Country<input type="text" [ngModel]="localMetadata().country" (ngModelChange)="setMetadata('country', $event)" /></label>
+              </div>
+              <p class="hint">Values must match the metadata in Immich.</p>
+              </div>
+            </details>
+            </div>
+            <p class="hint">Optional. Album, people, location and dates are combined.</p>
+          }
+        </section>
       }
       </div>
 

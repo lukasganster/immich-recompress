@@ -6,7 +6,6 @@
     <dt>Photo</dt><dd>{{ photoSummary }}</dd>
     <dt>Mode</dt><dd>{{ modeSummary }}</dd>
   </dl>
-  <button class="btn ghost ss-edit" (click)="open.set(true)">Edit compression settings</button>
 </div>
 
 @if (open()) {
@@ -19,171 +18,183 @@
     </div>
 
     <div class="modal-body">
-      <div class="settings-form">
-
-        <h3 class="section-head">Video Settings</h3>
-
-        <div class="field">
-          <label>Encoder</label>
-          <select [ngModel]="s.encoder" (ngModelChange)="onEncoder($event)">
-            @for (e of store.encoders(); track e.id) {
-              <option [value]="e.id">{{ e.label }}</option>
-            } @empty {
-              <option [value]="s.encoder">{{ s.encoder }}</option>
-            }
-          </select>
-          <small>Hardware (GPU) encoders are listed only when the running HandBrake
-            build supports them — they're far faster and barely touch the CPU.</small>
-        </div>
-
-        <div class="field">
-          <label>Quality ({{ enc?.qbetter === 'high' ? 'CQ' : 'RF' }}): {{ s.quality }} · {{ qualityLabel(s.quality) }}</label>
-          <div class="rangewrap">
-            <input type="range" [min]="enc?.qmin ?? 18" [max]="enc?.qmax ?? 32"
-              [ngModel]="s.quality" (ngModelChange)="update({quality: +$event})" />
-            <input type="number" [min]="enc?.qmin ?? 18" [max]="enc?.qmax ?? 32" class="num-input"
-              [ngModel]="s.quality" (ngModelChange)="update({quality: +$event})" />
-          </div>
-          @if (enc?.qbetter === 'high') {
-            <small>Constant-quality target (0–100).
-              <strong>Higher = better quality &amp; bigger files; lower = smaller files.</strong>
-              ~55–65 is a good balance.</small>
-          } @else {
-            <small>Constant-quality target for the encoder (HandBrake's RF, like CRF).
-              <strong>Lower = better quality &amp; bigger files; higher = smaller files &amp; lower quality.</strong>
-              Roughly each +6 halves the size. 18 ≈ near-lossless, ~22–26 is the sweet spot, 32 is small but visibly soft.</small>
-          }
-        </div>
-
-        @if (!enc?.hw) {
-          <div class="field">
-            <label>Preset</label>
-            <select [ngModel]="s.preset" (ngModelChange)="update({preset: $event})">
-              @for (p of ['ultrafast','superfast','veryfast','faster','fast','medium','slow','slower','veryslow']; track p) {
-                <option [value]="p">{{ p }}</option>
-              }
-            </select>
-          </div>
-        }
-
-        @if (enc?.cores) {
-          <div class="field">
-            <label>CPU cores: {{ cores }} / {{ store.cpuCount() }}</label>
-            <div class="rangewrap">
-              <input type="range" min="1" [max]="store.cpuCount()"
-                [ngModel]="cores" (ngModelChange)="update({threads: +$event})" />
-              <input type="number" min="1" [max]="store.cpuCount()" class="num-input"
-                [ngModel]="cores" (ngModelChange)="update({threads: +$event})" />
+      <div class="disclosures">
+        <details class="disclosure">
+          <summary>Video<span class="disclosure-value">{{ videoSummary }}</span></summary>
+          <div class="disclosure-body settings-form">
+            <div class="field">
+              <label>Encoder</label>
+              <select [ngModel]="s.encoder" (ngModelChange)="onEncoder($event)">
+                @for (e of store.encoders(); track e.id) {
+                  <option [value]="e.id">{{ e.label }}</option>
+                } @empty {
+                  <option [value]="s.encoder">{{ s.encoder }}</option>
+                }
+              </select>
+              <small>Hardware (GPU) encoders are listed only when the running HandBrake
+                build supports them — they're far faster and barely touch the CPU.</small>
             </div>
-            <small>How many CPU cores the software encoder may use — {{ store.cpuCount() }} detected.
-              Fewer keeps the machine responsive; the max is fastest.</small>
-          </div>
-        }
 
-        <div class="field">
-          <label>Max Resolution</label>
-          <select [ngModel]="s.resolution" (ngModelChange)="update({resolution: $event})">
-            <option value="original">Original (no downscale)</option>
-            <option value="2160">4K · 2160p</option>
-            <option value="1440">1440p</option>
-            <option value="1080">1080p</option>
-            <option value="720">720p</option>
-            <option value="480">480p</option>
-          </select>
-          <small>Caps the longer edge; only downscales videos larger than this, never upscales.</small>
-        </div>
+            <div class="field">
+              <label>Quality ({{ enc?.qbetter === 'high' ? 'CQ' : 'RF' }}): {{ s.quality }} · {{ qualityLabel(s.quality) }}</label>
+              <div class="rangewrap">
+                <input type="range" [min]="enc?.qmin ?? 18" [max]="enc?.qmax ?? 32"
+                  [ngModel]="s.quality" (ngModelChange)="update({quality: +$event})" />
+                <input type="number" [min]="enc?.qmin ?? 18" [max]="enc?.qmax ?? 32" class="num-input"
+                  [ngModel]="s.quality" (ngModelChange)="update({quality: +$event})" />
+              </div>
+              @if (enc?.qbetter === 'high') {
+                <small>Constant-quality target (0–100).
+                  <strong>Higher = better quality &amp; bigger files; lower = smaller files.</strong>
+                  ~55–65 is a good balance.</small>
+              } @else {
+                <small>Constant-quality target for the encoder (HandBrake's RF, like CRF).
+                  <strong>Lower = better quality &amp; bigger files; higher = smaller files &amp; lower quality.</strong>
+                  Roughly each +6 halves the size. 18 ≈ near-lossless, ~22–26 is the sweet spot, 32 is small but visibly soft.</small>
+              }
+            </div>
 
-        <div class="field">
-          <label>Skip Codecs</label>
-          <input type="text" [ngModel]="s.skip_codecs" (ngModelChange)="update({skip_codecs: $event})" />
-        </div>
-
-        <h3 class="section-head">Photo Settings</h3>
-
-        <div class="field full">
-          <label for="photoFormat">Output format</label>
-          <select id="photoFormat" [ngModel]="s.photo_format"
-            (ngModelChange)="update({photo_format: $event})" aria-describedby="photoFormatHelp">
-            <option value="jpeg">JPEG</option>
-            <option value="jxl" [disabled]="!store.jpegXlAvailable()">JPEG XL (lossless)</option>
-          </select>
-          <small id="photoFormatHelp">
-            @if (s.photo_format === 'jxl') {
-              Converts JPEG originals to JPEG XL without additional quality loss.
-              Savings vary by photo; files below the minimum savings are skipped.
-              Other formats, including RAW and existing JPEG XL files, are skipped.
-            } @else {
-              Recompresses JPEG originals to a target size.
+            @if (!enc?.hw) {
+              <div class="field">
+                <label>Preset</label>
+                <select [ngModel]="s.preset" (ngModelChange)="update({preset: $event})">
+                  @for (p of ['ultrafast','superfast','veryfast','faster','fast','medium','slow','slower','veryslow']; track p) {
+                    <option [value]="p">{{ p }}</option>
+                  }
+                </select>
+              </div>
             }
-          </small>
-          @if (!store.jpegXlAvailable()) {
-            @if (s.photo_format === 'jxl') {
-              <small class="warn" role="alert">JPEG XL is unavailable on this server.
-                Choose JPEG or install libjxl-tools to compress photos.</small>
-            } @else {
-              <small>JPEG XL requires cjxl and djxl. Install libjxl-tools on the server to enable it.</small>
+
+            @if (enc?.cores) {
+              <div class="field">
+                <label>CPU cores: {{ cores }} / {{ store.cpuCount() }}</label>
+                <div class="rangewrap">
+                  <input type="range" min="1" [max]="store.cpuCount()"
+                    [ngModel]="cores" (ngModelChange)="update({threads: +$event})" />
+                  <input type="number" min="1" [max]="store.cpuCount()" class="num-input"
+                    [ngModel]="cores" (ngModelChange)="update({threads: +$event})" />
+                </div>
+                <small>How many CPU cores the software encoder may use — {{ store.cpuCount() }} detected.
+                  Fewer keeps the machine responsive; the max is fastest.</small>
+              </div>
             }
-          }
-        </div>
 
-        @if (s.photo_format === 'jpeg') {
-        <div class="field full">
-          <label>Target Savings: {{ s.photo_target_savings }}%</label>
-          <div class="rangewrap">
-            <input type="range" min="5" max="90"
-              [ngModel]="s.photo_target_savings" (ngModelChange)="update({photo_target_savings: +$event})" />
-            <input type="number" min="5" max="95" class="num-input"
-              [ngModel]="s.photo_target_savings" (ngModelChange)="update({photo_target_savings: +$event})" />
+            <div class="field">
+              <label>Max Resolution</label>
+              <select [ngModel]="s.resolution" (ngModelChange)="update({resolution: $event})">
+                <option value="original">Original (no downscale)</option>
+                <option value="2160">4K · 2160p</option>
+                <option value="1440">1440p</option>
+                <option value="1080">1080p</option>
+                <option value="720">720p</option>
+                <option value="480">480p</option>
+              </select>
+              <small>Caps the longer edge; only downscales videos larger than this, never upscales.</small>
+            </div>
+
+            <div class="field">
+              <label>Skip Codecs</label>
+              <input type="text" [ngModel]="s.skip_codecs" (ngModelChange)="update({skip_codecs: $event})" />
+            </div>
           </div>
-          <small>Photos are compressed (JPEG) to achieve approximately this fraction of file size savings.</small>
-        </div>
+        </details>
 
-        <div class="field full">
-          <div class="toggle">
-            <input type="checkbox" id="compressRaw"
-              [ngModel]="s.compress_raw" (ngModelChange)="update({compress_raw: $event})" />
-            <label for="compressRaw">Convert RAW (DNG/CR2/NEF/…) to JPEG</label>
+        <details class="disclosure" [open]="expandPhoto()">
+          <summary>Photo<span class="disclosure-value" [class.warn]="jxlBlocked">{{ jxlBlocked ? 'JPEG XL unavailable' : photoSummary }}</span></summary>
+          <div class="disclosure-body settings-form">
+            <div class="field full">
+              <label for="photoFormat">Output format</label>
+              <select id="photoFormat" [ngModel]="s.photo_format"
+                (ngModelChange)="update({photo_format: $event})" aria-describedby="photoFormatHelp">
+                <option value="jpeg">JPEG</option>
+                <option value="jxl" [disabled]="!store.jpegXlAvailable()">JPEG XL (lossless)</option>
+              </select>
+              <small id="photoFormatHelp">
+                @if (s.photo_format === 'jxl') {
+                  Converts JPEG originals to JPEG XL without additional quality loss.
+                  Savings vary by photo; files below the minimum savings are skipped.
+                  Other formats, including RAW and existing JPEG XL files, are skipped.
+                } @else {
+                  Recompresses JPEG originals to a target size.
+                }
+              </small>
+              @if (!store.jpegXlAvailable()) {
+                @if (s.photo_format === 'jxl') {
+                  <small class="warn" role="alert">JPEG XL is unavailable on this server.
+                    Choose JPEG or install libjxl-tools to compress photos.</small>
+                } @else {
+                  <small>JPEG XL requires cjxl and djxl. Install libjxl-tools on the server to enable it.</small>
+                }
+              }
+            </div>
+
+            @if (s.photo_format === 'jpeg') {
+            <div class="field full">
+              <label>Target Savings: {{ s.photo_target_savings }}%</label>
+              <div class="rangewrap">
+                <input type="range" min="5" max="90"
+                  [ngModel]="s.photo_target_savings" (ngModelChange)="update({photo_target_savings: +$event})" />
+                <input type="number" min="5" max="95" class="num-input"
+                  [ngModel]="s.photo_target_savings" (ngModelChange)="update({photo_target_savings: +$event})" />
+              </div>
+              <small>Photos are compressed (JPEG) to achieve approximately this fraction of file size savings.</small>
+            </div>
+
+            <div class="field full">
+              <div class="toggle">
+                <input type="checkbox" id="compressRaw"
+                  [ngModel]="s.compress_raw" (ngModelChange)="update({compress_raw: $event})" />
+                <label for="compressRaw">Convert RAW (DNG/CR2/NEF/…) to JPEG</label>
+              </div>
+              <small class="warn">Converts RAW → JPEG and replaces the original. Requires sips (macOS).</small>
+            </div>
+            }
           </div>
-          <small class="warn">Converts RAW → JPEG and replaces the original. Requires sips (macOS).</small>
-        </div>
-        }
+        </details>
 
-        <h3 class="section-head">Live Photo Settings</h3>
-
-        <div class="field full">
-          <label>Motion video</label>
-          <select [ngModel]="s.motion_action" (ngModelChange)="update({motion_action: $event})">
-            <option value="remove">Remove (keep still photo only)</option>
-            <option value="recompress">Recompress (keep it live, smaller — uses the video encoder above)</option>
-            <option value="keep">Keep (analyze only, change nothing)</option>
-          </select>
-          <small>Applies to the "Live Photos" media type. The still photo is never modified; only the embedded motion video is acted on (backed up locally first).</small>
-        </div>
-
-        <h3 class="section-head">General</h3>
-
-        <div class="field">
-          <label>Min. Savings: {{ s.min_savings }}%</label>
-          <input type="range" min="0" max="50"
-            [ngModel]="s.min_savings" (ngModelChange)="update({min_savings: +$event})" />
-        </div>
-
-        <div class="field">
-          <div class="toggle">
-            <input type="checkbox" id="setReplace"
-              [ngModel]="s.replace" (ngModelChange)="update({replace: $event})" />
-            <label for="setReplace">Replace Original</label>
+        <details class="disclosure">
+          <summary>Live Photo<span class="disclosure-value">{{ liveSummary }}</span></summary>
+          <div class="disclosure-body settings-form">
+            <div class="field full">
+              <label>Motion video</label>
+              <select [ngModel]="s.motion_action" (ngModelChange)="update({motion_action: $event})">
+                <option value="remove">Remove (keep still photo only)</option>
+                <option value="recompress">Recompress (keep it live, smaller, uses the Video settings)</option>
+                <option value="keep">Keep (analyze only, change nothing)</option>
+              </select>
+              <small>Applies to the "Live Photos" media type. The still photo is never modified; only the embedded motion video is acted on (backed up locally first).</small>
+            </div>
           </div>
-        </div>
+        </details>
 
-        <div class="field">
-          <div class="toggle">
-            <input type="checkbox" id="setConfirm"
-              [ngModel]="s.confirm" (ngModelChange)="update({confirm: $event})" />
-            <label for="setConfirm">Replace only after review</label>
+        <details class="disclosure">
+          <summary>General<span class="disclosure-value">{{ generalSummary }}</span></summary>
+          <div class="disclosure-body settings-form">
+            <div class="field">
+              <label>Min. Savings: {{ s.min_savings }}%</label>
+              <div class="rangewrap">
+                <input type="range" min="0" max="50"
+                  [ngModel]="s.min_savings" (ngModelChange)="update({min_savings: +$event})" />
+              </div>
+            </div>
+
+            <div class="field">
+              <div class="toggle">
+                <input type="checkbox" id="setReplace"
+                  [ngModel]="s.replace" (ngModelChange)="update({replace: $event})" />
+                <label for="setReplace">Replace Original</label>
+              </div>
+            </div>
+
+            <div class="field">
+              <div class="toggle">
+                <input type="checkbox" id="setConfirm"
+                  [ngModel]="s.confirm" (ngModelChange)="update({confirm: $event})" />
+                <label for="setConfirm">Replace only after review</label>
+              </div>
+            </div>
           </div>
-        </div>
-
+        </details>
       </div>
     </div>
 

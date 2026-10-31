@@ -87,6 +87,10 @@ export class ApiService {
     return this.http.post<{ ok: boolean }>(`/api/confirm/${encodeURIComponent(id)}`, {});
   }
 
+  confirmAll(ids: string[]): Observable<{ confirmed: string[]; skipped: string[] }> {
+    return this.http.post<{ confirmed: string[]; skipped: string[] }>('/api/confirm-all', { ids });
+  }
+
   discard(id: string): Observable<{ ok: boolean }> {
     return this.http.post<{ ok: boolean }>(`/api/discard/${encodeURIComponent(id)}`, {});
   }
@@ -101,6 +105,10 @@ export class ApiService {
 
   downloadUrl(id: string, name?: string): string {
     return `/api/download/${encodeURIComponent(id)}${name ? '?name=' + encodeURIComponent(name) : ''}`;
+  }
+
+  playbackUrl(id: string): string {
+    return `/api/playback/${encodeURIComponent(id)}`;
   }
 
   previewUrl(id: string): string {

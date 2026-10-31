@@ -165,13 +165,14 @@
 
 .row-actions button:hover { color: var(--ink); border-color: var(--rule-hard); }
 
-/* The result of a finished job, stated under its state word. */
-.status-sub {
-  display: block;
-  font-size: 11px;
-  color: var(--ink-faint);
-  margin-top: 2px;
+/* The result of a finished job sits beside its state word: a second line
+   would not fit the row. The new size is in the title. */
+.state-cell {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
   white-space: nowrap;
 }
 
-.neg { color: var(--reclaimed); font-weight: 600; }
+.neg { font-size: 11px; color: var(--reclaimed); font-weight: 600; }
