@@ -62,6 +62,15 @@ export class BrowseDialogComponent implements OnDestroy {
     const m = this.localMetadata();
     return !!(m.albumId || m.personIds.length || m.city || m.state || m.country);
   });
+  /** A closed section still says what it is filtering by. */
+  readonly albumSummary = computed(() => {
+    const id = this.localMetadata().albumId;
+    return id ? this.albums().find(a => a.id === id)?.name ?? 'Saved album' : '';
+  });
+  readonly locationSummary = computed(() => {
+    const m = this.localMetadata();
+    return [m.city, m.state, m.country].filter(Boolean).join(', ');
+  });
   readonly supportsMetadata = computed(() => {
     const match = this.store.immichVersion().match(/(\d+)\.(\d+)(?:\.(\d+))?/);
     return !!match && (+match[1] > 3 || (+match[1] === 3 && +match[2] >= 2));

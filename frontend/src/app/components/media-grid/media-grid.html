@@ -83,14 +83,12 @@
 <ng-template #statusTpl let-row="row">
   @let v = asVideo(row);
   @let st = effectiveStatus(row);
-  <span class="badge" [ngClass]="st">{{ statusLabel(st) }}</span>
-  @if (['done','encoded','processed'].includes(st)) {
-    @let res = jobResult(v);
-    @if (res) {
-      @let pct = res.oldSize ? Math.round((1 - res.newSize / res.oldSize) * 100) : 0;
-      <div class="status-sub">→ {{ humanMB(res.newSize) }} <span class="neg">(−{{ pct }}%)</span></div>
-    }
-  }
+  @let res = ['done','encoded','processed'].includes(st) ? jobResult(v) : null;
+  @let pct = res?.oldSize ? Math.round((1 - res!.newSize / res!.oldSize) * 100) : 0;
+  <div class="state-cell" [title]="res ? '→ ' + humanMB(res.newSize) + ' (−' + pct + '%)' : ''">
+    <span class="badge" [ngClass]="st">{{ statusLabel(st) }}</span>
+    @if (res) { <span class="neg">−{{ pct }}%</span> }
+  </div>
 </ng-template>
 
 <ng-template #actionsTpl let-row="row">

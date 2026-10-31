@@ -12,7 +12,7 @@ serves the built UI.
 
 ## Toolchain
 
-- **Package manager is pnpm** (`pnpm@10.30.2`), Node 22. Do not use `npm`/`yarn` here.
+- **Package manager is pnpm** (`pnpm@10.30.2`), Node 22.23.4. Do not use `npm`/`yarn` here.
   Install with `pnpm install --frozen-lockfile`.
 - Angular **22**, TypeScript ~6.0, `@ornery/ui-grid` for the data table (Angular peer
   deps pinned via `pnpm.overrides`).

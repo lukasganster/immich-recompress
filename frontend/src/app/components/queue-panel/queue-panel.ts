@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, output, signal } from '@angular/core';
 import { NgClass } from '@angular/common';
 import { StoreService } from '../../services/store.service';
 import { ApiService } from '../../services/api.service';
@@ -19,6 +19,17 @@ export class QueuePanelComponent {
   readonly reviewRequested = output<string>();
   readonly jobsRefresh = output<void>();
 
+  /** The bulk replace is waiting for its second click. */
+  readonly confirmingAll = signal(false);
+
+  constructor() {
+    // The bar leaves with the second-to-last review, and must not come back
+    // half-confirmed the next time two results land on the bench.
+    effect(() => {
+      if (this.reviewJobs.length < 2) this.confirmingAll.set(false);
+    });
+  }
+
   get orderedJobs(): [string, JobPublic][] {
     const jobs = this.store.jobs();
     const active = this.store.activeId();
@@ -35,6 +46,12 @@ export class QueuePanelComponent {
 
   confirmReplace(id: string): void {
     this.api.confirm(id).subscribe(() => this.jobsRefresh.emit());
+  }
+
+  replaceAll(): void {
+    this.confirmingAll.set(false);
+    const ids = this.reviewJobs.map(([id]) => id);
+    this.api.confirmAll(ids).subscribe(() => this.jobsRefresh.emit());
   }
 
   discard(id: string): void {
@@ -121,6 +138,11 @@ export class QueuePanelComponent {
 
   private entries(): [string, JobPublic][] {
     return Object.entries(this.store.jobs());
+  }
+
+  /** What replacing everything on the bench would reclaim. */
+  get reviewSavedBytes(): number {
+    return this.reviewJobs.reduce((total, [, j]) => total + this.savedBytes(j), 0);
   }
 
   /** Percent of the original reclaimed by a finished encode. */

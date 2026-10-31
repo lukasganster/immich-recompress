@@ -23,10 +23,23 @@
         @let ex = d.exif;
         @let owner = d.owner;
 
-        <img class="drawer-thumb"
-          [src]="'/api/thumbnail/' + d.id"
-          [alt]="'Preview of ' + d.name"
-          (error)="$any($event.target).style.display='none'" />
+        @if (d.mime_type.startsWith('video/') && !playbackFailed()) {
+          <!-- preload="metadata" fetches only the file's header. Without it a
+               click on the poster does nothing until the play button is used. -->
+          <video class="drawer-thumb drawer-video" controls playsinline preload="metadata"
+            [src]="api.playbackUrl(d.id)"
+            [poster]="'/api/thumbnail/' + d.id"
+            [attr.aria-label]="'Play ' + d.name"
+            (error)="playbackFailed.set(true)"></video>
+        } @else {
+          <img class="drawer-thumb"
+            [src]="'/api/thumbnail/' + d.id"
+            [alt]="'Preview of ' + d.name"
+            (error)="$any($event.target).style.display='none'" />
+          @if (playbackFailed()) {
+            <p class="playback-error" role="alert">This video could not be played here. The browser may not support its format, or Immich may be unreachable.</p>
+          }
+        }
 
         <dl class="detail-grid">
           <dt>File</dt><dd>{{ d.name }}</dd>

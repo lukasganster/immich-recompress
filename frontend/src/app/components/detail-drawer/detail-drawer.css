@@ -57,6 +57,20 @@
   margin-bottom: var(--pad);
 }
 
+/* The whole frame stays visible: a portrait clip must not lose its top
+   and bottom to the crop the poster-sized thumbnail uses. */
+.drawer-video {
+  max-height: min(320px, 45vh);
+  object-fit: contain;
+}
+
+.playback-error {
+  margin: calc(var(--pad) * -0.5) 0 var(--pad);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--destruct);
+}
+
 .detail-section { margin-top: 18px; }
 .detail-section:first-child { margin-top: 0; }
 

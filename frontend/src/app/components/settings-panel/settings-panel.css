@@ -1,5 +1,6 @@
 /* The settings summary sits at the foot of the bench, stating what the
-   next encode will do. Editing happens in a dialog. See DESIGN.md. */
+   next encode will do. Editing happens in a dialog, opened from the
+   rail. See DESIGN.md. */
 
 :host { display: block; margin-top: auto; }
 
@@ -40,22 +41,9 @@
   overflow-wrap: anywhere;
 }
 
-.ss-edit { margin: 0 var(--pad) 13px; }
-
 /* ── the settings dialog ────────────────────────────────────────────── */
 
 .settings-form { display: flex; flex-direction: column; gap: 18px; }
-
-.section-head {
-  margin: 0;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--rule-hard);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-}
 
 .field { display: flex; flex-direction: column; gap: 6px; }
 

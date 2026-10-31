@@ -3,9 +3,10 @@
 # --------------------------------------------------------------------------- #
 # Stage 1 — build the Angular frontend into backend/static
 # --------------------------------------------------------------------------- #
-# Angular 22 requires Node >= 20.19 / 22.12. The build writes to ../backend/static
+# Pinned to the patched 22.x release, see the Node.js October 2026 security release.
+# The build writes to ../backend/static
 # (see angular.json "outputPath"), i.e. /app/backend/static.
-FROM node:22-slim AS frontend
+FROM node:22.23.4-slim AS frontend
 
 WORKDIR /app/frontend
 

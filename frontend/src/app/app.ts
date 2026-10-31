@@ -39,6 +39,7 @@ export class App implements OnInit {
   readonly drawer = viewChild.required(DetailDrawerComponent);
   readonly review = viewChild.required(ReviewModalComponent);
   readonly browse = viewChild.required(BrowseDialogComponent);
+  readonly settings = viewChild.required(SettingsPanelComponent);
   readonly settingsPanel = viewChild.required(SettingsPanelComponent);
 
   readonly codecs = ['', 'h264', 'hevc', 'av1', '__other__'];

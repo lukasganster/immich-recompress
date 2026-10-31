@@ -1,3 +1,5 @@
+<img src="frontend/public/logo.svg" alt="Immich Recompress logo" width="72" />
+
 # Immich Recompress
 
 Browse, inspect and **recompress** the videos and photos in your
@@ -9,8 +11,21 @@ live progress.
 ## Screenshots
 
 <p align="center">
-  <img src="screenshots/immich-recompress-demo.gif" alt="Immich Recompress workflow: select media, browse the library, and review a recompressed photo" width="100%" />
+  <img src="screenshots/immich-recompress-demo.gif" alt="Immich Recompress workflow: select media, watch a video in the detail panel, encode it, and review the result" width="100%" />
 </p>
+
+<table>
+  <tr>
+    <td><img src="screenshots/immich-recompress-screenshot-1.png" alt="Select media dialog with date, album, people and location filters" /></td>
+    <td><img src="screenshots/immich-recompress-screenshot-2.png" alt="Library list with an encoded video on the bench, original and recompressed side by side" /></td>
+  </tr>
+  <tr>
+    <td><img src="screenshots/immich-recompress-screenshot-3.png" alt="Full preview of a recompressed video before replacing the original" /></td>
+    <td><img src="screenshots/immich-recompress-screenshot-4.png" alt="Detail panel playing a video from the library" /></td>
+  </tr>
+</table>
+
+Demo images use made-up sample data.
 
 ## Features
 
@@ -25,8 +40,8 @@ live progress.
   Review uses a PNG preview; the file uploaded to Immich remains JPEG XL.
 - Strip the hidden motion video from Live Photos.
 - **Review** the result (new size, savings, preview) before replacing the original.
-- Sequential queue with live progress (SSE), proxied thumbnails/downloads and
-  persistent job history.
+- Sequential queue with live progress (SSE), proxied thumbnails, video playback
+  and downloads, and persistent job history.
 
 Replacement uploads the compressed file as a new asset, copies the original's
 metadata / tags / albums, restores its capture date and location, and moves
@@ -42,7 +57,7 @@ local backup is also kept.
   (included in Docker; locally install `libjxl-tools` on Debian/Ubuntu or
   `jpeg-xl` with Homebrew).
 - An Immich server (tested with **v3.2.2**) and an **admin** API key
-- Docker, or for local dev: Python 3.9+ and Node 22 + [pnpm](https://pnpm.io/)
+- Docker, or for local dev: Python 3.9+ and Node 22.23.4 + [pnpm](https://pnpm.io/)
 
 > **Immich compatibility:** Developed and tested against Immich **3.2.2**. Newer or
 > older releases may work but API behaviour can differ. Check `/api/status` for the

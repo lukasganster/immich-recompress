@@ -18,6 +18,15 @@ export class SettingsPanelComponent {
   /** Whether the edit dialog is open. */
   readonly open = signal(false);
 
+  /** Photo section starts open when its alert would otherwise stay hidden.
+   *  Read once per opening, so choosing JPEG does not collapse the section. */
+  readonly expandPhoto = signal(false);
+
+  show(): void {
+    this.expandPhoto.set(this.jxlBlocked);
+    this.open.set(true);
+  }
+
   get s(): Settings { return this.store.settings(); }
 
   /** Spec of the currently-selected encoder (undefined until caps load). */
@@ -72,6 +81,20 @@ export class SettingsPanelComponent {
   get photoSummary(): string {
     if (this.s.photo_format === 'jxl') return 'JPEG XL · lossless';
     return `JPEG · −${this.s.photo_target_savings}% target${this.s.compress_raw ? ' · RAW→JPEG' : ''}`;
+  }
+
+  /** The saved choice is JPEG XL, but this server cannot produce it. */
+  get jxlBlocked(): boolean {
+    return this.s.photo_format === 'jxl' && !this.store.jpegXlAvailable();
+  }
+
+  get liveSummary(): string {
+    const action = this.s.motion_action;
+    return `${action.charAt(0).toUpperCase()}${action.slice(1)} motion video`;
+  }
+
+  get generalSummary(): string {
+    return `${this.modeSummary} · min. ${this.s.min_savings}% savings`;
   }
 
   get modeSummary(): string {

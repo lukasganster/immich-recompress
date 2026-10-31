@@ -13,18 +13,20 @@ import { VideoDetail } from '../../models/api.models';
   styleUrl: './detail-drawer.css',
 })
 export class DetailDrawerComponent {
-  private readonly api = inject(ApiService);
+  readonly api = inject(ApiService);
   readonly store = inject(StoreService);
 
   readonly open = signal(false);
   readonly detail = signal<VideoDetail | null>(null);
   readonly loading = signal(false);
   readonly currentId = signal<string | null>(null);
+  readonly playbackFailed = signal(false);
 
   readonly encodeRequested = output<string[]>();
   show(id: string): void {
     this.currentId.set(id);
     this.detail.set(null);
+    this.playbackFailed.set(false);
     this.loading.set(true);
     this.open.set(true);
     this.api.assetDetail(id).subscribe({

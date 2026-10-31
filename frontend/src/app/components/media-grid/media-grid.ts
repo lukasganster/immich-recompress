@@ -36,6 +36,14 @@ export class MediaGridComponent implements OnInit, OnDestroy {
   readonly pageLoading = signal(false);
   private assetRequest: Subscription | null = null;
   private sortUnsubscribe: (() => void) | null = null;
+  private resizeObserver: ResizeObserver | null = null;
+  private resizeDebounce: ReturnType<typeof setTimeout> | null = null;
+
+  /** Measured width of the ledger. The grid resolves its percentage columns
+   *  to fixed pixels when it receives options, and its own resize observer
+   *  never rebuilds those tracks, so a window that grows after a load would
+   *  leave the table at its old width. Handing it fresh options re-measures. */
+  private readonly hostWidth = signal(0);
 
   /** Bumped on every successful load. @ornery/ui-grid's Angular cell-template
    *  bridge keys slots by row position, not row id, so swapping in a whole new
@@ -75,6 +83,7 @@ export class MediaGridComponent implements OnInit, OnDestroy {
     // which is the wrong advice here. Same when the load failed: a table
     // cannot say what went wrong. Render our own state instead.
     if (!this.store.loaded() || this.store.loadError() || this.pageLoading()) return null;
+    this.hostWidth();
     const hideClipCols = this.store.media() !== 'video';  // duration/codec only apply to videos
     // Size is wide because it carries the drawn quantity as well as the
     // number — the rule beside each value is what makes the expensive rows
@@ -158,11 +167,19 @@ export class MediaGridComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     // grid options computed after view is ready
     setTimeout(() => this.tplsReady.set(true), 0);
+    this.resizeObserver = new ResizeObserver(entries => {
+      const width = Math.round(entries[0]?.contentRect.width ?? 0);
+      if (this.resizeDebounce) clearTimeout(this.resizeDebounce);
+      this.resizeDebounce = setTimeout(() => this.hostWidth.set(width), 100);
+    });
+    this.resizeObserver.observe(this.host.nativeElement);
   }
 
   ngOnDestroy(): void {
     this.assetRequest?.unsubscribe();
     this.sortUnsubscribe?.();
+    this.resizeObserver?.disconnect();
+    if (this.resizeDebounce) clearTimeout(this.resizeDebounce);
   }
 
   /**

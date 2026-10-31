@@ -432,6 +432,49 @@ span:has(> .row-actions) { display: block; }
   background: var(--sheet-2);
 }
 
+/* ── disclosures ───────────────────────────────────────────────────── */
+
+/* Closed sections in dialogs. The summary line states the current value, so
+   a closed section still says what it holds. */
+
+.disclosures { border-top: 1px solid var(--rule); }
+.disclosure { border-bottom: 1px solid var(--rule); }
+
+.disclosure summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 0;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+.disclosure summary::-webkit-details-marker { display: none; }
+
+.disclosure summary::before {
+  content: '›';
+  flex: none;
+  width: 10px;
+  text-align: center;
+  color: var(--ink-faint);
+}
+
+.disclosure[open] summary::before { transform: rotate(90deg); }
+
+.disclosure-value {
+  margin-left: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 400;
+  color: var(--ink-dim);
+}
+
+.disclosure-body { padding: 2px 0 12px 18px; }
+
 /* ── uiGrid ─────────────────────────────────────────────────────────── */
 
 /* The grid keeps its styles in a shadow root, but every value below is a
