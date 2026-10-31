@@ -5,7 +5,7 @@
 
 ### Bug Fixes
 
-* **jobs:** delete local backup after replacement ([#40](https://github.com/lukasganster/immich-recompress/issues/40)) ([0646a3e](https://github.com/lukasganster/immich-recompress/commit/0646a3e473bfd4adcf00d0d2ed3ab42cb1621af4)), closes [#24](https://github.com/lukasganster/immich-recompress/issues/24)
+* **jobs:** delete local backup after replacement ([#40](https://github.com/lukasganster/immich-recompress/issues/40)) ([0646a3e](https://github.com/lukasganster/immich-recompress/commit/0646a3e473bfd4adcf00d0d2ed3ab42cb1621af4))
 
 ## [1.4.0](https://github.com/lukasganster/immich-recompress/compare/v1.3.2...v1.4.0) (2026-10-31)
 
