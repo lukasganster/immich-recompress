@@ -42,7 +42,7 @@ local backup is also kept.
   (included in Docker; locally install `libjxl-tools` on Debian/Ubuntu or
   `jpeg-xl` with Homebrew).
 - An Immich server (tested with **v3.2.2**) and an **admin** API key
-- Docker, or for local dev: Python 3.9+ and Node 22 + [pnpm](https://pnpm.io/)
+- Docker, or for local dev: Python 3.9+ and Node 22.23.4 + [pnpm](https://pnpm.io/)
 
 > **Immich compatibility:** Developed and tested against Immich **3.2.2**. Newer or
 > older releases may work but API behaviour can differ. Check `/api/status` for the
