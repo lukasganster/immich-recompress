@@ -7,7 +7,8 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from backend.immich_api import capture_metadata_fields
-from backend.jobs import do_replace
+from backend.jobs import do_replace, new_job
+from backend.state import _jobs
 
 
 class ReplacementTest(unittest.TestCase):
@@ -17,6 +18,11 @@ class ReplacementTest(unittest.TestCase):
         directory = self.stack.enter_context(tempfile.TemporaryDirectory())
         self.output = Path(directory) / "encoded.mp4"
         self.output.write_bytes(b"encoded video")
+        self.backup = Path(directory) / "original.mp4"
+        self.backup.write_bytes(b"original video")
+        self.stack.enter_context(patch.dict(_jobs, {
+            "original": {**new_job("original", {}), "_backup_path": str(self.backup)},
+        }))
         self.env = {"url": "https://immich.test", "api_key": "test-key"}
         self.source = {
             "fileCreatedAt": "2025-02-03T18:37:35.000Z",
@@ -31,6 +37,7 @@ class ReplacementTest(unittest.TestCase):
         self.target = {"dateTimeOriginal": "2026-10-10T14:31:29.000Z"}
         self.events = []
         self.update_status = 200
+        self.trash_status = 204
         self.upload_status = "created"
         self.get = self.stack.enter_context(
             patch(
@@ -85,7 +92,7 @@ class ReplacementTest(unittest.TestCase):
 
     def trash(self, *args, **kwargs):
         self.events.append("trash")
-        return Mock(status_code=204)
+        return Mock(status_code=self.trash_status)
 
     def replace(self, mime="video/mp4"):
         return do_replace(
@@ -110,6 +117,21 @@ class ReplacementTest(unittest.TestCase):
             self.post.call_args.kwargs["data"]["fileCreatedAt"],
             self.source["fileCreatedAt"],
         )
+
+    def test_replacement_removes_local_backup(self):
+        self.assertTrue(self.replace())
+        self.assertFalse(self.backup.exists())
+        self.assertIsNone(_jobs["original"]["_backup_path"])
+
+    def test_failed_trash_keeps_local_backup(self):
+        self.trash_status = 500
+        self.assertFalse(self.replace())
+        self.assertTrue(self.backup.exists())
+
+    def test_failed_upload_keeps_local_backup(self):
+        self.upload_status = "duplicate"
+        self.assertFalse(self.replace())
+        self.assertTrue(self.backup.exists())
 
     def test_metadata_update_failure_keeps_original(self):
         self.update_status = 403

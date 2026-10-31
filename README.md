@@ -45,8 +45,9 @@ Demo images use made-up sample data.
 
 Replacement uploads the compressed file as a new asset, copies the original's
 metadata / tags / albums, restores its capture date and location, and moves
-the original to the Immich trash (recoverable for the retention period). A
-local backup is also kept.
+the original to the Immich trash (recoverable for the retention period). The
+local backup taken during the job is deleted once the replacement succeeds and
+stays in place if it fails.
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/lukasganster)
 
