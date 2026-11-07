@@ -2,87 +2,41 @@
 
 # Immich Recompress
 
-Browse, inspect and **recompress** the videos and photos in your
-[Immich](https://immich.app/) library to reclaim storage, all from a small web
-dashboard. Re-encode videos with HandBrake, recompress JPEGs with ffmpeg or JPEG XL, or
-strip the motion clip from Live Photos, with a review-before-replace step and
-live progress.
-
-## Screenshots
+Find the large videos and photos in your [Immich](https://immich.app/) library,
+**recompress** them and replace the originals after you have reviewed the result.
 
 <p align="center">
   <img src="screenshots/immich-recompress-demo.gif" alt="Immich Recompress workflow: select media, watch a video in the detail panel, encode it, and review the result" width="100%" />
 </p>
 
-The demo uses made-up sample data.
-
 ## Features
 
 - Browse videos, photos or Live Photos, filtered by size, capture date, album,
   people and location.
-- Re-encode videos (HandBrake: x264 / x265 / AV1, optional resolution cap).
-- Hardware (GPU) encoding when available, auto-detected at runtime, plus a
-  selectable CPU-core count. See [Hardware acceleration](#hardware-acceleration).
-- Recompress JPEGs to a target size (ffmpeg, with a macOS `sips` fallback);
-  optional opt-in RAW → JPEG.
-- Convert JPEGs to lossless JPEG XL, preserving original JPEG reconstruction.
-  Review uses a PNG preview; the file uploaded to Immich remains JPEG XL.
+- Re-encode videos with HandBrake (x264 / x265 / AV1, optional resolution cap),
+  on the GPU when available. See [Hardware acceleration](#hardware-acceleration).
+- Recompress JPEGs to a target size, or convert them to lossless JPEG XL
+  (`djxl photo.jxl restored.jpg` restores the original JPEG).
 - Strip the hidden motion video from Live Photos.
-- **Review** the result (new size, savings, preview) before replacing the original.
-- Sequential queue with live progress (SSE), proxied thumbnails, video playback
-  and downloads, and persistent job history.
+- **Review** every result (size, savings, preview) before it replaces the original.
+- Queue with live progress and persistent job history.
 
-Replacement uploads the compressed file as a new asset, copies the original's
-metadata / tags / albums, restores its capture date and location, and moves
-the original to the Immich trash (recoverable for the retention period). The
-local backup taken during the job is deleted once the replacement succeeds and
-stays in place if it fails.
-
-[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/lukasganster)
+Replacing uploads the compressed file as a new asset, copies the original's
+metadata, tags, albums, capture date and location, and moves the original to
+the Immich trash. A local backup is kept until the replacement succeeds.
 
 ## Requirements
 
-- [`HandBrakeCLI`](https://handbrake.fr/) and [`ffmpeg` / `ffprobe`](https://ffmpeg.org/) on `PATH`
-- For JPEG XL: [`cjxl` and `djxl`](https://github.com/libjxl/libjxl) on `PATH`
-  (included in Docker; locally install `libjxl-tools` on Debian/Ubuntu or
-  `jpeg-xl` with Homebrew).
-- An Immich server (tested with **v3.2.2**) and an **admin** API key
+- An Immich **3.x.x** server and an **admin** API key. Several keys
+  (comma-separated) let you browse several users' libraries.
+- [`HandBrakeCLI`](https://handbrake.fr/), [`ffmpeg` / `ffprobe`](https://ffmpeg.org/)
+  and, for JPEG XL, [`cjxl` / `djxl`](https://github.com/libjxl/libjxl) on `PATH`.
+  The Docker image includes all of them.
 - Docker, or for local dev: Python 3.9+ and Node 22.23.4 + [pnpm](https://pnpm.io/)
-
-> **Immich compatibility:** Developed and tested against Immich **3.2.2**. Newer or
-> older releases may work but API behaviour can differ. Check `/api/status` for the
-> detected server version and report issues if something breaks on your version.
-
-Capture-date filters use Immich's structured metadata search API. Dates are
-interpreted as whole calendar days in the browser's timezone, including both
-selected endpoints. The selected timezone is saved with the filter.
-
-Choose **JPEG XL (lossless)** under **Photo Settings → Output format** to convert
-JPEG originals without additional quality loss. Savings depend on the source;
-this mode uses the minimum-savings threshold rather than a target percentage.
-RAW, other image formats, and existing JPEG XL files are skipped in this mode.
-The original JPEG can be reconstructed with `djxl photo.jxl restored.jpg`.
-
-In Select media, search for one album or select people by name. People match any
-selected person; album, people, city, state, country and dates are combined.
-Location values must match the metadata stored in Immich. Album, people and
-location filters require a detected Immich version of 3.2 or later. Older servers
-retain size and capture-date browsing.
-
-With multiple API keys, selected libraries define which asset owners are eligible.
-Shared albums are available through keys that can read them, but their results
-include only assets owned by the selected libraries. Each asset appears once and
-uses its owner's API key for processing. Distinct people with the same name stay
-separate and show their library labels.
-
-Filters are saved locally. An album or person that becomes unavailable must be
-cleared or selected again. Failed or capped scans display an error instead of
-partial counts or an apparently complete selection. Narrow the filters and retry
-if a scan exceeds the 100-page limit.
 
 ## Quick start
 
-> ### ⚠️ Early development
+> ### Early development
 >
 > This may still contain bugs, so use it with caution: **I don't guarantee
 > against data loss.** Also read [SECURITY.md](SECURITY.md) before exposing it.
@@ -91,11 +45,8 @@ if a scan exceeds the 100-page limit.
 
 #### Using the published image (recommended)
 
-A pre-built multi-stage image is published to the GitHub Container Registry on
-every release: `ghcr.io/lukasganster/immich-recompress:latest`.
-
-Drop this `docker-compose.yml` somewhere, alongside a `.env` that sets at least
-`IMMICH_URL` and `IMMICH_API_KEY` (see [`.env.example`](.env.example)):
+Put this `docker-compose.yml` next to a `.env` that sets `IMMICH_URL` and
+`IMMICH_API_KEY` (see [`.env.example`](.env.example)):
 
 ```yaml
 services:
@@ -127,19 +78,8 @@ volumes:
 docker compose up -d
 ```
 
-For reproducible deploys, pin a version instead of `latest`, e.g.
-`ghcr.io/lukasganster/immich-recompress:1.3.1`.
-
-Development PRs target the default branch, `development`, and are rebase
-merged. A release is a PR from `development` to `main` that is fast-forwarded
-by commenting `/fast-forward`, so both branches keep the same commits. The
-version comes from the Conventional Commits since the last release, and the
-Release workflow creates the GitHub release and publishes the container for
-AMD64 and ARM64. `latest` follows stable releases; ordinary merges and
-prereleases do not change it. The container build runs after the GitHub
-release is created, so check that the workflow has finished before pulling a
-new version. Maintainer setup and recovery steps are in the
-[release skill](.agents/skills/release-docker/SKILL.md).
+Then open <http://localhost:5050>. Pin a version such as `:1.3.1` instead of
+`latest` for reproducible deploys.
 
 #### Building from source
 
@@ -148,27 +88,14 @@ pnpm run env                    # creates .env; set IMMICH_URL and IMMICH_API_KE
 docker compose up -d --build
 ```
 
-Then open <http://localhost:5050>.
-
 ### Local
 
 ```bash
-# Backend deps: creates .venv and installs requirements.txt
-pnpm run setup
-
-# Create .env, then set IMMICH_URL and IMMICH_API_KEY in it
-pnpm run env
-
-# Frontend (Angular, pnpm): builds the UI into backend/static
+pnpm run setup                  # creates .venv with the Python deps
+pnpm run env                    # creates .env; set IMMICH_URL and IMMICH_API_KEY in it
 pnpm run install:frontend && pnpm run build:frontend
-
-# Run (serves UI + API on http://127.0.0.1:5050)
-pnpm start
+pnpm start                      # UI and API on http://127.0.0.1:5050
 ```
-
-The individual steps map to plain commands if you prefer not to use the pnpm
-wrappers (`pnpm run setup` → `python3 -m venv .venv && .venv/bin/pip install -r
-requirements.txt`, `pnpm start` → `.venv/bin/python backend/server.py`).
 
 ## Configuration
 
@@ -184,10 +111,9 @@ Set in `.env` (see [`.env.example`](.env.example)):
 
 ## Hardware acceleration
 
-The encoder dropdown is detected at runtime from your `HandBrakeCLI` build, so
-you only see options that work. Hardware encoders are far faster and barely touch
-the CPU; software encoders compress best and expose a **CPU cores** slider
-(defaults to all cores. Lower it to keep the machine responsive).
+The encoder list comes from your `HandBrakeCLI` build, so it only shows what
+works. Hardware encoders are much faster; software encoders compress best and
+let you limit the CPU cores.
 
 | Platform | Hardware encoder | How to enable |
 | -------- | ---------------- | ------------- |
@@ -195,9 +121,8 @@ the CPU; software encoders compress best and expose a **CPU cores** slider
 | Linux + Intel/AMD | QSV / VAAPI | Pass `/dev/dri` (below) + a HandBrake build with QSV/VAAPI. |
 | Linux + NVIDIA | NVENC | [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) + GPU reservation (below) + a HandBrake build with NVENC. |
 
-> **Docker:** the stock image's Debian `handbrake-cli` has **no** GPU encoders, so
-> only CPU encoders appear. NVENC/QSV need a HandBrake build that includes them.
-> The passthrough wiring below (and in `docker-compose.yml`) is ready for one.
+The stock Docker image ships a HandBrake build **without** GPU encoders. With a
+build that has them, pass the GPU through:
 
 ```yaml
 services:
@@ -211,15 +136,9 @@ services:
             - { driver: nvidia, count: all, capabilities: [gpu] }
 ```
 
-## Project layout
-
-```
-backend/    Flask app (server.py entry; config, state, db, media,
-            immich_api, jobs, routes). Builds the UI into backend/static/
-frontend/   Angular 22 app (pnpm); see frontend/README.md
-```
-
 ## Contributing & license
 
 Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). Licensed under
 the [MIT License](LICENSE).
+
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/lukasganster)
