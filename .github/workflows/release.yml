@@ -1,35 +1,49 @@
 name: Release
 
+# Runs when main moves. A push with your own credentials triggers it
+# directly; the fast-forward workflow pushes with GITHUB_TOKEN, which does
+# not start push workflows, so it calls this workflow instead.
 on:
   push:
     branches: [main]
+  workflow_call:
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-please
+  group: release
   cancel-in-progress: false
 
 jobs:
   release:
-    if: github.ref == 'refs/heads/main'
+    name: Create GitHub release
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      issues: write
-      pull-requests: write
     outputs:
-      created: ${{ steps.release.outputs.release_created }}
-      tag: ${{ steps.release.outputs.tag_name }}
+      created: ${{ steps.create.outputs.created }}
+      tag: ${{ steps.plan.outputs.tag }}
     steps:
-      - uses: googleapis/release-please-action@v4
-        id: release
+      - uses: actions/checkout@v4
         with:
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
-          target-branch: main
+          ref: main
+          fetch-depth: 0
+      - name: Plan release from Conventional Commits
+        id: plan
+        run: node .github/scripts/release-plan.mjs --notes "$RUNNER_TEMP/notes.md"
+      - name: Create tag and release
+        id: create
+        if: steps.plan.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.plan.outputs.tag }}
+          SHA: ${{ steps.plan.outputs.sha }}
+        run: |
+          gh release create "$TAG" --target "$SHA" --title "$TAG" \
+            --notes-file "$RUNNER_TEMP/notes.md" --latest
+          echo "created=true" >> "$GITHUB_OUTPUT"
 
   publish:
     needs: release
