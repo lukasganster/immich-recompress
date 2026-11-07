@@ -14,6 +14,7 @@ import { Subscription } from 'rxjs';
 import { MAX_PER_PAGE, StoreService } from '../../services/store.service';
 import { ApiService } from '../../services/api.service';
 import { VideoSummary, JobStatus, SortField, SortOrder } from '../../models/api.models';
+import { formatDate } from '../../utils/format-date';
 
 /** The backend sorts the whole result set and returns one page of it. The
  *  grid would otherwise re-sort that page by its own rules (the Length
@@ -516,16 +517,7 @@ export class MediaGridComponent implements OnInit, OnDestroy {
   }
 
   formatCaptureDate(value: unknown): string {
-    if (!value) return '—';
-    const parsed = new Date(String(value));
-    if (Number.isNaN(parsed.getTime())) return String(value).slice(0, 10);
-    try {
-      return new Intl.DateTimeFormat(undefined, {
-        timeZone: this.store.captureTimezone(), year: 'numeric', month: '2-digit', day: '2-digit',
-      }).format(parsed);
-    } catch {
-      return String(value).slice(0, 10);
-    }
+    return formatDate(value, this.store.captureTimezone());
   }
 
   statusLabel(status: JobStatus): string {

@@ -27,7 +27,7 @@
   @if (store.captureDateFrom() || store.captureDateTo()) {
     <span class="pill plain min-w-0 overflow-hidden text-ellipsis" role="status">
       <app-icon [path]="mdiCalendarRange" [size]="14" />
-      Capture: {{ store.captureDateFrom() || 'any time' }} to {{ store.captureDateTo() || 'any time' }}
+      Capture: {{ store.captureDateFrom() ? formatDate(store.captureDateFrom()) : 'any time' }} to {{ store.captureDateTo() ? formatDate(store.captureDateTo()) : 'any time' }}
       ({{ store.captureTimezone() }})
     </span>
   }

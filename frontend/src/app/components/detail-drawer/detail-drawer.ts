@@ -17,6 +17,7 @@ import { IconComponent } from '../icon/icon';
 import { ApiService } from '../../services/api.service';
 import { StoreService } from '../../services/store.service';
 import { VideoDetail } from '../../models/api.models';
+import { formatDate } from '../../utils/format-date';
 
 @Component({
   selector: 'app-detail-drawer',
@@ -94,8 +95,6 @@ export class DetailDrawerComponent {
   }
 
   fmtDate(iso: string | null | undefined): string {
-    if (!iso) return '—';
-    const d = new Date(iso);
-    return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-US');
+    return formatDate(iso, this.store.captureTimezone());
   }
 }
