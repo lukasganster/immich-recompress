@@ -1,223 +1,100 @@
 /* The bench: what needs a decision, what is running, what is waiting,
-   what is finished. In that order. See DESIGN.md. */
+   what is finished. In that order. Each group is an Immich card, in the
+   manner of the job tiles on Immich's /admin/jobs. See DESIGN.md. */
 
-:host { display: block; }
-
-.bench-section { border-bottom: 1px solid var(--rule-hard); }
-
-.bench-section .panel-head { position: sticky; top: 0; z-index: 2; }
-
-.count { font-size: 11px; color: var(--ink-faint); font-weight: 400; letter-spacing: 0; text-transform: none; }
-
-.bench-empty {
-  margin: 0;
-  padding: 12px var(--pad) 14px;
-  color: var(--ink-faint);
-  max-width: 52ch;
-}
-
-/* ── the clamped asset under review ─────────────────────────────────── */
-
-.clamp { border-bottom: 1px solid var(--rule); }
-.clamp:last-child { border-bottom: 0; }
-
-.clamp-head {
+:host {
   display: flex;
-  align-items: baseline;
-  gap: 9px;
-  padding: 10px var(--pad) 9px;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 12px 0;
 }
 
-.clamp-head .f {
-  font-weight: 600;
-  font-size: 14px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* Not .panel: that clips overflow, which would stop the head and the
+   replace-all bar from sticking to the bench while it scrolls. */
+.card {
   min-width: 0;
+  border: 1px solid var(--immich-line);
+  border-radius: 1.5rem;
+  background: var(--immich-subtle);
 }
 
-.clamp-head .spacer { flex: 1; }
-
-.compare {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1px;
-  background: var(--rule-hard);
-  border-block: 1px solid var(--rule-hard);
+.card-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  border-radius: 1.5rem 1.5rem 0 0;
+  background: var(--immich-subtle);
+  padding-bottom: 12px;
 }
-
-.compare.single { grid-template-columns: 1fr; }
-
-.pane {
-  background: var(--sheet);
-  padding: 10px var(--pad) 12px;
-  min-width: 0;
-}
-
-.pane .lbl { display: block; margin-bottom: 7px; }
 
 /* The frame keeps its box even when the preview cannot be fetched, so the
    two panes stay aligned and no broken-image glyph ever ships. */
-.frame {
-  display: block;
-  width: 100%;
-  height: 112px;
-  background: var(--sheet-3);
-  margin-bottom: 9px;
+.frame,
+.thumb {
+  display: flex;
+  flex: none;
   overflow: hidden;
+  border-radius: 0.75rem;
+  background: var(--immich-hover);
 }
 
-.frame img, .frame video {
-  display: block;
+.frame {
+  width: 100%;
+  height: 112px;
+  margin-bottom: 8px;
+}
+
+.frame img,
+.frame video,
+.thumb img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.frame img.hidden, .frame video.hidden { display: none; }
-
-.pane .big {
-  font-size: 19px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-
-.pane.after .big { color: var(--reclaimed); }
-
-.pane-note { margin: 0; font-size: 12px; color: var(--ink-dim); }
-
 .spec {
   display: flex;
   justify-content: space-between;
   gap: 10px;
-  font-size: 12px;
-  padding: 3px 0 0;
-  color: var(--ink-dim);
   min-width: 0;
+  padding-top: 2px;
+  font-size: 12px;
+  color: var(--immich-muted);
 }
 
 .spec b {
-  font-weight: 500;
-  color: var(--ink);
-  text-align: right;
   overflow: hidden;
+  font-weight: 500;
+  color: var(--immich-fg);
+  text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.verdict {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 11px var(--pad) 0;
-}
-
-.verdict .num { font-size: 17px; color: var(--reclaimed); }
-.verdict-pct { font-size: 11px; color: var(--ink-dim); }
-.verdict .spacer { flex: 1; }
-
-/* States what replacing actually does, immediately above the button
-   that does it. Product principle 2: destructive actions stay deliberate. */
-.consequence {
-  margin: 9px 0 0;
-  padding: 0 var(--pad);
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--ink-dim);
-  max-width: 62ch;
-}
-
-.clamp-acts {
-  display: flex;
-  gap: 8px;
-  padding: 11px var(--pad) 13px;
-}
-
-/* Stays in reach while the reviews scroll underneath it. */
 .replace-all {
   position: sticky;
   bottom: 0;
   z-index: 2;
   display: flex;
-  align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
-  padding: 9px var(--pad);
-  border-top: 1px solid var(--rule-hard);
-  background: var(--sheet-2);
-}
-
-.replace-all .spacer { flex: 1; }
-.replace-all .num { font-size: 14px; color: var(--reclaimed); }
-.replace-all-q { font-size: 12px; font-weight: 600; }
-
-/* ── running ────────────────────────────────────────────────────────── */
-
-.job { padding: 11px var(--pad) 12px; }
-
-.job-top {
-  display: flex;
-  align-items: baseline;
-  gap: 9px;
-  margin-bottom: 8px;
-}
-
-.job-top .f {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 500;
-}
-
-.running-pct { color: var(--reclaimable); }
-
-.job-log {
-  margin-top: 7px;
-  font-size: 11px;
-  color: var(--ink-faint);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* ── waiting / finished ─────────────────────────────────────────────── */
-
-.line {
-  display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 7px var(--pad);
-  border-bottom: 1px solid var(--rule);
-  min-width: 0;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--immich-line);
+  border-radius: 0 0 1.5rem 1.5rem;
+  background: var(--immich-subtle);
 }
 
-.line:last-of-type { border-bottom: 0; }
-
-.line .f {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* job rows */
+.rows {
+  margin: 0;
+  padding: 0 8px 8px;
+  list-style: none;
 }
 
-.was { font-size: 11px; color: var(--ink-faint); white-space: nowrap; }
-.delta { font-size: 11px; font-weight: 600; color: var(--reclaimed); white-space: nowrap; }
-
-.saved-total {
+.row {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
   gap: 12px;
-  padding: 9px var(--pad) 11px;
-  border-top: 1px solid var(--rule);
-}
-
-.saved-total .num { color: var(--reclaimed); font-size: 14px; }
-
-@media (max-width: 640px) {
-  .compare { grid-template-columns: 1fr; }
+  min-width: 0;
+  padding: 8px;
 }
