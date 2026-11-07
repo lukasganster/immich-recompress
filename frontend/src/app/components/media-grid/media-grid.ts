@@ -15,6 +15,16 @@ import { VideoSummary, JobStatus, SortField, SortOrder } from '../../models/api.
  *  sort that never reorders keeps the server's order. */
 const keepServerOrder = (): number => 0;
 
+/** Sort marks drawn on a 24-unit grid. The library's own set uses a stack
+ *  of bars for "unsorted", which reads as a letter at this size, so all
+ *  three are replaced: a faint up/down pair until a column is sorted, then
+ *  one arrow pointing the way the values run. */
+const SORT_ICONS = {
+  sortNone: { path: 'M12 3 18 10H6Z M12 21 6 14H18Z' },
+  sortAsc: { path: 'M12 2 21 12H15.5V22H8.5V12H3Z' },
+  sortDesc: { path: 'M12 22 3 12H8.5V2H15.5V12H21Z' },
+};
+
 @Component({
   selector: 'app-media-grid',
   standalone: true,
@@ -142,6 +152,8 @@ export class MediaGridComponent implements OnInit, OnDestroy {
       // disabled and use the component pager below to request that page.
       enablePagination: false,
       enablePaginationControls: false,
+      // Not in the Angular wrapper's types, but passed through to the element.
+      ...{ iconOverrides: SORT_ICONS },
       // Only reachable once a load has happened, so this always talks about
       // filters rather than about getting started.
       emptyMessage: 'Nothing matches the current filters. Widen the search, or lower the size threshold in Select media.',
@@ -210,12 +222,22 @@ export class MediaGridComponent implements OnInit, OnDestroy {
     const root = el?.shadowRoot;
     if (!root || root.adoptedStyleSheets.includes(MediaGridComponent.shadowSheet)) return;
     root.adoptedStyleSheets = [...root.adoptedStyleSheets, MediaGridComponent.shadowSheet];
+    root.addEventListener('pointerover', MediaGridComponent.titleSortButton);
   }
 
   /** Grid column name to the API's sort field, for the sortable columns. */
   private static readonly sortFields: Record<string, SortField> = {
     name: 'name', size: 'size', duration: 'duration', date: 'date',
   };
+
+  /** The sort buttons are glyph-only. The grid gives them an aria-label
+   *  ("Sort", "Sort ascending", ...) but no tooltip, and it rewrites the
+   *  header on every sort, so the label is mirrored into a title at the
+   *  moment the pointer reaches a button rather than once after render. */
+  private static titleSortButton(event: Event): void {
+    const button = (event.target as Element | null)?.closest?.('[data-action="sort"]');
+    if (button instanceof HTMLElement) button.title = button.getAttribute('aria-label') ?? 'Sort';
+  }
 
   private static readonly shadowSheet = (() => {
     const sheet = new CSSStyleSheet();
@@ -237,6 +259,10 @@ export class MediaGridComponent implements OnInit, OnDestroy {
       ::slotted(span) { display: block; width: 100%; min-width: 0; }
       .header-label { text-overflow: ellipsis; }
       .header-cell { border-bottom-color: var(--rule-hard); }
+      /* The library outlines the active sort button but never fills it, so
+         the active colour (the sheet, meant for a filled control) would
+         draw the arrow invisibly. Draw it in ink instead. */
+      .header-cell.is-active .header-action[data-action="sort"] { color: var(--ink); }
       /* Column heads join the app's one label system. */
       .header-label {
         font-size: 10px;

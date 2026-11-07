@@ -524,7 +524,7 @@ app-ui-grid {
 
   /* Sort controls become small square marks, not floating round chips. */
   --ui-grid-control-size: 16px;
-  --ui-grid-control-icon-size: 9px;
+  --ui-grid-control-icon-size: 10px;
   --ui-grid-control-radius: 0;
   --ui-grid-control-background: transparent;
   --ui-grid-control-background-active: var(--ink);
