@@ -23,9 +23,9 @@
   <span class="min-w-0 flex-1"></span>
 
   <div class="flex min-w-0 items-center gap-2 max-[860px]:gap-1" role="group" aria-label="Dependencies">
-    <span class="pill" [class.bad]="!store.handbrake()" title="HandBrakeCLI">HandBrakeCLI</span>
-    <span class="pill" [class.bad]="!store.ffprobe()" title="ffprobe">ffprobe</span>
-    <span class="pill" [class.bad]="!store.ffmpeg()" title="ffmpeg">ffmpeg</span>
+    <span class="pill" [class.bad]="!store.handbrake()" [class.dep-ok]="store.handbrake()" title="HandBrakeCLI">HandBrakeCLI</span>
+    <span class="pill" [class.bad]="!store.ffprobe()" [class.dep-ok]="store.ffprobe()" title="ffprobe">ffprobe</span>
+    <span class="pill" [class.bad]="!store.ffmpeg()" [class.dep-ok]="store.ffmpeg()" title="ffmpeg">ffmpeg</span>
   </div>
 
   <!-- The endpoint is the first thing to give up room; the dependency
@@ -43,7 +43,7 @@
 
   <button
     type="button"
-    class="icon-btn"
+    class="icon-btn flex-none"
     [attr.aria-label]="theme.theme() === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'"
     [title]="theme.theme() === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'"
     (click)="theme.toggle()"

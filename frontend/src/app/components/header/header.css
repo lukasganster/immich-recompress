@@ -1,3 +1,10 @@
 :host {
   display: contents;
 }
+
+/* On a narrow navbar only a missing dependency is worth the room. */
+@media (max-width: 860px) {
+  .dep-ok {
+    display: none;
+  }
+}

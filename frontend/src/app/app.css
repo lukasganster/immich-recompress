@@ -6,11 +6,13 @@
 }
 
 /* Below this the bench cannot hold a side-by-side comparison, so it
-   stops being a rail and becomes the section under the ledger. */
+   stops being a rail and becomes the section under the ledger. The table
+   keeps a fixed share of the viewport so the bench below cannot squeeze it
+   to nothing; the body scrolls instead. */
 @media (max-width: 1180px) {
   .layout {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-rows: max(420px, 62vh) auto;
     overflow-y: auto;
   }
   .bench {
