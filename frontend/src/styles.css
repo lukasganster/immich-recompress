@@ -48,7 +48,7 @@
   --immich-hover: #2c2c2c;
   --immich-line: #2d2d2d;
   --immich-line-strong: #404040;
-  --immich-field: #4b5563;
+  --immich-field: #333333;
   --immich-knob: #e5e7eb;
 
   --immich-untouched: #6b7280;
@@ -79,6 +79,7 @@
   --color-warning: var(--immich-warning);
   --color-success: var(--immich-success);
   --color-danger: var(--immich-danger);
+  --color-overlay: var(--immich-overlay);
 }
 
 /* Legacy names from the previous design. Kept only so that component CSS
@@ -365,6 +366,9 @@
     border: 1px solid var(--color-line);
   }
   .seg button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     font: inherit;
     font-size: 13px;
     font-weight: 500;
@@ -530,7 +534,7 @@
   .modal-overlay {
     position: fixed;
     inset: 0;
-    background: var(--color-overlay, var(--immich-overlay));
+    background: var(--color-overlay);
     z-index: 110;
   }
 

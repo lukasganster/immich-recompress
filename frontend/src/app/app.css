@@ -1,77 +1,8 @@
-/* Shell rows: rail, band, filters, body, status. See DESIGN.md. */
-
-.filterbar {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  height: 38px;
-  padding: 0 var(--pad);
-  border-bottom: 1px solid var(--rule);
-  background: var(--sheet-2);
-  min-width: 0;
-}
-
-.find {
-  width: 230px;
-  flex: none;
-  border: 0;
-  border-bottom: 1px solid var(--edge);
-  background: none;
-  padding: 0;
-  height: 22px;
-}
-
-.find:focus-visible { outline-offset: 3px; }
-
-.filterbar .seg { margin-left: 22px; }
-
-.filterbar select {
-  margin-left: auto;
-  background: none;
-  border-color: var(--edge);
-  font-size: 12px;
-  color: var(--ink-dim);
-  cursor: pointer;
-  transition: border-color var(--trans), color var(--trans);
-}
-
-.filterbar select:hover { border-color: var(--rule-hard); color: var(--ink); }
-
-.active-filter {
-  margin-left: 14px;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--ink-dim);
-  font-size: 11px;
-}
-
-/* ── body ───────────────────────────────────────────────────────────── */
+/* Shell rows: navbar, library card, filters, body, status. The body grid
+   lives in styles.css; layout details are Tailwind utilities in app.html. */
 
 .layout {
-  display: grid;
   grid-template-columns: minmax(0, 1fr) 470px;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.ledger {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-  border-right: 1px solid var(--rule-hard);
-}
-
-.bench {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow-y: auto;
-  background: var(--sheet-2);
 }
 
 /* Below this the bench cannot hold a side-by-side comparison, so it
@@ -82,53 +13,27 @@
     grid-template-rows: minmax(0, 1fr) auto;
     overflow-y: auto;
   }
-  .ledger { border-right: 0; border-bottom: 1px solid var(--rule-hard); }
-  .bench { overflow-y: visible; }
+  .bench {
+    overflow-y: visible;
+  }
 }
-
-/* ── status ─────────────────────────────────────────────────────────── */
-
-.statusbar {
-  padding: 7px var(--pad);
-  border-top: 1px solid var(--rule-hard);
-  background: var(--sheet-2);
-  font-size: 11px;
-  color: var(--ink-dim);
-}
-
-/* ── loading ────────────────────────────────────────────────────────── */
 
 .loading-overlay {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--overlay);
-  z-index: 120;
   opacity: 0;
   animation: loading-appear 140ms ease forwards;
   animation-delay: 180ms;
 }
 
-@keyframes loading-appear { to { opacity: 1; } }
-
-.loading-box {
-  width: min(360px, 90vw);
-  padding: 16px 18px 18px;
-  background: var(--sheet);
-  border: 1px solid var(--rule-hard);
-  box-shadow: var(--lift);
+@keyframes loading-appear {
+  to {
+    opacity: 1;
+  }
 }
-
-.loading-text { display: flex; flex-direction: column; gap: 3px; margin-bottom: 14px; }
-.loading-title { font-size: 14px; font-weight: 600; }
-.loading-sub { font-size: 12px; color: var(--ink-dim); }
-.loading-hint { margin-top: 5px; font-size: 12px; color: var(--reclaimable); }
-
-/* The indeterminate meter itself is declared once in styles.css. */
 
 @media (prefers-reduced-motion: reduce) {
   /* No fade at all, rather than the same fade with no delay. */
-  .loading-overlay { animation: none; opacity: 1; }
+  .loading-overlay {
+    animation: none;
+    opacity: 1;
+  }
 }

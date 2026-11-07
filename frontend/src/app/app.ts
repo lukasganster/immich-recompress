@@ -2,6 +2,9 @@ import {
   ChangeDetectionStrategy, Component, inject, OnInit, viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import {
+  mdiCalendarRange, mdiCloudDownloadOutline, mdiFilterVariant, mdiMagnify,
+} from '@mdi/js';
 
 import { StoreService } from './services/store.service';
 import { ApiService } from './services/api.service';
@@ -16,6 +19,7 @@ import { QueuePanelComponent } from './components/queue-panel/queue-panel';
 import { DetailDrawerComponent } from './components/detail-drawer/detail-drawer';
 import { ReviewModalComponent } from './components/review-modal/review-modal';
 import { BrowseDialogComponent } from './components/browse-dialog/browse-dialog';
+import { IconComponent } from './components/icon/icon';
 
 @Component({
   selector: 'app-root',
@@ -25,6 +29,7 @@ import { BrowseDialogComponent } from './components/browse-dialog/browse-dialog'
     HeaderComponent, DashboardComponent, SettingsPanelComponent,
     MediaGridComponent, BulkBarComponent, QueuePanelComponent,
     DetailDrawerComponent, ReviewModalComponent, BrowseDialogComponent,
+    IconComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './app.html',
@@ -41,6 +46,11 @@ export class App implements OnInit {
   readonly browse = viewChild.required(BrowseDialogComponent);
   readonly settings = viewChild.required(SettingsPanelComponent);
   readonly settingsPanel = viewChild.required(SettingsPanelComponent);
+
+  readonly mdiCalendarRange = mdiCalendarRange;
+  readonly mdiCloudDownloadOutline = mdiCloudDownloadOutline;
+  readonly mdiFilterVariant = mdiFilterVariant;
+  readonly mdiMagnify = mdiMagnify;
 
   readonly codecs = ['', 'h264', 'hevc', 'av1', '__other__'];
   readonly codecLabels: Record<string, string> = {
@@ -65,7 +75,7 @@ export class App implements OnInit {
   }
 
   get statusText(): string {
-    if (!this.store.loaded()) return 'Ready — choose Select media above to load media.';
+    if (!this.store.loaded()) return 'Ready. Choose Select media above to load media.';
     const s = this.store.queueStats();
     const m = this.store.media();
     const noun = m === 'image' ? 'Photos' : m === 'motionphoto' ? 'Live Photos' : 'Videos';

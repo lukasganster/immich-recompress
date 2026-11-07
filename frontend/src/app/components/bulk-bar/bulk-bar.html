@@ -1,10 +1,17 @@
 @if (show) {
-  <div class="bulkbar">
-    <strong>{{ n }} {{ noun }} selected</strong>
-    <button class="link" (click)="clearSelection.emit()">Clear</button>
-    <span class="spacer"></span>
-    <button class="btn ghost" (click)="downloadSelected.emit()">Download {{ n }}</button>
+  <div class="flex flex-wrap items-center gap-2 border-t border-line bg-app px-3 py-2.5">
+    <button type="button" class="icon-btn" aria-label="Clear selection" title="Clear selection"
+      (click)="clearSelection.emit()">
+      <app-icon [path]="mdiClose" [size]="22" />
+    </button>
+    <strong class="text-base font-medium text-primary">{{ n }} {{ noun }} selected</strong>
+    <span class="flex-1"></span>
+    <button class="btn" (click)="downloadSelected.emit()">
+      <app-icon [path]="mdiDownload" [size]="18" />
+      Download {{ n }}
+    </button>
     <button class="btn primary" (click)="encodeSelected.emit([...store.selected()])">
+      <app-icon [path]="mdiArchiveArrowDownOutline" [size]="18" />
       {{ actionLabel }} {{ n }}
     </button>
   </div>

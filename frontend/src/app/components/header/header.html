@@ -1,30 +1,53 @@
-<header class="rail">
-  <img class="logo" src="logo.svg" alt="" />
-  <h1 class="wordmark">Immich Recompress</h1>
+<header
+  class="flex h-(--navbar-height) min-w-0 items-center gap-4 overflow-hidden border-b border-line bg-app px-4 text-fg max-[860px]:gap-2 md:px-6"
+>
+  <div class="flex flex-none items-center gap-2">
+    <img class="block size-9 flex-none object-contain" src="logo.svg" alt="" />
+    <h1 class="m-0 whitespace-nowrap text-xl font-medium tracking-tight text-primary max-[560px]:sr-only">
+      Immich Recompress
+    </h1>
+  </div>
 
-  <span class="sep"></span>
-
-  <div class="rail-actions">
-    <button class="btn" (click)="browseClick.emit()">Select media</button>
+  <div class="ml-2 flex flex-none items-center gap-2 max-[860px]:ml-0">
+    <button class="btn" (click)="browseClick.emit()">
+      <app-icon [path]="mdiImageSearchOutline" [size]="18" />
+      <span>Select media</span>
+    </button>
     <button class="btn ghost" aria-label="Edit compression settings" (click)="settingsClick.emit()">
-      <span class="label-full">Edit compression settings</span>
-      <span class="label-short">Settings</span>
+      <app-icon [path]="mdiTune" [size]="18" />
+      <span class="max-[860px]:hidden">Edit compression settings</span>
+      <span class="hidden max-[860px]:inline">Settings</span>
     </button>
   </div>
 
-  <span class="header-spacer"></span>
+  <span class="min-w-0 flex-1"></span>
 
-  <span class="deps">
+  <div class="flex min-w-0 items-center gap-2 max-[860px]:gap-1" role="group" aria-label="Dependencies">
     <span class="pill" [class.bad]="!store.handbrake()" title="HandBrakeCLI">HandBrakeCLI</span>
     <span class="pill" [class.bad]="!store.ffprobe()" title="ffprobe">ffprobe</span>
     <span class="pill" [class.bad]="!store.ffmpeg()" title="ffmpeg">ffmpeg</span>
-  </span>
+  </div>
 
-  <span class="sep"></span>
-
-  <span class="pill plain" [class.bad]="!store.immichUrl()">
+  <!-- The endpoint is the first thing to give up room; the dependency
+       states are what actually stop the app working. -->
+  <span
+    class="pill plain min-w-0 max-w-80 overflow-hidden text-ellipsis max-[1180px]:hidden"
+    [class.bad]="!store.immichUrl()"
+    [title]="store.immichUrl() || 'not connected'"
+  >
+    <app-icon [path]="mdiServerOutline" [size]="14" />
     <span class="label-url">Immich</span>
-    {{ store.immichUrl() || 'not connected' }}
+    <span class="min-w-0 overflow-hidden text-ellipsis">{{ store.immichUrl() || 'not connected' }}</span>
     @if (store.immichVersion()) { <span class="label-url">v{{ store.immichVersion() }}</span> }
   </span>
+
+  <button
+    type="button"
+    class="icon-btn"
+    [attr.aria-label]="theme.theme() === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'"
+    [title]="theme.theme() === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'"
+    (click)="theme.toggle()"
+  >
+    <app-icon [path]="theme.theme() === 'dark' ? mdiWeatherSunny : mdiWeatherNight" [size]="22" />
+  </button>
 </header>

@@ -2,11 +2,17 @@
 
 <app-dashboard></app-dashboard>
 
-<div class="filterbar">
-  <input type="text" class="find" placeholder="Find by filename"
-    aria-label="Find by filename"
-    [value]="store.search()"
-    (input)="onSearch($any($event.target).value)" />
+<div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 md:px-6">
+  <label class="relative flex w-72 min-w-0 flex-none items-center max-[860px]:w-full max-[860px]:flex-1">
+    <span class="pointer-events-none absolute left-3 flex text-muted">
+      <app-icon [path]="mdiMagnify" [size]="20" />
+    </span>
+    <input type="text" class="h-10 w-full rounded-full border-transparent bg-field pl-10 pr-4 focus:border-primary"
+      placeholder="Find by filename"
+      aria-label="Find by filename"
+      [value]="store.search()"
+      (input)="onSearch($any($event.target).value)" />
+  </label>
 
   @if (store.media() === 'video') {
     <div class="seg" role="group" aria-label="Filter by codec">
@@ -19,16 +25,21 @@
   }
 
   @if (store.captureDateFrom() || store.captureDateTo()) {
-    <span class="active-filter" role="status">
+    <span class="pill plain min-w-0 overflow-hidden text-ellipsis" role="status">
+      <app-icon [path]="mdiCalendarRange" [size]="14" />
       Capture: {{ store.captureDateFrom() || 'any time' }} to {{ store.captureDateTo() || 'any time' }}
       ({{ store.captureTimezone() }})
     </span>
   }
   @if (store.metadataDescription()) {
-    <button type="button" class="link active-filter" (click)="browse().show()"
-      aria-label="Edit album and metadata filters">{{ store.metadataDescription() }}</button>
+    <button type="button" class="btn ghost sm min-w-0 max-w-full overflow-hidden text-ellipsis" (click)="browse().show()"
+      aria-label="Edit album and metadata filters">
+      <app-icon [path]="mdiFilterVariant" [size]="16" />
+      <span class="min-w-0 overflow-hidden text-ellipsis">{{ store.metadataDescription() }}</span>
+    </button>
   }
-  <select aria-label="Filter by user" (change)="setUser($any($event.target).value)">
+  <select class="ml-auto h-10 cursor-pointer rounded-full border-transparent bg-field pl-4 text-sm focus:border-primary"
+    aria-label="Filter by user" (change)="setUser($any($event.target).value)">
     <option value="">All users</option>
     @for (u of store.users(); track u.id) {
       <option [value]="u.id">{{ u.name || u.email }}</option>
@@ -36,8 +47,8 @@
   </select>
 </div>
 
-<main class="layout">
-  <section class="ledger">
+<main class="layout grid min-h-0 min-w-0 gap-4 overflow-hidden px-4 pb-4 md:px-6">
+  <section class="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-3xl border border-line bg-app">
     <app-media-grid (detailRequested)="drawer().show($event)"></app-media-grid>
 
     <app-bulk-bar
@@ -47,7 +58,7 @@
     </app-bulk-bar>
   </section>
 
-  <aside class="bench">
+  <aside class="bench flex min-h-0 flex-col gap-4 overflow-y-auto">
     <app-queue-panel
       (reviewRequested)="review().show($event)"
       (jobsRefresh)="onJobsRefresh()">
@@ -57,21 +68,27 @@
   </aside>
 </main>
 
-<div class="statusbar" role="status" aria-live="polite">{{ statusText }}</div>
+<div class="border-t border-line bg-app px-4 py-2 text-xs text-muted md:px-6" role="status" aria-live="polite">
+  {{ statusText }}
+</div>
 
 <app-detail-drawer (encodeRequested)="onEncode($event)"></app-detail-drawer>
 <app-review-modal></app-review-modal>
 <app-browse-dialog (apply)="onBrowseApply()"></app-browse-dialog>
 
 @if (store.loading()) {
-  <div class="loading-overlay" role="status" aria-live="polite" aria-label="Fetching assets from Immich">
-    <div class="loading-box">
-      <div class="loading-text">
-        <span class="loading-title">Fetching assets from Immich</span>
-        <span class="loading-sub">{{ loadingSubtitle }}</span>
-        @if (store.loadingHint()) {
-          <span class="loading-hint">{{ store.loadingHint() }}</span>
-        }
+  <div class="loading-overlay fixed inset-0 z-[120] flex items-center justify-center bg-(--immich-overlay)"
+    role="status" aria-live="polite" aria-label="Fetching assets from Immich">
+    <div class="w-[min(400px,90vw)] rounded-3xl border border-line bg-app px-6 pb-6 pt-5 shadow-xl dark:bg-subtle">
+      <div class="mb-4 flex items-start gap-3">
+        <span class="flex text-primary"><app-icon [path]="mdiCloudDownloadOutline" [size]="24" /></span>
+        <div class="flex min-w-0 flex-col gap-1">
+          <span class="text-lg font-medium text-primary">Fetching assets from Immich</span>
+          <span class="text-sm text-muted">{{ loadingSubtitle }}</span>
+          @if (store.loadingHint()) {
+            <span class="mt-1 text-sm text-warning">{{ store.loadingHint() }}</span>
+          }
+        </div>
       </div>
       <div class="meter indeterminate"><i></i></div>
     </div>

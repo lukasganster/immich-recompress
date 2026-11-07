@@ -1,18 +1,3 @@
-/* Selection actions, pinned under the ledger. A ruled bar, not a floating
-   card: it belongs to the table above it. See DESIGN.md. */
-
-:host { display: block; }
-
-.bulkbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 9px var(--pad);
-  border-top: 1px solid var(--rule-hard);
-  background: var(--sheet-3);
+:host {
+  display: block;
 }
-
-.bulkbar strong { font-weight: 600; }
-
-.spacer { flex: 1; }
