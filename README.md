@@ -14,18 +14,7 @@ live progress.
   <img src="screenshots/immich-recompress-demo.gif" alt="Immich Recompress workflow: select media, watch a video in the detail panel, encode it, and review the result" width="100%" />
 </p>
 
-<table>
-  <tr>
-    <td><img src="screenshots/immich-recompress-screenshot-1.png" alt="Select media dialog with date, album, people and location filters" /></td>
-    <td><img src="screenshots/immich-recompress-screenshot-2.png" alt="Library list with an encoded video on the bench, original and recompressed side by side" /></td>
-  </tr>
-  <tr>
-    <td><img src="screenshots/immich-recompress-screenshot-3.png" alt="Full preview of a recompressed video before replacing the original" /></td>
-    <td><img src="screenshots/immich-recompress-screenshot-4.png" alt="Detail panel playing a video from the library" /></td>
-  </tr>
-</table>
-
-Demo images use made-up sample data.
+The demo uses made-up sample data.
 
 ## Features
 
