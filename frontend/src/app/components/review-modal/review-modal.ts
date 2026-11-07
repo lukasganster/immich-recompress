@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, HostListener, inject, output, signal } from '@angular/core';
 import { CdkTrapFocus } from '@angular/cdk/a11y';
-import { mdiClose } from '@mdi/js';
+import { mdiClose, mdiFileReplaceOutline } from '@mdi/js';
 import { IconComponent } from '../icon/icon';
 import { ApiService } from '../../services/api.service';
 import { StoreService } from '../../services/store.service';
@@ -16,6 +16,7 @@ import { JobPublic } from '../../models/api.models';
 })
 export class ReviewModalComponent {
   readonly mdiClose = mdiClose;
+  readonly mdiFileReplaceOutline = mdiFileReplaceOutline;
 
   private readonly api = inject(ApiService);
   readonly store = inject(StoreService);
