@@ -17,7 +17,7 @@
   @if (store.media() === 'video') {
     <div class="seg" role="group" aria-label="Filter by codec">
       @for (c of codecs; track c) {
-        <button [class.active]="store.codec() === c" (click)="setCodec(c)">
+        <button type="button" [class.active]="store.codec() === c" [attr.aria-pressed]="store.codec() === c" (click)="setCodec(c)">
           {{ codecLabels[c] }}
         </button>
       }
