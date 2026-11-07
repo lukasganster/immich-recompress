@@ -1,5 +1,5 @@
 /* Asset detail on the right, after Immich's asset viewer detail panel.
-   Layout is Tailwind in the template. See DESIGN.md. */
+   Layout is Tailwind in the template. */
 @reference "../../../styles.css";
 
 :host {

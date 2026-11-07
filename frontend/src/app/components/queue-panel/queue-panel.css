@@ -1,6 +1,6 @@
 /* The bench: what needs a decision, what is running, what is waiting,
    what is finished. In that order. Each group is an Immich card, in the
-   manner of the job tiles on Immich's /admin/jobs. See DESIGN.md. */
+   manner of the job tiles on Immich's /admin/jobs. */
 
 :host {
   display: flex;

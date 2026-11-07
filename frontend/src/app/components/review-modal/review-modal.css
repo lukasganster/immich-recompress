@@ -1,5 +1,5 @@
 /* Original next to the recompressed result, so the result can be judged
-   before it replaces anything. See DESIGN.md. */
+   before it replaces anything. */
 @reference "../../../styles.css";
 
 :host {

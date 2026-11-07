@@ -1,6 +1,6 @@
 /* The settings summary sits at the foot of the bench, stating what the
    next encode will do. Editing happens in a dialog, opened from the
-   rail, laid out like Immich's admin settings. See DESIGN.md. */
+   rail, laid out like Immich's admin settings. */
 
 :host {
   display: block;

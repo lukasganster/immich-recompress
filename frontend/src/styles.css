@@ -1,7 +1,7 @@
 /* Immich Recompress, styled after the Immich web app.
    Tailwind CSS v4 carries the layout; the tokens below are the Immich
    palette, and the component classes reproduce Immich's controls so that
-   every component draws from the same set. See DESIGN.md. */
+   every component draws from the same set. */
 
 @import 'tailwindcss';
 @import '@fontsource-variable/overpass';
