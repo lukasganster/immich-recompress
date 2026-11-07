@@ -1,8 +1,13 @@
 /* @ornery/ui-grid keeps its styles in a shadow root, but every value below
    is a custom property it reads from here, and custom properties inherit
-   through the shadow boundary. This is the whole grid theme. */
+   through the shadow boundary. Rules that need real selectors (row and
+   header heights, label type, row hover and selection) are adopted into
+   the shadow root by media-grid.ts. Row and header heights are set there
+   too, so the paddings below only position content inside a fixed box. */
 
 app-ui-grid {
+  font-size: 13px;
+
   --ui-grid-surface: var(--immich-app);
   --ui-grid-header-background: var(--immich-app);
   --ui-grid-group-background: var(--immich-subtle);
@@ -17,8 +22,13 @@ app-ui-grid {
   --ui-grid-row-selected-bg: color-mix(in srgb, var(--immich-primary) 12%, var(--immich-app));
   --ui-grid-row-selected-bg-odd: color-mix(in srgb, var(--immich-primary) 12%, var(--immich-app));
   --ui-grid-row-selected-color: var(--immich-fg);
-  --ui-grid-row-focus-background: var(--immich-hover);
-  --ui-grid-cell-focus-background: var(--immich-hover);
+  /* focus is shown as a ring (see media-grid.ts), not a lasting fill */
+  --ui-grid-row-focus-background: var(--immich-app);
+  --ui-grid-cell-focus-background: var(--immich-app);
+  --ui-grid-cell-focus-ring: none;
+
+  /* hovering a selected row deepens its tint rather than greying it */
+  --app-grid-row-selected-hover: color-mix(in srgb, var(--immich-primary) 18%, var(--immich-app));
 
   --ui-grid-cell-color: var(--immich-fg);
   --ui-grid-muted-color: var(--immich-muted);
@@ -30,24 +40,26 @@ app-ui-grid {
   --ui-grid-row-dirty-color: var(--immich-warning);
 
   --ui-grid-header-weight: 500;
-  --ui-grid-header-cell-padding-block: 10px;
+  --ui-grid-header-cell-padding-block: 0;
   --ui-grid-header-cell-padding-inline: 12px;
-  --ui-grid-header-cell-gap: 6px;
-  --ui-grid-header-actions-gap: 4px;
-  --ui-grid-header-cell-background-active: var(--immich-subtle);
+  --ui-grid-header-cell-gap: 4px;
+  --ui-grid-header-actions-gap: 2px;
+  --ui-grid-header-cell-background-active: var(--immich-app);
 
-  --ui-grid-body-cell-padding-block: 9px;
+  --ui-grid-body-cell-padding-block: 0;
   --ui-grid-body-cell-padding-inline: 12px;
+  --ui-grid-cell-shell-gap: 8px;
 
-  --ui-grid-control-size: 22px;
-  --ui-grid-control-icon-size: 12px;
+  /* sort buttons: round, transparent, the arrow in primary once sorted */
+  --ui-grid-control-size: 26px;
+  --ui-grid-control-icon-size: 16px;
   --ui-grid-control-radius: 9999px;
   --ui-grid-control-background: transparent;
-  --ui-grid-control-background-active: var(--immich-primary);
+  --ui-grid-control-background-active: transparent;
   --ui-grid-control-border-color: transparent;
-  --ui-grid-control-border-color-active: var(--immich-primary);
+  --ui-grid-control-border-color-active: transparent;
   --ui-grid-control-color: var(--immich-muted);
-  --ui-grid-control-color-active: var(--immich-primary-fg);
+  --ui-grid-control-color-active: var(--immich-primary);
 
   --ui-grid-empty-state-min-height: 220px;
   --ui-grid-empty-state-padding: 40px 16px;

@@ -1,5 +1,8 @@
-/* The ledger. Dense, ruled, and carrying the drawn quantity in the size
-   column. See DESIGN.md. */
+/* The media list, after Immich's list views: clean rows on the app ground,
+   hairline separators, and the drawn quantity in the size column. Most of
+   the look is Tailwind in the template; the grid itself is themed in
+   src/styles/ui-grid.css and in the sheet media-grid.ts adopts into the
+   grid's shadow root. See DESIGN.md. */
 
 :host {
   display: flex;
@@ -10,169 +13,15 @@
   overflow: hidden;
 }
 
-.grid-shell {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
+/* The global select is a full-size field; the pager wants a compact pill. */
+.pager-size {
+  font-size: 13px;
+  border-radius: 9999px;
+  padding: 4px 30px 4px 12px;
+  background-position: right 6px center;
+  background-size: 18px;
 }
 
-/* The grid library has no way to host an Angular template in a header
-   cell (only body cells), so this sits on top of the select column's
-   otherwise-blank header cell as a real, independently-clickable element. */
-.select-all-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
+.cell-center input[type='checkbox']:disabled {
+  cursor: not-allowed;
 }
-
-/* ── pager ──────────────────────────────────────────────────────────── */
-
-.grid-pager {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  height: 34px;
-  padding: 0 var(--pad);
-  border-top: 1px solid var(--rule-hard);
-  background: var(--sheet-2);
-  color: var(--ink-dim);
-  font-size: 11px;
-  flex: none;
-}
-
-.pager-controls {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.pager-controls button {
-  width: 20px;
-  height: 19px;
-  line-height: 1;
-  font: inherit;
-  font-size: 12px;
-  color: var(--ink);
-  background: none;
-  border: 1px solid var(--rule-hard);
-  cursor: pointer;
-  transition: background var(--trans), border-color var(--trans);
-}
-
-.pager-controls button:hover:not(:disabled) { background: var(--sheet-3); border-color: var(--ink-faint); }
-.pager-controls button:disabled { color: var(--ink-faint); border-color: var(--rule); cursor: not-allowed; }
-
-.pager-controls select {
-  height: 19px;
-  padding: 0 4px;
-  font-size: 11px;
-  color: var(--ink-dim);
-  border-color: var(--rule);
-  background: none;
-}
-
-/* ── empty ──────────────────────────────────────────────────────────── */
-
-.empty-grid {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 40px var(--pad);
-  text-align: center;
-  color: var(--ink-dim);
-}
-
-.empty-text { max-width: 54ch; }
-.empty-text strong { color: var(--ink); font-weight: 600; }
-.empty-text.is-error { color: var(--destruct); }
-.empty-meter { width: 180px; }
-
-/* ── cells ──────────────────────────────────────────────────────────── */
-
-.name-cell {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-}
-
-.row-thumb {
-  height: 20px;
-  width: 26px;
-  flex: none;
-  object-fit: cover;
-  background: var(--sheet-3);
-}
-
-.row-thumb.hidden { display: none; }
-
-.name-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
-
-.lp-badge {
-  flex: none;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 0 3px;
-  color: var(--ink-faint);
-  border: 1px solid var(--edge);
-  white-space: nowrap;
-}
-
-.cell-center {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.cell-center input[type='checkbox']:disabled { cursor: not-allowed; }
-
-.row-actions {
-  display: flex;
-  gap: 4px;
-}
-
-.row-actions button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 20px;
-  font: inherit;
-  font-size: 12px;
-  color: var(--ink-faint);
-  background: none;
-  border: 1px solid transparent;
-  cursor: pointer;
-  transition: color var(--trans), border-color var(--trans);
-}
-
-.row-actions button:hover { color: var(--ink); border-color: var(--rule-hard); }
-
-/* The result of a finished job sits beside its state word: a second line
-   would not fit the row. The new size is in the title. */
-.state-cell {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  min-width: 0;
-  white-space: nowrap;
-}
-
-.neg { font-size: 11px; color: var(--reclaimed); font-weight: 600; }

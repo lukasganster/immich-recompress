@@ -1,9 +1,15 @@
 @if (gridOptions()) {
-  <div class="grid-shell">
+  <div class="grid-shell relative min-h-0 flex-1 overflow-auto bg-app"
+    [style.--app-grid-header-height]="headerRowHeight + 'px'"
+    [style.--app-grid-row-height]="rowHeight + 'px'">
     @for (gen of [loadGen()]; track gen) {
       <app-ui-grid [options]="gridOptions()!" />
     }
-    <label class="select-all-overlay"
+    <!-- The grid library has no way to host an Angular template in a header
+         cell (only body cells), so this sits on top of the select column's
+         otherwise-blank header cell as a real, independently-clickable
+         element. -->
+    <label class="absolute left-0 top-0 z-[1] flex cursor-pointer items-center justify-center"
       [style.width]="selectColWidth" [style.height.px]="headerRowHeight"
       title="Select all">
       <input type="checkbox" aria-label="Select all"
@@ -11,17 +17,21 @@
         (change)="toggleAll()" />
     </label>
   </div>
-  <div class="grid-pager">
+  <div class="flex h-13 flex-none items-center justify-between gap-4 border-t border-line bg-app px-4 text-sm text-muted">
     <span>{{ firstItem() }}-{{ lastItem() }} of {{ store.total() }}</span>
-    <div class="pager-controls">
-      <button type="button" aria-label="Previous page"
+    <div class="flex items-center gap-1">
+      <button type="button" class="icon-btn sm" aria-label="Previous page" title="Previous page"
         [disabled]="store.page() <= 1"
-        (click)="goToPage(store.page() - 1)">‹</button>
-      <span>Page {{ store.page() }} of {{ totalPages() }}</span>
-      <button type="button" aria-label="Next page"
+        (click)="goToPage(store.page() - 1)">
+        <app-icon [path]="mdiChevronLeft" [size]="20" />
+      </button>
+      <span class="px-1">Page {{ store.page() }} of {{ totalPages() }}</span>
+      <button type="button" class="icon-btn sm" aria-label="Next page" title="Next page"
         [disabled]="store.page() >= totalPages()"
-        (click)="goToPage(store.page() + 1)">›</button>
-      <select aria-label="Rows per page" [value]="store.perPage()"
+        (click)="goToPage(store.page() + 1)">
+        <app-icon [path]="mdiChevronRight" [size]="20" />
+      </button>
+      <select class="pager-size ml-2" aria-label="Rows per page" [value]="store.perPage()"
         (change)="changePageSize($any($event.target).value)">
         @for (size of store.perPageOptions(); track size) {
           <option [value]="size">{{ pageSizeLabel(size) }}</option>
@@ -30,24 +40,33 @@
     </div>
   </div>
 } @else {
-  <div class="empty-grid">
+  <div class="flex flex-1 flex-col items-center justify-center gap-4 px-4 py-10 text-center text-muted">
     @if (store.loadError()) {
-      <span class="empty-text is-error" role="alert">{{ store.loadError() }}</span>
-      <button class="btn" (click)="load(true)">Try again</button>
+      <app-icon class="text-danger" [path]="mdiAlertCircleOutline" [size]="48" />
+      <span class="max-w-[54ch] text-danger" role="alert">{{ store.loadError() }}</span>
+      <button type="button" class="btn primary" (click)="load(true)">
+        <app-icon [path]="mdiRefresh" [size]="18" />
+        Try again
+      </button>
     } @else if (pageLoading()) {
-      <div class="meter indeterminate empty-meter"><i></i></div>
-      <span class="empty-text" role="status">Loading assets</span>
+      <app-icon class="text-primary" [path]="mdiImageMultipleOutline" [size]="48" />
+      <div class="meter indeterminate w-45"><i></i></div>
+      <span role="status">Loading assets</span>
     } @else if (!store.loaded()) {
-      <span class="empty-text">No assets loaded. Choose <strong>Select media</strong> in the
-        top bar to scan Immich for videos, photos or Live Photos above a size threshold.</span>
+      <app-icon [path]="mdiImageMultipleOutline" [size]="48" />
+      <span class="max-w-[54ch]">No assets loaded. Choose <strong class="font-medium text-fg">Select media</strong>
+        in the top bar to scan Immich for videos, photos or Live Photos above a size threshold.</span>
     }
   </div>
 }
 
-<!-- Cell templates -->
+<!-- Cell templates. The grid's template bridge renders these into the light
+     DOM, so Tailwind and this component's styles reach them. The class
+     names cell-center, name-cell, qty and row-actions are also used by
+     styles.css to promote the bridge's wrapper spans to blocks. -->
 <ng-template #selectTpl let-row="row">
   @let st = effectiveStatus(row);
-  <div class="cell-center">
+  <div class="cell-center flex items-center justify-center">
     <input type="checkbox"
       [checked]="isSelected(row['id'])"
       [disabled]="isLocked(row)"
@@ -57,15 +76,19 @@
 </ng-template>
 
 <ng-template #nameTpl let-row="row">
-  <div class="name-cell">
-    <img class="row-thumb"
+  <div class="name-cell flex min-w-0 items-center gap-3">
+    <img class="size-9 flex-none rounded-lg bg-subtle object-cover"
       [src]="api.thumbnailUrl(row['id'])"
       loading="lazy"
       alt=""
       (error)="$any($event.target).classList.add('hidden')" />
-    <span class="name-text">{{ row['name'] || '—' }}</span>
+    <span class="min-w-0 truncate">{{ row['name'] || '—' }}</span>
     @if (row['media'] === 'motionphoto') {
-      <span class="lp-badge" title="Live Photo (has a motion video)">Live</span>
+      <span class="inline-flex flex-none items-center gap-0.5 rounded-full bg-subtle px-1.5 py-0.5 text-xs font-medium text-muted"
+        title="Live Photo (has a motion video)">
+        <app-icon [path]="mdiMotionPlayOutline" [size]="14" />
+        Live
+      </span>
     }
   </div>
 </ng-template>
@@ -85,18 +108,27 @@
   @let st = effectiveStatus(row);
   @let res = ['done','encoded','processed'].includes(st) ? jobResult(v) : null;
   @let pct = res?.oldSize ? Math.round((1 - res!.newSize / res!.oldSize) * 100) : 0;
-  <div class="state-cell" [title]="res ? '→ ' + humanMB(res.newSize) + ' (−' + pct + '%)' : ''">
+  <!-- The result of a finished job sits beside its state: a second line
+       would not fit the row. The new size is in the title. -->
+  <div class="flex min-w-0 items-center gap-2 whitespace-nowrap"
+    [title]="res ? '→ ' + humanMB(res.newSize) + ' (−' + pct + '%)' : ''">
     <span class="badge" [ngClass]="st">{{ statusLabel(st) }}</span>
-    @if (res) { <span class="neg">−{{ pct }}%</span> }
+    @if (res) { <span class="text-xs font-semibold text-success">−{{ pct }}%</span> }
   </div>
 </ng-template>
 
 <ng-template #actionsTpl let-row="row">
   @let v = asVideo(row);
-  <div class="row-actions">
-    <button title="Details" aria-label="Details" (click)="detailRequested.emit(v.id)">ℹ</button>
+  <div class="row-actions flex items-center justify-end gap-0.5">
+    <button type="button" class="icon-btn sm text-muted hover:text-fg"
+      title="Details" aria-label="Details" (click)="detailRequested.emit(v.id)">
+      <app-icon [path]="mdiInformationOutline" [size]="18" />
+    </button>
     @if (immichUrl) {
-      <button title="Open in Immich" aria-label="Open in Immich" (click)="openInImmich(v)">↗</button>
+      <button type="button" class="icon-btn sm text-muted hover:text-fg"
+        title="Open in Immich" aria-label="Open in Immich" (click)="openInImmich(v)">
+        <app-icon [path]="mdiOpenInNew" [size]="18" />
+      </button>
     }
   </div>
 </ng-template>
