@@ -1,0 +1,10 @@
+<svg
+  viewBox="0 0 24 24"
+  [attr.width]="size()"
+  [attr.height]="size()"
+  [attr.aria-hidden]="label() ? null : 'true'"
+  [attr.aria-label]="label() || null"
+  [attr.role]="label() ? 'img' : null"
+>
+  <path [attr.d]="path()" fill="currentColor" />
+</svg>

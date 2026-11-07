@@ -18,8 +18,13 @@
     "@angular/forms": "^22.0.0",
     "@angular/platform-browser": "^22.0.0",
     "@angular/router": "^22.0.0",
+    "@fontsource-variable/overpass": "^5.3.0",
+    "@mdi/js": "^7.4.47",
     "@ornery/ui-grid": "^1.0.6",
+    "@tailwindcss/postcss": "^4.3.5",
+    "postcss": "^8.5.32",
     "rxjs": "~7.8.0",
+    "tailwindcss": "^4.3.5",
     "tslib": "^2.3.0"
   },
   "pnpm": {
