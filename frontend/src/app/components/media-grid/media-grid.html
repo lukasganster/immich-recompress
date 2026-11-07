@@ -31,10 +31,12 @@
         (click)="goToPage(store.page() + 1)">
         <app-icon [path]="mdiChevronRight" [size]="20" />
       </button>
-      <select class="pager-size ml-2" aria-label="Rows per page" [value]="store.perPage()"
+      <select class="pager-size ml-2" aria-label="Rows per page"
         (change)="changePageSize($any($event.target).value)">
+        <!-- [selected] per option, not [value] on the select: the select's
+             value is set before its options exist and falls back to the first. -->
         @for (size of store.perPageOptions(); track size) {
-          <option [value]="size">{{ pageSizeLabel(size) }}</option>
+          <option [value]="size" [selected]="size === store.perPage()">{{ pageSizeLabel(size) }}</option>
         }
       </select>
     </div>

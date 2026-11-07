@@ -134,7 +134,7 @@ export class MediaGridComponent implements OnInit, OnDestroy {
     // visible before anything is read. See DESIGN.md.
     const widths = hideClipCols
       ? { select: this.selectColWidth, name: '27%', size: '17%', resolution: '11%', date: '11%', user: '10%', status: '13%', actions: '7%' }
-      : { select: this.selectColWidth, name: '19%', size: '14%', resolution: '10%', duration: '7%', codec: '12%', date: '10%', user: '10%', status: '10%', actions: '4%' };
+      : { select: this.selectColWidth, name: '18%', size: '14%', resolution: '9%', duration: '7%', codec: '10%', date: '10%', user: '9%', status: '10%', actions: '9%' };
     const cols: GridColumnDef[] = [
       {
         name: 'select', displayName: ' ', field: 'id', width: widths.select,
@@ -350,6 +350,13 @@ export class MediaGridComponent implements OnInit, OnDestroy {
       .header-cell:hover .header-action[data-action="sort"] { opacity: 1; }
       .header-action[data-action="sort"]:hover { background: var(--immich-hover); }
       .empty-state { color: var(--ui-grid-muted-color); max-width: none; }
+      /* Overlay scrollbars hide how far the list goes: a page of 25 looks
+         like it ends after the rows in view. A thin, always-drawn bar says
+         there is more. */
+      .grid-body-viewport {
+        scrollbar-width: thin;
+        scrollbar-color: var(--immich-line-strong) transparent;
+      }
     `);
     return sheet;
   })();
