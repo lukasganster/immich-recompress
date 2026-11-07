@@ -21,6 +21,6 @@ describe('JPEG XL review', () => {
     expect(element.textContent).toContain('JPEG → JPEG XL · .jxl');
     expect(element.textContent).toContain('Lossless JPEG reconstruction');
     expect(element.textContent).not.toContain('Target savings');
-    expect(element.querySelector('img')!.getAttribute('src')).toBe('/api/preview/photo');
+    expect(element.querySelector('img[data-role="result"]')!.getAttribute('src')).toBe('/api/preview/photo');
   });
 });

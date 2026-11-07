@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, HostListener, inject, output, signal } from '@angular/core';
 import { CdkTrapFocus } from '@angular/cdk/a11y';
+import { mdiClose } from '@mdi/js';
+import { IconComponent } from '../icon/icon';
 import { ApiService } from '../../services/api.service';
 import { StoreService } from '../../services/store.service';
 import { JobPublic } from '../../models/api.models';
@@ -7,12 +9,14 @@ import { JobPublic } from '../../models/api.models';
 @Component({
   selector: 'app-review-modal',
   standalone: true,
-  imports: [CdkTrapFocus],
+  imports: [CdkTrapFocus, IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './review-modal.html',
   styleUrl: './review-modal.css',
 })
 export class ReviewModalComponent {
+  readonly mdiClose = mdiClose;
+
   private readonly api = inject(ApiService);
   readonly store = inject(StoreService);
 
@@ -89,6 +93,11 @@ export class ReviewModalComponent {
 
   previewUrl(id: string): string {
     return this.api.previewUrl(id);
+  }
+
+  /** The untouched original video, streamed from Immich for comparison. */
+  originalUrl(id: string): string {
+    return this.api.playbackUrl(id);
   }
 
   thumbUrl(id: string): string {

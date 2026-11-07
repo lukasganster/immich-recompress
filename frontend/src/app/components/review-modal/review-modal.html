@@ -1,45 +1,76 @@
 @if (open()) {
   <div class="modal-overlay" (click)="hide()"></div>
-  <div class="modal" cdkTrapFocus [cdkTrapFocusAutoCapture]="true"
+  <div class="modal w-[min(980px,94vw)]" cdkTrapFocus [cdkTrapFocusAutoCapture]="true"
     role="dialog" aria-modal="true" aria-label="Preview recompressed file">
     <div class="modal-head">
-      <strong>{{ currentJob()?.name || 'Preview' }}</strong>
-      <button class="icon-btn" (click)="hide()" aria-label="Close">✕</button>
+      <h2 class="m-0 min-w-0 truncate text-xl font-medium">{{ currentJob()?.name || 'Preview' }}</h2>
+      <button class="icon-btn" (click)="hide()" aria-label="Close">
+        <app-icon [path]="mdiClose" [size]="24" />
+      </button>
     </div>
 
     <div class="modal-body">
       @let j = currentJob();
       @let id = currentId();
       @if (j && id) {
-        @if (j.media === 'image') {
-          <img class="review-media" [src]="previewUrl(id)" alt="Preview" />
-        } @else if (j.media === 'motionphoto' && !isMotionRecompress(j)) {
-          <img class="review-media" [src]="thumbUrl(id)" alt="Still photo (kept)" />
+        @if (j.media === 'motionphoto' && !isMotionRecompress(j)) {
+          <!-- Only the motion video goes; the still is untouched, so there is
+               nothing to put side by side. -->
+          <figure class="m-0">
+            <figcaption class="lbl mb-2">Still photo, kept</figcaption>
+            <img class="review-media" [src]="thumbUrl(id)" alt="Still photo (kept)" />
+          </figure>
+          <p class="mt-4 mb-0 text-base font-medium text-success">
+            Reclaims {{ humanMB(j.old_size) }}
+          </p>
         } @else {
-          <video class="review-media" controls preload="metadata" playsinline
-            [src]="previewUrl(id)"></video>
+          <div class="grid gap-4 sm:grid-cols-2">
+            <figure class="m-0 min-w-0">
+              <figcaption class="lbl mb-2 flex justify-between gap-2">
+                <span>Original</span><span>{{ humanMB(j.old_size) }}</span>
+              </figcaption>
+              @if (j.media === 'video') {
+                <video class="review-media" controls preload="metadata" playsinline
+                  [src]="originalUrl(id)" [poster]="thumbUrl(id)"
+                  aria-label="Original video"></video>
+              } @else {
+                <img class="review-media" [src]="thumbUrl(id)" alt="Original" />
+              }
+            </figure>
+            <figure class="m-0 min-w-0">
+              <figcaption class="lbl mb-2 flex justify-between gap-2">
+                <span>Recompressed</span><span>{{ humanMB(j.new_size) }}</span>
+              </figcaption>
+              @if (j.media === 'image') {
+                <img class="review-media" data-role="result" [src]="previewUrl(id)" alt="Preview" />
+              } @else {
+                <video class="review-media" data-role="result" controls preload="metadata" playsinline
+                  [src]="previewUrl(id)" aria-label="Recompressed video"></video>
+              }
+            </figure>
+          </div>
+          <p class="mt-4 mb-0 text-base font-medium text-success">
+            Saves {{ humanMB((j.old_size ?? 0) - (j.new_size ?? 0)) }} (−{{ pct(j) }}%)
+          </p>
         }
 
-        <dl class="detail-grid">
+        <dl class="mt-3 mb-0 grid grid-cols-[140px_1fr] gap-x-4 gap-y-1.5 text-sm">
           @if (j.media === 'motionphoto' && !isMotionRecompress(j)) {
-            <dt>Motion Video</dt><dd>{{ humanMB(j.old_size) }} (reclaimed)</dd>
-            <dt>Still Photo</dt><dd>Unchanged</dd>
-            <dt>Action</dt><dd>{{ formatLabel(j) }}</dd>
+            <dt class="text-muted">Motion Video</dt><dd class="m-0">{{ humanMB(j.old_size) }} (reclaimed)</dd>
+            <dt class="text-muted">Still Photo</dt><dd class="m-0">Unchanged</dd>
+            <dt class="text-muted">Action</dt><dd class="m-0">{{ formatLabel(j) }}</dd>
           } @else {
-            <dt>{{ j.media === 'motionphoto' ? 'Motion Video' : 'Original Size' }}</dt><dd>{{ humanMB(j.old_size) }}</dd>
-            <dt>New Size</dt><dd>{{ humanMB(j.new_size) }}</dd>
-            <dt>Savings</dt><dd>{{ humanMB((j.old_size ?? 0) - (j.new_size ?? 0)) }} (−{{ pct(j) }}%)</dd>
-            <dt>Format</dt><dd>{{ formatLabel(j) }}</dd>
+            <dt class="text-muted">Format</dt><dd class="m-0">{{ formatLabel(j) }}</dd>
             @if (j.media === 'image') {
-              <dt>Setting</dt>
-              <dd>{{ j.photo_format === 'jxl' || j.new_codec === 'JPEG XL'
+              <dt class="text-muted">Setting</dt>
+              <dd class="m-0">{{ j.photo_format === 'jxl' || j.new_codec === 'JPEG XL'
                 ? 'Lossless JPEG reconstruction'
                 : 'Target savings ' + (j.photo_target_savings ?? '—') + '%' }}</dd>
             } @else {
-              <dt>Encoder</dt><dd>{{ encoderDetail(j) }}</dd>
+              <dt class="text-muted">Encoder</dt><dd class="m-0">{{ encoderDetail(j) }}</dd>
             }
             @if (j.media === 'motionphoto') {
-              <dt>Still Photo</dt><dd>Unchanged</dd>
+              <dt class="text-muted">Still Photo</dt><dd class="m-0">Unchanged</dd>
             }
           }
         </dl>
@@ -47,10 +78,10 @@
     </div>
 
     <div class="modal-actions">
-      <!-- Same order and emphasis as the bench, so the decision never
-           changes shape depending on where it is made. -->
+      <!-- Same order as the bench, so the decision never changes shape
+           depending on where it is made. -->
       <button class="btn destruct" (click)="confirm()">Replace in Immich</button>
-      <button class="btn ghost" (click)="discard()">Keep original</button>
+      <button class="btn" (click)="discard()">Keep original</button>
     </div>
   </div>
 }
