@@ -1,5 +1,7 @@
 # Changelog
 
+Releases after 1.4.1 are listed on [GitHub Releases](https://github.com/lukasganster/immich-recompress/releases). Their notes are generated from the Conventional Commits in each release.
+
 ## [1.4.1](https://github.com/lukasganster/immich-recompress/compare/v1.4.0...v1.4.1) (2026-10-31)
 
 

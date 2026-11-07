@@ -22,9 +22,9 @@ pnpm test                       # unit tests
 ## Guidelines
 
 - Branch from `development` and target your PR at `development`, the default
-  branch. Ordinary PRs are squash merged using the PR title. `main` is reserved
-  for release preparation and release PRs, which use merge commits to preserve
-  the history used by Release Please.
+  branch. PRs are rebase merged, so every commit lands as written and appears
+  in the release notes. `main` only moves by fast-forward when a release is
+  made.
 - Keep the UI **in English**.
 - Open an issue first for larger changes so we can agree on direction.
 - Write commit messages and PR titles as
