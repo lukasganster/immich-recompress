@@ -1,41 +1,59 @@
-<section class="band" aria-label="Library composition">
-  @if (store.loaded()) {
-    <div class="band-top">
-      <span class="lbl">Library</span>
-      <span class="band-total">{{ humanMB(store.totalSize()) }}</span>
-      <span class="band-of">across {{ store.total().toLocaleString('en-US') }} {{ noun }}</span>
-    </div>
+<section class="min-w-0 px-4 pt-4 md:px-6" aria-label="Library composition">
+  <div class="rounded-3xl border border-line bg-subtle px-5 py-4 md:px-6">
+    @if (store.loaded()) {
+      <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
+        <div class="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+          <span class="flex items-center gap-1.5 self-center text-sm font-medium text-primary">
+            <app-icon [path]="mdiHarddisk" [size]="18" />
+            Library
+          </span>
+          <span class="text-2xl font-semibold tracking-tight">{{ humanMB(store.totalSize()) }}</span>
+          <span class="text-xs text-muted">across {{ store.total().toLocaleString('en-US') }} {{ noun }}</span>
+        </div>
 
-    <div class="bar" role="img"
-      [attr.aria-label]="humanMB(reclaimed().bytes) + ' has already been reclaimed. '
-        + humanMB(store.totalSize()) + ' is still on disk.'">
-      <span class="seg-reclaimed" [style.width.%]="reclaimed().pct"></span>
-      <span class="seg-on-disk" [style.width.%]="onDisk().pct"></span>
-    </div>
+        <span class="flex-1"></span>
 
-    <!-- The bar's own aria-label already states these figures in prose, but
-         the legend is plain readable text, so it is left in the tree. -->
-    <ul class="legend">
-      <li>
-        <i class="key seg-reclaimed" aria-hidden="true"></i>
-        <span class="num">{{ humanMB(reclaimed().bytes) }}</span>
-        <span class="lbl">reclaimed</span>
-      </li>
+        <!-- The bar's own aria-label already states these figures in prose, but
+             the legend is plain readable text, so it is left in the tree. -->
+        <ul class="m-0 flex list-none flex-wrap items-center gap-2 p-0">
+          <li class="flex min-w-0 items-center gap-2 rounded-full bg-success/12 px-3 py-1 text-success">
+            <app-icon [path]="mdiCheckCircleOutline" [size]="16" />
+            <span class="num text-sm">{{ humanMB(reclaimed().bytes) }}</span>
+            <span class="text-xs font-medium">reclaimed</span>
+          </li>
 
-      @if (selectionCount() > 0) {
-        <li class="legend-sel">
-          <span class="num">{{ selectionEstimate }}</span>
-          @if (selectionTime) {
-            <span class="band-of">{{ selectionTime }} to encode</span>
+          @if (selectionCount() > 0) {
+            <li class="flex min-w-0 items-center gap-2 rounded-full bg-warning/12 px-3 py-1 text-warning">
+              <app-icon [path]="mdiArchiveArrowDownOutline" [size]="16" />
+              <span class="num min-w-0 truncate text-sm">{{ selectionEstimate }}</span>
+              @if (selectionTime) {
+                <span class="whitespace-nowrap text-xs font-medium">{{ selectionTime }} to encode</span>
+              }
+            </li>
           }
-        </li>
-      }
-    </ul>
-  } @else {
-    <div class="band-empty">
-      <span class="lbl">Library</span>
-      <p>Nothing loaded yet. Choose <strong>Select media</strong> above to scan Immich for
-        videos, photos or Live Photos above a size threshold.</p>
-    </div>
-  }
+        </ul>
+      </div>
+
+      <div
+        class="mt-3 flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full bg-line"
+        role="img"
+        [attr.aria-label]="humanMB(reclaimed().bytes) + ' has already been reclaimed. '
+          + humanMB(store.totalSize()) + ' is still on disk.'"
+      >
+        <span class="seg block h-full min-w-0 rounded-full bg-success" [style.width.%]="reclaimed().pct"></span>
+        <span class="seg block h-full min-w-0 rounded-full bg-untouched" [style.width.%]="onDisk().pct"></span>
+      </div>
+    } @else {
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <span class="flex items-center gap-1.5 text-sm font-medium text-primary">
+          <app-icon [path]="mdiHarddisk" [size]="18" />
+          Library
+        </span>
+        <p class="m-0 max-w-[68ch] text-muted">
+          Nothing loaded yet. Choose <strong class="font-semibold text-fg">Select media</strong> above to scan
+          Immich for videos, photos or Live Photos above a size threshold.
+        </p>
+      </div>
+    }
+  </div>
 </section>

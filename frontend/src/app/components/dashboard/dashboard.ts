@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { mdiArchiveArrowDownOutline, mdiCheckCircleOutline, mdiHarddisk } from '@mdi/js';
 import { StoreService } from '../../services/store.service';
+import { IconComponent } from '../icon/icon';
 
 /** One segment of the composition band. */
 interface Segment {
@@ -10,12 +12,17 @@ interface Segment {
 @Component({
   selector: 'app-dashboard',
   standalone: true,
+  imports: [IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.css',
 })
 export class DashboardComponent {
   readonly store = inject(StoreService);
+
+  readonly mdiArchiveArrowDownOutline = mdiArchiveArrowDownOutline;
+  readonly mdiCheckCircleOutline = mdiCheckCircleOutline;
+  readonly mdiHarddisk = mdiHarddisk;
 
   /**
    * The band draws the whole library to scale: what recompressing already
