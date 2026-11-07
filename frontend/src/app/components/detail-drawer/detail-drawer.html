@@ -1,20 +1,24 @@
 @if (open()) {
-  <div class="drawer-overlay" (click)="hide()"></div>
-  <div class="drawer" cdkTrapFocus [cdkTrapFocusAutoCapture]="true"
+  <div class="fixed inset-0 z-[100] bg-[var(--immich-overlay)]" (click)="hide()"></div>
+  <div
+    class="fixed inset-y-0 right-0 z-[101] flex w-[min(400px,92vw)] flex-col border-l border-line bg-app shadow-2xl dark:bg-subtle"
+    cdkTrapFocus [cdkTrapFocusAutoCapture]="true"
     role="dialog" aria-modal="true" aria-label="Asset detail">
-    <div class="drawer-head">
-      <strong>{{ detail()?.name || 'Detail' }}</strong>
-      <button class="icon-btn" (click)="hide()" aria-label="Close">✕</button>
+    <div class="flex items-center gap-2 p-2">
+      <button class="icon-btn" (click)="hide()" aria-label="Close">
+        <app-icon [path]="mdiClose" [size]="24" />
+      </button>
+      <h2 class="m-0 min-w-0 truncate text-lg font-normal text-fg">{{ detail()?.name || 'Detail' }}</h2>
     </div>
 
-    <div class="drawer-body">
+    <div class="flex-1 overflow-y-auto px-4 pb-4">
       @if (loading()) {
-        <div class="empty">
+        <div class="flex max-w-[48ch] flex-col items-start gap-3 py-6 text-muted">
           <span>Loading details from Immich</span>
-          <div class="meter indeterminate"><i></i></div>
+          <div class="meter indeterminate w-[180px]"><i></i></div>
         </div>
       } @else if (!detail()) {
-        <div class="empty">
+        <div class="flex max-w-[48ch] flex-col items-start gap-3 py-6 text-muted">
           <span>Could not load this asset's details. Immich may be unreachable.</span>
           <button class="btn ghost" (click)="retry()">Try again</button>
         </div>
@@ -22,115 +26,140 @@
         @let d = detail()!;
         @let ex = d.exif;
         @let owner = d.owner;
+        @let isVideo = d.mime_type.startsWith('video/');
 
-        @if (d.mime_type.startsWith('video/') && !playbackFailed()) {
+        @if (isVideo && !playbackFailed()) {
           <!-- preload="metadata" fetches only the file's header. Without it a
                click on the poster does nothing until the play button is used. -->
-          <video class="drawer-thumb drawer-video" controls playsinline preload="metadata"
+          <video class="drawer-video block w-full rounded-xl bg-black" controls playsinline preload="metadata"
             [src]="api.playbackUrl(d.id)"
             [poster]="'/api/thumbnail/' + d.id"
             [attr.aria-label]="'Play ' + d.name"
             (error)="playbackFailed.set(true)"></video>
         } @else {
-          <img class="drawer-thumb"
+          <img class="block max-h-60 w-full rounded-xl bg-hover object-cover"
             [src]="'/api/thumbnail/' + d.id"
             [alt]="'Preview of ' + d.name"
             (error)="$any($event.target).style.display='none'" />
           @if (playbackFailed()) {
-            <p class="playback-error" role="alert">This video could not be played here. The browser may not support its format, or Immich may be unreachable.</p>
+            <p class="mt-2 mb-0 text-xs text-danger" role="alert">This video could not be played here. The browser may not support its format, or Immich may be unreachable.</p>
           }
         }
 
-        <dl class="detail-grid">
-          <dt>File</dt><dd>{{ d.name }}</dd>
-          <dt>Path</dt><dd>{{ d.original_path }}</dd>
-          <dt>MIME</dt><dd>{{ d.mime_type }}</dd>
-          <dt>Checksum</dt><dd>{{ d.checksum }}</dd>
-          <dt>Size</dt><dd>{{ d.size_human }}</dd>
-          <dt>Duration</dt><dd>{{ d.duration_human || '—' }}</dd>
-          <dt>Codec</dt><dd>{{ ex.codec || '—' }}</dd>
-          <dt>Resolution</dt><dd>{{ ex.resolution || '—' }}</dd>
-          <dt>Bitrate</dt><dd>{{ ex.bitrate ?? '—' }}</dd>
-          <dt>FPS</dt><dd>{{ ex.fps ?? '—' }}</dd>
-        </dl>
+        <h3 class="lbl mt-6 mb-0">Details</h3>
 
-        <div class="detail-section">
-          <h3>Camera</h3>
-          <dl class="detail-grid">
-            <dt>Make</dt><dd>{{ ex.make || '—' }}</dd>
-            <dt>Model</dt><dd>{{ ex.model || '—' }}</dd>
-            <dt>Lens</dt><dd>{{ ex.lens || '—' }}</dd>
-          </dl>
+        <!-- Immich's detail rows: a muted leading icon, a value, and a
+             smaller second line with what qualifies it. -->
+        <div class="flex gap-4 py-3">
+          <app-icon class="text-muted" [path]="isVideo ? mdiVideoOutline : mdiImageOutline" [size]="24" />
+          <div class="min-w-0">
+            <p class="m-0 break-all">{{ d.name }}</p>
+            <p class="m-0 text-sm text-muted">
+              {{ ex.resolution || '—' }}
+              @if (d.duration_human) { · {{ d.duration_human }} }
+              @if (ex.fps != null) { · {{ ex.fps }} fps }
+            </p>
+          </div>
         </div>
 
-        <div class="detail-section">
-          <h3>Location</h3>
-          <dl class="detail-grid">
-            <dt>Coordinates</dt><dd>{{ (ex.lat != null && ex.lon != null) ? (ex.lat + ', ' + ex.lon) : '—' }}</dd>
-            <dt>City</dt><dd>{{ ex.city || '—' }}</dd>
-            <dt>Country</dt><dd>{{ ex.country || '—' }}</dd>
-          </dl>
+        <div class="flex gap-4 py-3">
+          <app-icon class="text-muted" [path]="mdiCalendar" [size]="24" />
+          <div class="min-w-0">
+            <p class="m-0">{{ fmtDate(d.created_at) }}</p>
+            <p class="m-0 text-sm text-muted">Updated {{ fmtDate(d.updated_at) }}</p>
+          </div>
         </div>
 
-        <div class="detail-section">
-          <h3>Owner</h3>
-          <dl class="detail-grid">
-            <dt>Name</dt><dd>{{ owner.name || '—' }}</dd>
-            <dt>Email</dt><dd>{{ owner.email || '—' }}</dd>
-          </dl>
+        <div class="flex gap-4 py-3">
+          <app-icon class="text-muted" [path]="mdiHarddisk" [size]="24" />
+          <div class="min-w-0">
+            <p class="m-0">{{ d.size_human }}</p>
+            <p class="m-0 text-sm break-all text-muted">Checksum {{ d.checksum }}</p>
+          </div>
+        </div>
+
+        <div class="flex gap-4 py-3">
+          <app-icon class="text-muted" [path]="mdiFileVideoOutline" [size]="24" />
+          <div class="min-w-0">
+            <p class="m-0">{{ ex.codec || '—' }}</p>
+            <p class="m-0 text-sm text-muted">{{ d.mime_type }} · Bitrate {{ ex.bitrate ?? '—' }}</p>
+          </div>
+        </div>
+
+        <div class="flex gap-4 py-3">
+          <app-icon class="text-muted" [path]="mdiFolderOutline" [size]="24" />
+          <div class="min-w-0">
+            <p class="m-0 break-all">{{ d.original_path }}</p>
+            <p class="m-0 text-sm text-muted">Path</p>
+          </div>
+        </div>
+
+        <div class="flex gap-4 py-3">
+          <app-icon class="text-muted" [path]="mdiCameraIris" [size]="24" />
+          <div class="min-w-0">
+            <p class="m-0">{{ joined(' ', ex.make, ex.model) }}</p>
+            <p class="m-0 text-sm text-muted">{{ ex.lens || 'No lens info' }}</p>
+          </div>
+        </div>
+
+        <div class="flex gap-4 py-3">
+          <app-icon class="text-muted" [path]="mdiMapMarkerOutline" [size]="24" />
+          <div class="min-w-0">
+            <p class="m-0">{{ joined(', ', ex.city, ex.country) }}</p>
+            <p class="m-0 text-sm text-muted">{{ (ex.lat != null && ex.lon != null) ? (ex.lat + ', ' + ex.lon) : 'No coordinates' }}</p>
+          </div>
+        </div>
+
+        <div class="flex gap-4 py-3">
+          <app-icon class="text-muted" [path]="mdiAccountOutline" [size]="24" />
+          <div class="min-w-0">
+            <p class="m-0">{{ owner.name || '—' }}</p>
+            <p class="m-0 text-sm break-all text-muted">{{ owner.email || '—' }}</p>
+          </div>
         </div>
 
         @if (d.albums?.length) {
-          <div class="detail-section">
-            <h3>Albums</h3>
-            <div class="chips">
-              @for (a of d.albums; track a.id) {
-                <span class="chip">{{ a.name || a.id }}</span>
-              }
-            </div>
+          <h3 class="lbl mt-4 mb-2">Albums</h3>
+          <div class="flex flex-wrap gap-1.5">
+            @for (a of d.albums; track a.id) {
+              <span class="chip">{{ a.name || a.id }}</span>
+            }
           </div>
         }
 
         @if (d.people?.length) {
-          <div class="detail-section">
-            <h3>People</h3>
-            <div class="chips">
-              @for (p of d.people; track p.id) {
-                <span class="chip">{{ p.name || p.id }}</span>
-              }
-            </div>
+          <h3 class="lbl mt-4 mb-2">People</h3>
+          <div class="flex flex-wrap gap-1.5">
+            @for (p of d.people; track p.id) {
+              <span class="chip">{{ p.name || p.id }}</span>
+            }
           </div>
         }
 
         @if (d.tags?.length) {
-          <div class="detail-section">
-            <h3>Tags</h3>
-            <div class="chips">
-              @for (t of d.tags; track t) {
-                <span class="chip">{{ t }}</span>
-              }
-            </div>
+          <h3 class="lbl mt-4 mb-2">Tags</h3>
+          <div class="flex flex-wrap gap-1.5">
+            @for (t of d.tags; track t) {
+              <span class="chip">{{ t }}</span>
+            }
           </div>
         }
 
-        <div class="detail-section">
-          <h3>Metadata</h3>
-          <dl class="detail-grid">
-            <dt>Created</dt><dd>{{ fmtDate(d.created_at) }}</dd>
-            <dt>Updated</dt><dd>{{ fmtDate(d.updated_at) }}</dd>
-          </dl>
-          <div class="chips" style="margin-top:8px">
-            <span class="chip" [class.flag-on]="d.is_favorite">Favorite</span>
-            <span class="chip" [class.flag-on]="d.is_archived">Archived</span>
-            <span class="chip" [class.flag-on]="d.is_trashed">Trashed</span>
-          </div>
+        <h3 class="lbl mt-4 mb-2">Flags</h3>
+        <div class="flex flex-wrap gap-1.5">
+          <span class="chip" [class.flag-on]="d.is_favorite">Favorite</span>
+          <span class="chip" [class.flag-on]="d.is_archived">Archived</span>
+          <span class="chip" [class.flag-on]="d.is_trashed">Trashed</span>
         </div>
       }
     </div>
 
-    <div class="drawer-actions">
-      <button class="btn ghost" (click)="download()">Download original</button>
-      <button class="btn" (click)="encode()">Encode now</button>
+    <div class="flex flex-wrap justify-end gap-2 border-t border-line px-4 py-3">
+      <button class="btn" (click)="download()">
+        <app-icon [path]="mdiDownload" [size]="18" />
+        Download original
+      </button>
+      <button class="btn primary" (click)="encode()">Encode now</button>
     </div>
   </div>
 }

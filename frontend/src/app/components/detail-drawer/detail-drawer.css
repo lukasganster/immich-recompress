@@ -1,60 +1,9 @@
-/* Asset detail, slid in from the right. See DESIGN.md. */
+/* Asset detail on the right, after Immich's asset viewer detail panel.
+   Layout is Tailwind in the template. See DESIGN.md. */
+@reference "../../../styles.css";
 
-:host { display: contents; }
-
-.drawer-overlay {
-  position: fixed;
-  inset: 0;
-  background: var(--overlay);
-  z-index: 100;
-}
-
-.drawer {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: min(440px, 92vw);
-  z-index: 101;
-  display: flex;
-  flex-direction: column;
-  background: var(--sheet);
-  border-left: 1px solid var(--rule-hard);
-  box-shadow: var(--lift);
-}
-
-.drawer-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 11px var(--pad);
-  border-bottom: 1px solid var(--rule-hard);
-  background: var(--sheet-2);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.drawer-head strong {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.drawer-body {
-  padding: var(--pad);
-  overflow-y: auto;
-  flex: 1;
-}
-
-.drawer-thumb {
-  display: block;
-  width: 100%;
-  max-height: 240px;
-  object-fit: cover;
-  background: var(--sheet-3);
-  margin-bottom: var(--pad);
+:host {
+  display: contents;
 }
 
 /* The whole frame stays visible: a portrait clip must not lose its top
@@ -64,87 +13,13 @@
   object-fit: contain;
 }
 
-.playback-error {
-  margin: calc(var(--pad) * -0.5) 0 var(--pad);
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--destruct);
-}
-
-.detail-section { margin-top: 18px; }
-.detail-section:first-child { margin-top: 0; }
-
-.detail-section h3 {
-  margin: 0 0 7px;
-  padding-bottom: 5px;
-  border-bottom: 1px solid var(--rule);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-}
-
-/* ── loading and failure ────────────────────────────────────────────── */
-
-.empty {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 24px 0;
-  color: var(--ink-dim);
-  max-width: 48ch;
-}
-
-.empty .meter { width: 180px; }
-
-/* ── album / person / tag chips ─────────────────────────────────────── */
-
-.chips { display: flex; flex-wrap: wrap; gap: 5px; }
-
+/* album / person / tag chips */
 .chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 1px 6px;
-  font-size: 11px;
-  color: var(--ink-dim);
-  border: 1px solid var(--rule-hard);
-  white-space: nowrap;
+  @apply inline-flex items-center rounded-full border border-line px-2.5 py-0.5 text-xs whitespace-nowrap text-muted;
 }
 
-/* A flag that is set reads as ink on the sheet; one that is not stays
-   an outline. Without this every flag looks identical either way. */
+/* A flag that is set is filled; one that is not stays an outline.
+   Without this every flag looks identical either way. */
 .chip.flag-on {
-  color: var(--sheet);
-  background: var(--ink);
-  border-color: var(--ink);
-  font-weight: 600;
-}
-
-.detail-grid {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 5px 16px;
-  margin: 0;
-  font-size: 12px;
-}
-
-.detail-grid dt { color: var(--ink-dim); }
-
-.detail-grid dd {
-  margin: 0;
-  text-align: right;
-  font-weight: 500;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.drawer-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 11px var(--pad);
-  border-top: 1px solid var(--rule-hard);
-  background: var(--sheet-2);
+  @apply border-primary bg-primary font-medium text-primary-fg;
 }

@@ -1,5 +1,19 @@
 import { ChangeDetectionStrategy, Component, HostListener, inject, output, signal } from '@angular/core';
 import { CdkTrapFocus } from '@angular/cdk/a11y';
+import {
+  mdiAccountOutline,
+  mdiCalendar,
+  mdiCameraIris,
+  mdiClose,
+  mdiDownload,
+  mdiFileVideoOutline,
+  mdiFolderOutline,
+  mdiHarddisk,
+  mdiImageOutline,
+  mdiMapMarkerOutline,
+  mdiVideoOutline,
+} from '@mdi/js';
+import { IconComponent } from '../icon/icon';
 import { ApiService } from '../../services/api.service';
 import { StoreService } from '../../services/store.service';
 import { VideoDetail } from '../../models/api.models';
@@ -7,12 +21,24 @@ import { VideoDetail } from '../../models/api.models';
 @Component({
   selector: 'app-detail-drawer',
   standalone: true,
-  imports: [CdkTrapFocus],
+  imports: [CdkTrapFocus, IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './detail-drawer.html',
   styleUrl: './detail-drawer.css',
 })
 export class DetailDrawerComponent {
+  readonly mdiAccountOutline = mdiAccountOutline;
+  readonly mdiCalendar = mdiCalendar;
+  readonly mdiCameraIris = mdiCameraIris;
+  readonly mdiClose = mdiClose;
+  readonly mdiDownload = mdiDownload;
+  readonly mdiFileVideoOutline = mdiFileVideoOutline;
+  readonly mdiFolderOutline = mdiFolderOutline;
+  readonly mdiHarddisk = mdiHarddisk;
+  readonly mdiImageOutline = mdiImageOutline;
+  readonly mdiMapMarkerOutline = mdiMapMarkerOutline;
+  readonly mdiVideoOutline = mdiVideoOutline;
+
   readonly api = inject(ApiService);
   readonly store = inject(StoreService);
 
@@ -60,6 +86,11 @@ export class DetailDrawerComponent {
       this.encodeRequested.emit([id]);
       this.hide();
     }
+  }
+
+  /** Join the parts that are set, or a dash when none are. */
+  joined(sep: string, ...parts: (string | null | undefined)[]): string {
+    return parts.filter(p => !!p).join(sep) || '—';
   }
 
   fmtDate(iso: string | null | undefined): string {
