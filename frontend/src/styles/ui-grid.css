@@ -1,0 +1,55 @@
+/* @ornery/ui-grid keeps its styles in a shadow root, but every value below
+   is a custom property it reads from here, and custom properties inherit
+   through the shadow boundary. This is the whole grid theme. */
+
+app-ui-grid {
+  --ui-grid-surface: var(--immich-app);
+  --ui-grid-header-background: var(--immich-app);
+  --ui-grid-group-background: var(--immich-subtle);
+  --ui-grid-border-color: var(--immich-line);
+  --ui-grid-radius: 0;
+  --ui-grid-shadow: none;
+  --ui-grid-overflow-x: hidden;
+
+  --ui-grid-row-odd: var(--immich-app);
+  --ui-grid-row-even: var(--immich-app);
+  --ui-grid-row-hover: var(--immich-subtle);
+  --ui-grid-row-selected-bg: color-mix(in srgb, var(--immich-primary) 12%, var(--immich-app));
+  --ui-grid-row-selected-bg-odd: color-mix(in srgb, var(--immich-primary) 12%, var(--immich-app));
+  --ui-grid-row-selected-color: var(--immich-fg);
+  --ui-grid-row-focus-background: var(--immich-hover);
+  --ui-grid-cell-focus-background: var(--immich-hover);
+
+  --ui-grid-cell-color: var(--immich-fg);
+  --ui-grid-muted-color: var(--immich-muted);
+  --ui-grid-accent: var(--immich-primary);
+
+  --ui-grid-row-error-bg: transparent;
+  --ui-grid-row-error-color: var(--immich-danger);
+  --ui-grid-row-dirty-bg: transparent;
+  --ui-grid-row-dirty-color: var(--immich-warning);
+
+  --ui-grid-header-weight: 500;
+  --ui-grid-header-cell-padding-block: 10px;
+  --ui-grid-header-cell-padding-inline: 12px;
+  --ui-grid-header-cell-gap: 6px;
+  --ui-grid-header-actions-gap: 4px;
+  --ui-grid-header-cell-background-active: var(--immich-subtle);
+
+  --ui-grid-body-cell-padding-block: 9px;
+  --ui-grid-body-cell-padding-inline: 12px;
+
+  --ui-grid-control-size: 22px;
+  --ui-grid-control-icon-size: 12px;
+  --ui-grid-control-radius: 9999px;
+  --ui-grid-control-background: transparent;
+  --ui-grid-control-background-active: var(--immich-primary);
+  --ui-grid-control-border-color: transparent;
+  --ui-grid-control-border-color-active: var(--immich-primary);
+  --ui-grid-control-color: var(--immich-muted);
+  --ui-grid-control-color-active: var(--immich-primary-fg);
+
+  --ui-grid-empty-state-min-height: 220px;
+  --ui-grid-empty-state-padding: 40px 16px;
+  --ui-grid-empty-state-gap: 10px;
+}
