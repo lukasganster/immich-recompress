@@ -77,11 +77,19 @@
       }
     </div>
 
-    <div class="modal-actions">
-      <!-- Same order as the bench, so the decision never changes shape
-           depending on where it is made. -->
-      <button class="btn destruct" (click)="confirm()">Replace in Immich</button>
-      <button class="btn" (click)="discard()">Keep original</button>
+    <!-- Same sentence, order and buttons as the bench, so the decision never
+         changes shape depending on where it is made. See DESIGN.md. -->
+    <p class="mx-6 mt-1 mb-0 max-w-[62ch] text-xs leading-normal text-muted">
+      Replacing uploads the recompressed file as a new asset, copies the original's
+      metadata, tags and albums onto it, then moves the original to the Immich trash.
+      The local backup is deleted once that succeeds.
+    </p>
+    <div class="modal-actions justify-start">
+      <button class="btn destruct" (click)="confirm()">
+        <app-icon [path]="mdiFileReplaceOutline" [size]="18" />
+        Replace in Immich
+      </button>
+      <button class="btn ghost" (click)="discard()">Keep original</button>
     </div>
   </div>
 }
