@@ -1,8 +1,14 @@
 import {
-  ChangeDetectionStrategy, Component, computed, inject,
+  ChangeDetectionStrategy, Component, computed, effect, inject,
   ElementRef, OnDestroy, OnInit, output, signal, TemplateRef, viewChild,
 } from '@angular/core';
 import { NgClass } from '@angular/common';
+import {
+  mdiAlertCircleOutline, mdiArrowDown, mdiArrowUp, mdiChevronLeft, mdiChevronRight,
+  mdiImageMultipleOutline, mdiInformationOutline, mdiMotionPlayOutline, mdiOpenInNew,
+  mdiRefresh, mdiUnfoldMoreHorizontal,
+} from '@mdi/js';
+import { IconComponent } from '../icon/icon';
 import { UiGridComponent, GridOptions, GridColumnDef, GridCellTemplateContext } from '@ornery/ui-grid';
 import { Subscription } from 'rxjs';
 import { MAX_PER_PAGE, StoreService } from '../../services/store.service';
@@ -15,20 +21,20 @@ import { VideoSummary, JobStatus, SortField, SortOrder } from '../../models/api.
  *  sort that never reorders keeps the server's order. */
 const keepServerOrder = (): number => 0;
 
-/** Sort marks drawn on a 24-unit grid. The library's own set uses a stack
- *  of bars for "unsorted", which reads as a letter at this size, so all
- *  three are replaced: a faint up/down pair until a column is sorted, then
- *  one arrow pointing the way the values run. */
+/** Sort marks from MDI, the set Immich draws with. The library's own set
+ *  uses a stack of bars for "unsorted", which reads as a letter at this
+ *  size, so all three are replaced: a faint up/down pair until a column is
+ *  sorted, then one arrow pointing the way the values run. */
 const SORT_ICONS = {
-  sortNone: { path: 'M12 3 18 10H6Z M12 21 6 14H18Z' },
-  sortAsc: { path: 'M12 2 21 12H15.5V22H8.5V12H3Z' },
-  sortDesc: { path: 'M12 22 3 12H8.5V2H15.5V12H21Z' },
+  sortNone: { path: mdiUnfoldMoreHorizontal },
+  sortAsc: { path: mdiArrowUp },
+  sortDesc: { path: mdiArrowDown },
 };
 
 @Component({
   selector: 'app-media-grid',
   standalone: true,
-  imports: [UiGridComponent, NgClass],
+  imports: [UiGridComponent, NgClass, IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './media-grid.html',
   styleUrl: './media-grid.css',
@@ -39,6 +45,15 @@ export class MediaGridComponent implements OnInit, OnDestroy {
   private readonly host: ElementRef<HTMLElement> = inject(ElementRef);
 
   readonly detailRequested = output<string>();
+
+  readonly mdiAlertCircleOutline = mdiAlertCircleOutline;
+  readonly mdiChevronLeft = mdiChevronLeft;
+  readonly mdiChevronRight = mdiChevronRight;
+  readonly mdiImageMultipleOutline = mdiImageMultipleOutline;
+  readonly mdiInformationOutline = mdiInformationOutline;
+  readonly mdiMotionPlayOutline = mdiMotionPlayOutline;
+  readonly mdiOpenInNew = mdiOpenInNew;
+  readonly mdiRefresh = mdiRefresh;
 
   // Template refs for custom cell rendering
   readonly nameTpl = viewChild.required<TemplateRef<GridCellTemplateContext>>('nameTpl');
@@ -88,9 +103,22 @@ export class MediaGridComponent implements OnInit, OnDestroy {
    *  (otherwise blank) header cell rather than rendered by the grid itself. */
   readonly selectColWidth = '4%';
   /** Pinned so the overlay checkbox's CSS height always matches the
-   *  rendered header row, regardless of the library's own default.
-   *  Must stay in step with --ui-grid-header-cell-padding-block. */
-  readonly headerRowHeight = 32;
+   *  rendered header row, regardless of the library's own default. The
+   *  template hands it to the shadow sheet as --app-grid-header-height and
+   *  header cells are border-box at that height, so the header paddings in
+   *  styles/ui-grid.css cannot drift it. */
+  readonly headerRowHeight = 44;
+  /** Row height, given to the grid (its scroll maths uses it) and to the
+   *  shadow sheet as --app-grid-row-height, so both always agree. Tall
+   *  enough for a 36px thumbnail with air, as in Immich's lists. */
+  readonly rowHeight = 52;
+
+  /** Grid row key (data-row in the shadow root) of the row under the
+   *  pointer. The grid draws rows as loose cells and only hovers the one
+   *  cell, so whole-row hover and selection tints are written as rules
+   *  keyed on data-row into a per-instance sheet. */
+  private readonly hoverRow = signal<string | null>(null);
+  private readonly rowSheet = new CSSStyleSheet();
 
   gridOptions = computed<GridOptions | null>(() => {
     if (!this.tplsReady()) return null;
@@ -106,7 +134,7 @@ export class MediaGridComponent implements OnInit, OnDestroy {
     // visible before anything is read. See DESIGN.md.
     const widths = hideClipCols
       ? { select: this.selectColWidth, name: '27%', size: '17%', resolution: '11%', date: '11%', user: '10%', status: '13%', actions: '7%' }
-      : { select: this.selectColWidth, name: '20%', size: '16%', resolution: '11%', duration: '9%', codec: '8%', date: '9%', user: '7%', status: '12%', actions: '4%' };
+      : { select: this.selectColWidth, name: '19%', size: '14%', resolution: '10%', duration: '7%', codec: '12%', date: '10%', user: '10%', status: '10%', actions: '4%' };
     const cols: GridColumnDef[] = [
       {
         name: 'select', displayName: ' ', field: 'id', width: widths.select,
@@ -142,12 +170,13 @@ export class MediaGridComponent implements OnInit, OnDestroy {
     ];
 
     return {
-      id: 'media-grid',
+      id: MediaGridComponent.gridId,
       data: this.store.videos() as unknown as readonly Record<string, unknown>[],
       columnDefs: cols,
       enableSorting: true,
       enableFiltering: false,
       headerRowHeight: this.headerRowHeight,
+      rowHeight: this.rowHeight,
       // The backend already returns one page. Keep the grid's internal pager
       // disabled and use the component pager below to request that page.
       enablePagination: false,
@@ -192,6 +221,28 @@ export class MediaGridComponent implements OnInit, OnDestroy {
     };
   });
 
+  constructor() {
+    // Selected and hovered rows, as rules on the grid's own row keys. The
+    // grid's default key is `${options.id}-${index in data}`, and the data
+    // is store.videos() in order, so a row's key follows from its index.
+    effect(() => {
+      const selected = this.store.selected();
+      const hover = this.hoverRow();
+      const rule = (key: string, bg: string) =>
+        `.body-cell[data-row="${CSS.escape(key)}"] { background: ${bg} !important; }`;
+      const rules: string[] = [];
+      let hoverIsSelected = false;
+      this.store.videos().forEach((v, i) => {
+        if (!selected.has(v.id)) return;
+        const key = `${MediaGridComponent.gridId}-${i}`;
+        if (key === hover) hoverIsSelected = true;
+        rules.push(rule(key, key === hover ? 'var(--app-grid-row-selected-hover)' : 'var(--ui-grid-row-selected-bg)'));
+      });
+      if (hover && !hoverIsSelected) rules.push(rule(hover, 'var(--ui-grid-row-hover)'));
+      this.rowSheet.replaceSync(rules.join('\n'));
+    });
+  }
+
   ngOnInit(): void {
     // grid options computed after view is ready
     setTimeout(() => this.tplsReady.set(true), 0);
@@ -220,10 +271,20 @@ export class MediaGridComponent implements OnInit, OnDestroy {
   private themeGridShadow(): void {
     const el = this.host.nativeElement.querySelector('ui-grid-element');
     const root = el?.shadowRoot;
-    if (!root || root.adoptedStyleSheets.includes(MediaGridComponent.shadowSheet)) return;
-    root.adoptedStyleSheets = [...root.adoptedStyleSheets, MediaGridComponent.shadowSheet];
+    if (!el || !root || root.adoptedStyleSheets.includes(MediaGridComponent.shadowSheet)) return;
+    root.adoptedStyleSheets = [...root.adoptedStyleSheets, MediaGridComponent.shadowSheet, this.rowSheet];
     root.addEventListener('pointerover', MediaGridComponent.titleSortButton);
+    root.addEventListener('pointerover', this.trackHover);
+    el.addEventListener('pointerleave', () => this.hoverRow.set(null));
   }
+
+  private readonly trackHover = (event: Event): void => {
+    const cell = (event.target as Element | null)?.closest?.('.body-cell');
+    this.hoverRow.set(cell?.getAttribute('data-row') ?? null);
+  };
+
+  /** The grid's options id, which also prefixes its default row keys. */
+  private static readonly gridId = 'media-grid';
 
   /** Grid column name to the API's sort field, for the sortable columns. */
   private static readonly sortFields: Record<string, SortField> = {
@@ -242,14 +303,28 @@ export class MediaGridComponent implements OnInit, OnDestroy {
   private static readonly shadowSheet = (() => {
     const sheet = new CSSStyleSheet();
     sheet.replaceSync(`
-      /* One line per row. A wrapping cell would break the ledger's
-         rhythm and hide the drawn quantity below the fold. */
+      /* One line per row, at a fixed height. A wrapping cell would break
+         the list's rhythm and hide the drawn quantity below the fold. */
       .body-cell {
+        box-sizing: border-box;
+        height: var(--app-grid-row-height, 52px);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        height: var(--row, 34px);
         align-content: center;
+      }
+      /* Hover and selection cover the whole row (see rowSheet), so the
+         library's single-cell outline on hover goes. */
+      .body-cell:hover:not(.row-focused):not(.cell-focused):not(.cell-editing),
+      .body-grid > .body-cell:hover:not(.row-focused):not(.cell-focused):not(.cell-editing) {
+        box-shadow: none;
+      }
+      /* A click leaves no lasting mark on the row; keyboard focus still
+         shows as a ring on the focused cell. */
+      .body-cell.ui-grid-row-focused { outline: none; }
+      .body-cell:focus-visible {
+        outline: 2px solid var(--ui-grid-accent);
+        outline-offset: -2px;
       }
       /* Cell templates are slotted in from the light DOM, and the wrapper
          they land in is a shrink-wrapping flex item. Without this the
@@ -257,20 +332,24 @@ export class MediaGridComponent implements OnInit, OnDestroy {
       .cell-shell { min-width: 0; }
       .cell-content { flex: 1 1 auto; min-width: 0; }
       ::slotted(span) { display: block; width: 100%; min-width: 0; }
-      .header-label { text-overflow: ellipsis; }
-      .header-cell { border-bottom-color: var(--rule-hard); }
-      /* The library outlines the active sort button but never fills it, so
-         the active colour (the sheet, meant for a filled control) would
-         draw the arrow invisibly. Draw it in ink instead. */
-      .header-cell.is-active .header-action[data-action="sort"] { color: var(--ink); }
-      /* Column heads join the app's one label system. */
-      .header-label {
-        font-size: 10px;
-        letter-spacing: 0.09em;
-        text-transform: uppercase;
-        color: var(--ink-faint);
+      .header-cell {
+        box-sizing: border-box;
+        height: var(--app-grid-header-height, 44px);
       }
-      .empty-state { color: var(--ink-dim); max-width: none; }
+      /* Column heads: Immich's muted medium label, sentence case. */
+      .header-label {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--ui-grid-muted-color);
+        text-overflow: ellipsis;
+      }
+      .header-cell.is-active .header-label { color: var(--ui-grid-cell-color); }
+      /* Unsorted marks stay faint until the column is pointed at. */
+      .header-action[data-action="sort"] { transition: background 150ms ease, opacity 150ms ease; }
+      .header-cell:not(.is-active) .header-action[data-action="sort"] { opacity: 0.45; }
+      .header-cell:hover .header-action[data-action="sort"] { opacity: 1; }
+      .header-action[data-action="sort"]:hover { background: var(--immich-hover); }
+      .empty-state { color: var(--ui-grid-muted-color); max-width: none; }
     `);
     return sheet;
   })();
@@ -325,6 +404,7 @@ export class MediaGridComponent implements OnInit, OnDestroy {
         s.perPage.set(data.per_page ?? s.perPage());
         s.loaded.set(true);
         s.loadError.set(data.error ?? null);
+        this.hoverRow.set(null);
         s.loading.set(false);
         this.pageLoading.set(false);
         this.loadGen.update(g => g + 1);
@@ -341,6 +421,7 @@ export class MediaGridComponent implements OnInit, OnDestroy {
         s.loaded.set(true);
         s.loading.set(false);
         this.pageLoading.set(false);
+        this.hoverRow.set(null);
         this.loadGen.update(g => g + 1);
       },
     });
