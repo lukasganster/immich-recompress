@@ -26,8 +26,8 @@
           <summary class="text-primary">Video<span class="disclosure-value">{{ videoSummary }}</span></summary>
           <div class="disclosure-body settings-form">
             <div class="field">
-              <label>Encoder</label>
-              <select [ngModel]="s.encoder" (ngModelChange)="onEncoder($event)">
+              <label for="setEncoder">Encoder</label>
+              <select id="setEncoder" [ngModel]="s.encoder" (ngModelChange)="onEncoder($event)">
                 @for (e of store.encoders(); track e.id) {
                   <option [value]="e.id">{{ e.label }}</option>
                 } @empty {
@@ -39,11 +39,11 @@
             </div>
 
             <div class="field">
-              <label>Quality ({{ enc?.qbetter === 'high' ? 'CQ' : 'RF' }}): {{ s.quality }} · {{ qualityLabel(s.quality) }}</label>
+              <label for="setQuality">Quality ({{ enc?.qbetter === 'high' ? 'CQ' : 'RF' }}): {{ s.quality }} · {{ qualityLabel(s.quality) }}</label>
               <div class="rangewrap">
-                <input type="range" [min]="enc?.qmin ?? 18" [max]="enc?.qmax ?? 32"
+                <input id="setQuality" type="range" [min]="enc?.qmin ?? 18" [max]="enc?.qmax ?? 32"
                   [ngModel]="s.quality" (ngModelChange)="update({quality: +$event})" />
-                <input type="number" [min]="enc?.qmin ?? 18" [max]="enc?.qmax ?? 32" class="num-input"
+                <input type="number" [min]="enc?.qmin ?? 18" [max]="enc?.qmax ?? 32" class="num-input" aria-label="Quality value"
                   [ngModel]="s.quality" (ngModelChange)="update({quality: +$event})" />
               </div>
               @if (enc?.qbetter === 'high') {
@@ -59,8 +59,8 @@
 
             @if (!enc?.hw) {
               <div class="field">
-                <label>Preset</label>
-                <select [ngModel]="s.preset" (ngModelChange)="update({preset: $event})">
+                <label for="setPreset">Preset</label>
+                <select id="setPreset" [ngModel]="s.preset" (ngModelChange)="update({preset: $event})">
                   @for (p of ['ultrafast','superfast','veryfast','faster','fast','medium','slow','slower','veryslow']; track p) {
                     <option [value]="p">{{ p }}</option>
                   }
@@ -70,11 +70,11 @@
 
             @if (enc?.cores) {
               <div class="field">
-                <label>CPU cores: {{ cores }} / {{ store.cpuCount() }}</label>
+                <label for="setCores">CPU cores: {{ cores }} / {{ store.cpuCount() }}</label>
                 <div class="rangewrap">
-                  <input type="range" min="1" [max]="store.cpuCount()"
+                  <input id="setCores" type="range" min="1" [max]="store.cpuCount()"
                     [ngModel]="cores" (ngModelChange)="update({threads: +$event})" />
-                  <input type="number" min="1" [max]="store.cpuCount()" class="num-input"
+                  <input type="number" min="1" [max]="store.cpuCount()" class="num-input" aria-label="CPU cores value"
                     [ngModel]="cores" (ngModelChange)="update({threads: +$event})" />
                 </div>
                 <small>How many CPU cores the software encoder may use — {{ store.cpuCount() }} detected.
@@ -83,8 +83,8 @@
             }
 
             <div class="field">
-              <label>Max Resolution</label>
-              <select [ngModel]="s.resolution" (ngModelChange)="update({resolution: $event})">
+              <label for="setResolution">Max Resolution</label>
+              <select id="setResolution" [ngModel]="s.resolution" (ngModelChange)="update({resolution: $event})">
                 <option value="original">Original (no downscale)</option>
                 <option value="2160">4K · 2160p</option>
                 <option value="1440">1440p</option>
@@ -96,8 +96,8 @@
             </div>
 
             <div class="field">
-              <label>Skip Codecs</label>
-              <input type="text" [ngModel]="s.skip_codecs" (ngModelChange)="update({skip_codecs: $event})" />
+              <label for="setSkipCodecs">Skip Codecs</label>
+              <input id="setSkipCodecs" type="text" [ngModel]="s.skip_codecs" (ngModelChange)="update({skip_codecs: $event})" />
             </div>
           </div>
         </details>
@@ -133,11 +133,11 @@
 
             @if (s.photo_format === 'jpeg') {
             <div class="field full">
-              <label>Target Savings: {{ s.photo_target_savings }}%</label>
+              <label for="setTargetSavings">Target Savings: {{ s.photo_target_savings }}%</label>
               <div class="rangewrap">
-                <input type="range" min="5" max="90"
+                <input id="setTargetSavings" type="range" min="5" max="90"
                   [ngModel]="s.photo_target_savings" (ngModelChange)="update({photo_target_savings: +$event})" />
-                <input type="number" min="5" max="95" class="num-input"
+                <input type="number" min="5" max="95" class="num-input" aria-label="Target savings value"
                   [ngModel]="s.photo_target_savings" (ngModelChange)="update({photo_target_savings: +$event})" />
               </div>
               <small>Photos are compressed (JPEG) to achieve approximately this fraction of file size savings.</small>
@@ -159,8 +159,8 @@
           <summary class="text-primary">Live Photo<span class="disclosure-value">{{ liveSummary }}</span></summary>
           <div class="disclosure-body settings-form">
             <div class="field full">
-              <label>Motion video</label>
-              <select [ngModel]="s.motion_action" (ngModelChange)="update({motion_action: $event})">
+              <label for="setMotion">Motion video</label>
+              <select id="setMotion" [ngModel]="s.motion_action" (ngModelChange)="update({motion_action: $event})">
                 <option value="remove">Remove (keep still photo only)</option>
                 <option value="recompress">Recompress (keep it live, smaller, uses the Video settings)</option>
                 <option value="keep">Keep (analyze only, change nothing)</option>
@@ -174,9 +174,9 @@
           <summary class="text-primary">General<span class="disclosure-value">{{ generalSummary }}</span></summary>
           <div class="disclosure-body settings-form">
             <div class="field">
-              <label>Min. Savings: {{ s.min_savings }}%</label>
+              <label for="setMinSavings">Min. Savings: {{ s.min_savings }}%</label>
               <div class="rangewrap">
-                <input type="range" min="0" max="50"
+                <input id="setMinSavings" type="range" min="0" max="50"
                   [ngModel]="s.min_savings" (ngModelChange)="update({min_savings: +$event})" />
               </div>
             </div>

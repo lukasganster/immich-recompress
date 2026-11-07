@@ -70,6 +70,7 @@
   @let st = effectiveStatus(row);
   <div class="cell-center flex items-center justify-center">
     <input type="checkbox"
+      [attr.aria-label]="'Select ' + (row['name'] || 'asset')"
       [checked]="isSelected(row['id'])"
       [disabled]="isLocked(row)"
       [title]="store.isDone(st) ? 'Already optimized' : ''"
