@@ -20,6 +20,7 @@ import { DetailDrawerComponent } from './components/detail-drawer/detail-drawer'
 import { ReviewModalComponent } from './components/review-modal/review-modal';
 import { BrowseDialogComponent } from './components/browse-dialog/browse-dialog';
 import { IconComponent } from './components/icon/icon';
+import { formatDate } from './utils/format-date';
 
 @Component({
   selector: 'app-root',
@@ -36,6 +37,7 @@ import { IconComponent } from './components/icon/icon';
   styleUrl: './app.css',
 })
 export class App implements OnInit {
+  readonly formatDate = formatDate;
   readonly store = inject(StoreService);
   private readonly api = inject(ApiService);
   private readonly events = inject(EventsService);
@@ -68,7 +70,7 @@ export class App implements OnInit {
     const dateFrom = this.store.captureDateFrom();
     const dateTo = this.store.captureDateTo();
     const dates = dateFrom || dateTo
-      ? ` · taken ${dateFrom || 'any time'} to ${dateTo || 'any time'}`
+      ? ` · taken ${dateFrom ? formatDate(dateFrom) : 'any time'} to ${dateTo ? formatDate(dateTo) : 'any time'}`
       : '';
     const metadata = this.store.metadataDescription();
     return `${noun} · ${threshold}${dates}${metadata ? ` · ${metadata}` : ''}`;
