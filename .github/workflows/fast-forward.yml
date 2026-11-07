@@ -1,0 +1,75 @@
+name: Fast-forward main
+
+# GitHub's merge button cannot fast-forward, so a release PR from
+# development to main is merged by commenting /fast-forward on it. main then
+# points at the same commit as development and the release workflow runs.
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+jobs:
+  fast-forward:
+    name: Fast-forward main
+    if: github.event.issue.pull_request && startsWith(github.event.comment.body, '/fast-forward')
+    runs-on: ubuntu-latest
+    # Job level, so other PR comments cannot cancel a pending fast-forward.
+    concurrency:
+      group: fast-forward-main
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Check commenter and pull request
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const repo = context.repo;
+            const username = context.payload.comment.user.login;
+            const { data: access } = await github.rest.repos.getCollaboratorPermissionLevel({ ...repo, username });
+            if (!['admin', 'write'].includes(access.permission)) {
+              throw new Error(`${username} needs write access to fast-forward main.`);
+            }
+            const { data: pr } = await github.rest.pulls.get({ ...repo, pull_number: context.issue.number });
+            const fullName = `${repo.owner}/${repo.repo}`;
+            if (pr.state !== 'open' || pr.base.ref !== 'main' || pr.head.ref !== 'development'
+                || pr.head.repo?.full_name !== fullName) {
+              throw new Error('Only an open PR from development to main can be fast-forwarded.');
+            }
+            core.setOutput('sha', pr.head.sha);
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Push the PR head to main
+        env:
+          SHA: ${{ steps.pr.outputs.sha }}
+        run: |
+          if ! git merge-base --is-ancestor HEAD "$SHA"; then
+            echo "::error::main has commits that are not on development, so it cannot be fast-forwarded."
+            exit 1
+          fi
+          git push origin "$SHA:refs/heads/main"
+      - name: Report failure on the PR
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: context.issue.number,
+              body: `Fast-forward failed, main was not changed. Details: ${url}`,
+            });
+
+  release:
+    needs: fast-forward
+    uses: ./.github/workflows/release.yml
+    permissions:
+      contents: write
+      packages: write
