@@ -1,26 +1,29 @@
-<div class="settings-summary panel">
-  <div class="ss-title">Compression settings</div>
-  <dl class="ss-grid">
-    <dt>Video</dt><dd>{{ videoSummary }}</dd>
-    <dt>Output</dt><dd>{{ outputSummary }}</dd>
-    <dt>Photo</dt><dd>{{ photoSummary }}</dd>
-    <dt>Mode</dt><dd>{{ modeSummary }}</dd>
+<section class="panel" aria-label="Compression settings summary">
+  <div class="panel-head">Compression settings</div>
+  <dl class="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 px-5 pb-4 pt-1 text-sm">
+    <dt class="text-muted">Video</dt><dd class="m-0 min-w-0 text-right font-medium wrap-anywhere">{{ videoSummary }}</dd>
+    <dt class="text-muted">Output</dt><dd class="m-0 min-w-0 text-right font-medium wrap-anywhere">{{ outputSummary }}</dd>
+    <dt class="text-muted">Photo</dt><dd class="m-0 min-w-0 text-right font-medium wrap-anywhere">{{ photoSummary }}</dd>
+    <dt class="text-muted">Mode</dt>
+    <dd class="m-0 min-w-0 text-right font-medium wrap-anywhere" [class.text-danger]="s.replace && !s.confirm">{{ modeSummary }}</dd>
   </dl>
-</div>
+</section>
 
 @if (open()) {
   <div class="modal-overlay" (click)="open.set(false)"></div>
   <div class="modal" cdkTrapFocus [cdkTrapFocusAutoCapture]="true"
     role="dialog" aria-modal="true" aria-label="Compression settings">
     <div class="modal-head">
-      <strong>Compression settings</strong>
-      <button class="icon-btn" (click)="open.set(false)" aria-label="Close">✕</button>
+      <h2 class="m-0 text-xl font-medium">Compression settings</h2>
+      <button class="icon-btn" (click)="open.set(false)" aria-label="Close">
+        <app-icon [path]="mdiClose" [size]="22" />
+      </button>
     </div>
 
     <div class="modal-body">
       <div class="disclosures">
         <details class="disclosure">
-          <summary>Video<span class="disclosure-value">{{ videoSummary }}</span></summary>
+          <summary class="text-primary">Video<span class="disclosure-value">{{ videoSummary }}</span></summary>
           <div class="disclosure-body settings-form">
             <div class="field">
               <label>Encoder</label>
@@ -100,7 +103,7 @@
         </details>
 
         <details class="disclosure" [open]="expandPhoto()">
-          <summary>Photo<span class="disclosure-value" [class.warn]="jxlBlocked">{{ jxlBlocked ? 'JPEG XL unavailable' : photoSummary }}</span></summary>
+          <summary class="text-primary">Photo<span class="disclosure-value" [class.warn]="jxlBlocked">{{ jxlBlocked ? 'JPEG XL unavailable' : photoSummary }}</span></summary>
           <div class="disclosure-body settings-form">
             <div class="field full">
               <label for="photoFormat">Output format</label>
@@ -142,18 +145,18 @@
 
             <div class="field full">
               <div class="toggle">
-                <input type="checkbox" id="compressRaw"
-                  [ngModel]="s.compress_raw" (ngModelChange)="update({compress_raw: $event})" />
                 <label for="compressRaw">Convert RAW (DNG/CR2/NEF/…) to JPEG</label>
+                <input type="checkbox" role="switch" class="switch" id="compressRaw"
+                  [ngModel]="s.compress_raw" (ngModelChange)="update({compress_raw: $event})" />
               </div>
-              <small class="warn">Converts RAW → JPEG and replaces the original. Requires sips (macOS).</small>
+              <small class="danger">Converts RAW → JPEG and replaces the original. Requires sips (macOS).</small>
             </div>
             }
           </div>
         </details>
 
         <details class="disclosure">
-          <summary>Live Photo<span class="disclosure-value">{{ liveSummary }}</span></summary>
+          <summary class="text-primary">Live Photo<span class="disclosure-value">{{ liveSummary }}</span></summary>
           <div class="disclosure-body settings-form">
             <div class="field full">
               <label>Motion video</label>
@@ -168,7 +171,7 @@
         </details>
 
         <details class="disclosure">
-          <summary>General<span class="disclosure-value">{{ generalSummary }}</span></summary>
+          <summary class="text-primary">General<span class="disclosure-value">{{ generalSummary }}</span></summary>
           <div class="disclosure-body settings-form">
             <div class="field">
               <label>Min. Savings: {{ s.min_savings }}%</label>
@@ -180,17 +183,17 @@
 
             <div class="field">
               <div class="toggle">
-                <input type="checkbox" id="setReplace"
-                  [ngModel]="s.replace" (ngModelChange)="update({replace: $event})" />
                 <label for="setReplace">Replace Original</label>
+                <input type="checkbox" role="switch" class="switch danger" id="setReplace"
+                  [ngModel]="s.replace" (ngModelChange)="update({replace: $event})" />
               </div>
             </div>
 
             <div class="field">
               <div class="toggle">
-                <input type="checkbox" id="setConfirm"
-                  [ngModel]="s.confirm" (ngModelChange)="update({confirm: $event})" />
                 <label for="setConfirm">Replace only after review</label>
+                <input type="checkbox" role="switch" class="switch" id="setConfirm"
+                  [ngModel]="s.confirm" (ngModelChange)="update({confirm: $event})" />
               </div>
             </div>
           </div>

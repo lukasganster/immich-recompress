@@ -1,19 +1,23 @@
 import { ChangeDetectionStrategy, Component, HostListener, inject, signal } from '@angular/core';
 import { CdkTrapFocus } from '@angular/cdk/a11y';
 import { FormsModule } from '@angular/forms';
+import { mdiClose } from '@mdi/js';
+import { IconComponent } from '../icon/icon';
 import { StoreService } from '../../services/store.service';
 import { EncoderInfo, Settings } from '../../models/api.models';
 
 @Component({
   selector: 'app-settings-panel',
   standalone: true,
-  imports: [FormsModule, CdkTrapFocus],
+  imports: [FormsModule, CdkTrapFocus, IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './settings-panel.html',
   styleUrl: './settings-panel.css',
 })
 export class SettingsPanelComponent {
   readonly store = inject(StoreService);
+
+  readonly mdiClose = mdiClose;
 
   /** Whether the edit dialog is open. */
   readonly open = signal(false);

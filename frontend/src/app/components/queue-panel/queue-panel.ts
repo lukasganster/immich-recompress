@@ -1,5 +1,15 @@
 import { ChangeDetectionStrategy, Component, effect, inject, output, signal } from '@angular/core';
 import { NgClass } from '@angular/common';
+import {
+  mdiArrowRight,
+  mdiCheck,
+  mdiClose,
+  mdiDeleteOutline,
+  mdiEyeOutline,
+  mdiFileReplaceOutline,
+  mdiOpenInNew,
+} from '@mdi/js';
+import { IconComponent } from '../icon/icon';
 import { StoreService } from '../../services/store.service';
 import { ApiService } from '../../services/api.service';
 import { JobPublic, JobStatus } from '../../models/api.models';
@@ -7,7 +17,7 @@ import { JobPublic, JobStatus } from '../../models/api.models';
 @Component({
   selector: 'app-queue-panel',
   standalone: true,
-  imports: [NgClass],
+  imports: [NgClass, IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './queue-panel.html',
   styleUrl: './queue-panel.css',
@@ -15,6 +25,14 @@ import { JobPublic, JobStatus } from '../../models/api.models';
 export class QueuePanelComponent {
   readonly store = inject(StoreService);
   private readonly api = inject(ApiService);
+
+  readonly mdiArrowRight = mdiArrowRight;
+  readonly mdiCheck = mdiCheck;
+  readonly mdiClose = mdiClose;
+  readonly mdiDeleteOutline = mdiDeleteOutline;
+  readonly mdiEyeOutline = mdiEyeOutline;
+  readonly mdiFileReplaceOutline = mdiFileReplaceOutline;
+  readonly mdiOpenInNew = mdiOpenInNew;
 
   readonly reviewRequested = output<string>();
   readonly jobsRefresh = output<void>();
@@ -96,7 +114,7 @@ export class QueuePanelComponent {
       idle: '–', queued: 'queued', encoding: 'encoding', downloading: 'downloading',
       replacing: 'replacing', done: 'done', downloaded: 'downloaded', encoded: 'encoded',
       review: 'review', skipped: 'skipped', error: 'error', cancelled: 'cancelled',
-      discarded: 'discarded', processed: '✓ done',
+      discarded: 'discarded', processed: 'done',
     };
     return map[status] ?? status;
   }
@@ -164,6 +182,11 @@ export class QueuePanelComponent {
   /** The original, straight from Immich. */
   thumbUrl(id: string): string {
     return this.api.thumbnailUrl(id, 'preview');
+  }
+
+  /** The small Immich thumbnail used by the job rows. */
+  rowThumbUrl(id: string): string {
+    return this.api.thumbnailUrl(id);
   }
 
   /** The encoded output itself, so the "after" pane shows the actual file
