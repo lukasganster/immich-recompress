@@ -295,6 +295,19 @@ export class StoreService {
     } catch { /* ignore */ }
   }
 
+  /** A click on a sortable column head. The active column flips direction;
+   *  a new column starts the way people usually read it: names A to Z,
+   *  everything else largest, longest or newest first. Always back to page 1. */
+  toggleSort(field: SortField): void {
+    if (this.sort() === field) {
+      this.order.set(this.order() === 'asc' ? 'desc' : 'asc');
+    } else {
+      this.sort.set(field);
+      this.order.set(field === 'name' ? 'asc' : 'desc');
+    }
+    this.page.set(1);
+  }
+
   saveBrowse(): void {
     try {
       localStorage.setItem(LS_BROWSE, JSON.stringify({

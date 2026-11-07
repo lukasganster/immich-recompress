@@ -46,6 +46,29 @@ describe('StoreService', () => {
     expect(store.perPageOptions()).not.toContain(MAX_PER_PAGE + 1);
   });
 
+  it('toggleSort flips the direction of the active column', () => {
+    store.page.set(3);
+    expect(store.sort()).toBe('size');
+    expect(store.order()).toBe('desc');
+
+    store.toggleSort('size');
+    expect(store.order()).toBe('asc');
+    expect(store.page()).toBe(1);
+
+    store.toggleSort('size');
+    expect(store.order()).toBe('desc');
+  });
+
+  it('toggleSort starts a new column largest first, or A to Z for names', () => {
+    store.toggleSort('date');
+    expect(store.sort()).toBe('date');
+    expect(store.order()).toBe('desc');
+
+    store.toggleSort('name');
+    expect(store.sort()).toBe('name');
+    expect(store.order()).toBe('asc');
+  });
+
   it('toggleSelect adds then removes, and selectionBytes tracks selected sizes', () => {
     store.videos.set([vs({ id: 'a', size: 1000 }), vs({ id: 'b', size: 250 })]);
 
