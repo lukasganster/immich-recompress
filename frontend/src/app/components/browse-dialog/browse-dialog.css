@@ -1,150 +1,49 @@
-/* Select media: what to scan Immich for, and above what size.
-   Shares the settings dialog's field vocabulary. See DESIGN.md. */
+@reference "../../../styles.css";
 
-:host { display: contents; }
+/* Select media, after Immich's search filter modal. Layout lives in the
+   template as Tailwind utilities; these are the few repeated pieces. */
 
-.browse-cols {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 220px;
-  gap: 0 var(--pad);
+:host {
+  display: contents;
 }
 
-.browse-main {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-width: 0;
+.section-label {
+  @apply text-sm font-medium text-muted;
 }
-
-.browse-side {
-  padding-left: var(--pad);
-  border-left: 1px solid var(--rule);
-  min-width: 0;
-}
-
-.side-label {
-  display: block;
-  margin-bottom: 5px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-}
-
-.side-hint { margin: 0 0 10px; }
-
-.field { display: flex; flex-direction: column; gap: 6px; }
-.field > label { font-size: 12px; font-weight: 600; }
-
-.type-field .seg { align-self: flex-start; }
-
-.rangewrap {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  max-width: 420px;
-}
-
-.rangewrap input[type='range'] {
-  flex: 1;
-  min-width: 0;
-  accent-color: var(--ink);
-}
-
-.num-input { width: 78px; text-align: right; }
 
 .hint {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--ink-dim);
-  max-width: 70ch;
+  @apply m-0 max-w-[70ch] text-xs leading-normal text-muted;
 }
 
-.link-input {
-  width: 100%;
-  resize: vertical;
-  font-size: 12px;
-  line-height: 1.5;
+.error {
+  @apply m-0 text-xs text-danger;
 }
 
-.date-label-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
+.seg-choice {
+  @apply inline-flex items-center gap-1.5;
 }
 
-.date-label-row > label { font-size: 12px; font-weight: 600; }
-
-.date-inputs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+/* Library rows: rounded, hoverable, tinted when checked. */
+.select-row {
+  @apply flex min-w-0 cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2 transition-colors hover:bg-hover;
+}
+.select-row:has(input:checked) {
+  @apply bg-primary/10;
 }
 
-.date-inputs label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--ink-dim);
+/* People: Immich-style chips with a round avatar. */
+.person-chip {
+  @apply inline-flex max-w-full cursor-pointer items-center gap-2 rounded-full border border-line bg-app py-1 pr-3 pl-1 text-sm transition-colors hover:bg-hover;
 }
-
-.date-inputs input { min-width: 0; }
-.date-error { margin: 0; font-size: 12px; color: var(--destruct); }
-
-.key-list {
-  display: flex;
-  flex-direction: column;
-  max-height: 260px;
-  overflow-y: auto;
+.person-chip:has(input:checked) {
+  @apply border-primary bg-primary/10 text-primary;
 }
-
-.key-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 0;
-  border-bottom: 1px solid var(--rule);
-  cursor: pointer;
-  min-width: 0;
+.person-chip:has(input:focus-visible) {
+  @apply outline-2 outline-offset-2 outline-primary;
 }
-
-.key-row:last-child { border-bottom: 0; }
-
-.key-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.person-chip .avatar {
+  @apply inline-flex size-7 flex-none items-center justify-center rounded-full bg-field text-xs font-semibold text-fg uppercase;
 }
-
-.push-left { margin-right: auto; }
-
-.metadata-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding-top: 16px;
-  border-top: 1px solid var(--rule);
-}
-
-.metadata-fields .side-label { margin: 0; }
-.metadata-fields select { width: 100%; min-width: 0; }
-.metadata-options { max-height: 144px; overflow-y: auto; }
-.metadata-options:empty { display: none; }
-.metadata-options small { color: var(--ink-dim); }
-
-/* Native disclosure: closed on every open of the dialog, and keyboard
-   operable without any state of ours. */
-.location-inputs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.location-inputs label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 600; }
-.location-inputs input { width: 100%; min-width: 0; }
-
-@media (max-width: 720px) {
-  .browse-cols { grid-template-columns: minmax(0, 1fr); gap: 16px; }
-  .browse-side { padding-left: 0; border-left: 0; border-top: 1px solid var(--rule); padding-top: 14px; }
-  .location-inputs { grid-template-columns: minmax(0, 1fr); }
+.person-chip:has(input:checked) .avatar {
+  @apply bg-primary text-primary-fg;
 }

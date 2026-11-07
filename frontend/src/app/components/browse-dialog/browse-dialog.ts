@@ -4,12 +4,27 @@ import { FormsModule } from '@angular/forms';
 import { StoreService } from '../../services/store.service';
 import { ApiService } from '../../services/api.service';
 import { Subscription } from 'rxjs';
+import {
+  mdiAccountCircleOutline,
+  mdiAccountMultipleOutline,
+  mdiCheck,
+  mdiClose,
+  mdiHistory,
+  mdiImageAlbum,
+  mdiImageOutline,
+  mdiLinkVariant,
+  mdiMapMarkerOutline,
+  mdiMotionPlayOutline,
+  mdiPlus,
+  mdiVideoOutline,
+} from '@mdi/js';
+import { IconComponent } from '../icon/icon';
 import { BrowseOption, MediaType, MetadataFilter, emptyMetadataFilter } from '../../models/api.models';
 
 @Component({
   selector: 'app-browse-dialog',
   standalone: true,
-  imports: [FormsModule, CdkTrapFocus],
+  imports: [FormsModule, CdkTrapFocus, IconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './browse-dialog.html',
   styleUrl: './browse-dialog.css',
@@ -19,6 +34,19 @@ export class BrowseDialogComponent implements OnDestroy {
   private readonly api = inject(ApiService);
   readonly apply = output<void>();
   readonly cancel = output<void>();
+
+  readonly mdiAccountCircleOutline = mdiAccountCircleOutline;
+  readonly mdiAccountMultipleOutline = mdiAccountMultipleOutline;
+  readonly mdiCheck = mdiCheck;
+  readonly mdiClose = mdiClose;
+  readonly mdiHistory = mdiHistory;
+  readonly mdiImageAlbum = mdiImageAlbum;
+  readonly mdiImageOutline = mdiImageOutline;
+  readonly mdiLinkVariant = mdiLinkVariant;
+  readonly mdiMapMarkerOutline = mdiMapMarkerOutline;
+  readonly mdiMotionPlayOutline = mdiMotionPlayOutline;
+  readonly mdiPlus = mdiPlus;
+  readonly mdiVideoOutline = mdiVideoOutline;
 
   open = signal(false);
   // 'link' is a UI-only tab (add by link/ID), not a media type.
@@ -98,6 +126,11 @@ export class BrowseDialogComponent implements OnDestroy {
   togglePerson(id: string): void {
     this.localMetadata.update(m => ({ ...m, personIds: m.personIds.includes(id)
       ? m.personIds.filter(p => p !== id) : [...m.personIds, id] }));
+  }
+
+  /** First letter of a name, for the round avatar on a person chip. */
+  initial(name: string): string {
+    return name.trim().charAt(0) || '?';
   }
 
   optionLibraries(option: BrowseOption): string {
