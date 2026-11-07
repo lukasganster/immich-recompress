@@ -7,7 +7,13 @@ import { UiGridComponent, GridOptions, GridColumnDef, GridCellTemplateContext } 
 import { Subscription } from 'rxjs';
 import { MAX_PER_PAGE, StoreService } from '../../services/store.service';
 import { ApiService } from '../../services/api.service';
-import { VideoSummary, JobStatus } from '../../models/api.models';
+import { VideoSummary, JobStatus, SortField, SortOrder } from '../../models/api.models';
+
+/** The backend sorts the whole result set and returns one page of it. The
+ *  grid would otherwise re-sort that page by its own rules (the Length
+ *  column holds text like "1:05", which sorts wrongly as a string). A stable
+ *  sort that never reorders keeps the server's order. */
+const keepServerOrder = (): number => 0;
 
 @Component({
   selector: 'app-media-grid',
@@ -98,21 +104,21 @@ export class MediaGridComponent implements OnInit, OnDestroy {
         cellTemplate: this.selectTpl() as TemplateRef<GridCellTemplateContext>,
       },
       {
-        name: 'name', displayName: 'Name', field: 'name', enableSorting: true,
+        name: 'name', displayName: 'Name', field: 'name', enableSorting: true, sortingAlgorithm: keepServerOrder,
         cellTemplate: this.nameTpl() as TemplateRef<GridCellTemplateContext>,
         width: widths.name,
       },
       {
-        name: 'size', displayName: 'Size', field: 'size', enableSorting: true,
+        name: 'size', displayName: 'Size', field: 'size', enableSorting: true, sortingAlgorithm: keepServerOrder,
         cellTemplate: this.sizeTpl() as TemplateRef<GridCellTemplateContext>,
         width: widths.size,
       },
       { name: 'resolution', displayName: 'Resolution', field: 'resolution', enableSorting: false, width: widths.resolution },
       ...(hideClipCols ? [] : [
-        { name: 'duration', displayName: 'Length', field: 'duration_human', enableSorting: true, width: widths.duration } as GridColumnDef,
+        { name: 'duration', displayName: 'Length', field: 'duration_human', enableSorting: true, sortingAlgorithm: keepServerOrder, width: widths.duration } as GridColumnDef,
         { name: 'codec', displayName: 'Codec', field: 'codec', enableSorting: false, width: widths.codec } as GridColumnDef,
       ]),
-      { name: 'date', displayName: 'Date', field: 'date', enableSorting: true, width: widths.date,
+      { name: 'date', displayName: 'Date', field: 'date', enableSorting: true, sortingAlgorithm: keepServerOrder, width: widths.date,
         formatter: (v) => this.formatCaptureDate(v) },
       { name: 'owner_name', displayName: 'User', field: 'owner_name', enableSorting: false, width: widths.user },
       {
@@ -146,20 +152,30 @@ export class MediaGridComponent implements OnInit, OnDestroy {
         const gridApi = api as {
           core?: {
             on?: { sortChanged?: (cb: (col: string | null, dir: string) => void) => (() => void) };
+            sortColumn?: (col: string, dir: SortOrder) => void;
           };
         };
         // ui-grid calls onRegisterApi again whenever reactive options change.
         // Replace the old sort listener so loads do not multiply over time.
         this.sortUnsubscribe?.();
         this.sortUnsubscribe = gridApi.core?.on?.sortChanged?.((col, dir) => {
-          if (!col) return;
-          const fieldMap: Record<string, string> = { name: 'name', size: 'size', duration: 'duration', date: 'date' };
-          const sortField = fieldMap[col] ?? 'size';
-          this.store.sort.set(sortField as never);
-          this.store.order.set(dir === 'asc' ? 'asc' : 'desc');
-          this.store.page.set(1);
+          const field = MediaGridComponent.sortFields[col ?? ''];
+          if (!field) return;
+          // The echo of the seed below, not a click.
+          if (field === this.store.sort() && dir === this.store.order()) return;
+          // The grid is rebuilt after every load, so its own idea of the
+          // next direction always starts from scratch. The store owns it.
+          this.store.toggleSort(field);
           this.load();
         }) ?? null;
+        // Show the server's sort on the fresh grid, so the header icon is
+        // right and the next click on that column flips it. Deferred because
+        // sorting from inside onRegisterApi would re-enter it.
+        const sortCol = this.store.sort();
+        const order = this.store.order();
+        if (cols.some(c => c.name === sortCol)) {
+          setTimeout(() => gridApi.core?.sortColumn?.(sortCol, order), 0);
+        }
       },
     };
   });
@@ -195,6 +211,11 @@ export class MediaGridComponent implements OnInit, OnDestroy {
     if (!root || root.adoptedStyleSheets.includes(MediaGridComponent.shadowSheet)) return;
     root.adoptedStyleSheets = [...root.adoptedStyleSheets, MediaGridComponent.shadowSheet];
   }
+
+  /** Grid column name to the API's sort field, for the sortable columns. */
+  private static readonly sortFields: Record<string, SortField> = {
+    name: 'name', size: 'size', duration: 'duration', date: 'date',
+  };
 
   private static readonly shadowSheet = (() => {
     const sheet = new CSSStyleSheet();
