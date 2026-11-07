@@ -98,7 +98,7 @@
 
 <!-- The size, written and drawn. The rule is measured against the largest
      row on the page, so the expensive files read as a shape down the
-     column before any number is read. See DESIGN.md. -->
+     column before any number is read. -->
 <ng-template #sizeTpl let-row="row">
   <div class="qty" [ngClass]="sizeInk(row)">
     <span class="v">{{ humanMB($any(row['size'])) }}</span>

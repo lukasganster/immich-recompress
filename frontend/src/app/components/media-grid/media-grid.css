@@ -2,7 +2,7 @@
    hairline separators, and the drawn quantity in the size column. Most of
    the look is Tailwind in the template; the grid itself is themed in
    src/styles/ui-grid.css and in the sheet media-grid.ts adopts into the
-   grid's shadow root. See DESIGN.md. */
+   grid's shadow root. */
 
 :host {
   display: flex;

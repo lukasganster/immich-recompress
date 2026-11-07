@@ -132,7 +132,7 @@ export class MediaGridComponent implements OnInit, OnDestroy {
     const hideClipCols = this.store.media() !== 'video';  // duration/codec only apply to videos
     // Size is wide because it carries the drawn quantity as well as the
     // number — the rule beside each value is what makes the expensive rows
-    // visible before anything is read. See DESIGN.md.
+    // visible before anything is read.
     const widths = hideClipCols
       ? { select: this.selectColWidth, name: '27%', size: '17%', resolution: '11%', date: '11%', user: '10%', status: '13%', actions: '7%' }
       : { select: this.selectColWidth, name: '18%', size: '14%', resolution: '9%', duration: '7%', codec: '10%', date: '10%', user: '9%', status: '10%', actions: '9%' };
@@ -457,7 +457,7 @@ export class MediaGridComponent implements OnInit, OnDestroy {
     return Math.max(1, (size / max) * 100);
   }
 
-  /** Which meaning-bound ink the rule wears. See DESIGN.md. */
+  /** Which meaning-bound ink the rule wears. */
   sizeInk(row: Record<string, unknown>): string {
     const st = this.effectiveStatus(row);
     if (this.store.isDone(st)) return 'done';
