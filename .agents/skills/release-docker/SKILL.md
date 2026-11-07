@@ -1,67 +1,64 @@
 ---
 name: release-docker
-description: Configure or operate release PRs, GitHub releases, and GHCR publishing for immich-recompress, including failed publish recovery.
+description: Configure or operate releases, GitHub releases, and GHCR publishing for immich-recompress, including failed publish recovery.
 ---
 
 # Releases and Docker publishing
 
 ## Release flow
 
-Follow the PR rules in the root `AGENTS.md`. Release Please maintains a release
-PR against `main`, collecting changes since the previous release. Its merge is
-the release button: `.github/workflows/release.yml` creates the tag and GitHub
-release, then calls `.github/workflows/publish.yml` directly to publish GHCR.
+Follow the PR rules in the root `AGENTS.md`. `main` only ever moves by
+fast-forward to a commit of `development`, and every move of `main` runs
+`.github/workflows/release.yml`. That workflow runs
+`.github/scripts/release-plan.mjs`, which reads the commits since the newest
+stable tag on `main`: a breaking change bumps major, `feat` bumps minor, and
+`fix`, `perf` or `revert` bump patch. Other types produce no release. When a
+release is due, the workflow creates the tag and GitHub release with the
+generated notes, then calls `.github/workflows/publish.yml` directly to publish
+GHCR.
 
-Before releasing, inspect those workflows and the repository settings. The
-documented flow becomes active when the setup PR is merged and the GitHub
-settings below are enabled. If setup is incomplete, report the missing piece
-and prepare its fix through a PR.
-
-1. Use Conventional Commits in ordinary PR titles. `fix:` increments patch,
-   `feat:` increments minor, and a breaking change increments major. A PR that
-   contains only documentation or maintenance need not produce a release.
-2. Leave version bumps to the release PR. The root `package.json` is the app
-   version; `frontend/package.json` describes the internal frontend package.
-   `.release-please-manifest.json` tracks the last released version. The initial
-   bootstrap commit in `release-please-config.json` bounds the first changelog.
-3. Review the release PR's version and changelog. Merge it when publication is
-   requested. Publishing starts automatically after that merge.
+1. Check what the next release would be before opening the PR:
+   `node .github/scripts/release-plan.mjs --to origin/development`.
+2. Open a PR from `development` to `main` and wait for CI.
+3. Comment `/fast-forward` on the PR when publication is requested.
+   `.github/workflows/fast-forward.yml` pushes the PR head to `main`, GitHub
+   marks the PR as merged, and the workflow calls the Release workflow. A
+   maintainer can do the same from a clone with
+   `git push origin <pr-head-sha>:main`, which triggers the Release workflow
+   through the push.
 4. Verify the GitHub release, workflow result, and image manifest before
    reporting that the release and container are ready. The GitHub release is
    created before the container build, so its existence alone is insufficient.
-5. Synchronize the release back to `development` through a PR using the merge
-   method described in `AGENTS.md`, carrying the released root version,
-   changelog, and manifest back to development.
+
+The merge button on a PR into `main` always creates new commits, which would
+split `main` from `development`. If that happened, fast-forward `development`
+to `main` through a PR so both point at one commit again.
+
+Versions live in tags only. The root `package.json` has no version and
+`CHANGELOG.md` covers releases up to 1.4.1; later notes are on GitHub Releases.
 
 ## Repository setup
 
 - Set `development` as the default branch and protect both `development` and
-  `main` with active rulesets requiring PRs and the checks named in
-  `.github/workflows/ci.yml`. Block force pushes and deletion. Keep the bypass
-  lists empty. A solo maintainer can require PRs with zero review approvals.
-- Allow squash merges and merge commits at repository level. Restrict `main`
-  to merge commits so promotion PRs retain individual Conventional Commits.
-  Allow both methods on `development`: squash ordinary PRs using the PR title,
-  and merge synchronization PRs from `main` to preserve the shared history.
-- Keep the Release workflow's trigger and Release Please's `target-branch` on
-  `main`. CI runs for PRs and pushes to both long-lived branches. Merges into
-  `development` collect work for a future promotion PR; they do not release it.
-- Under Settings > Actions > General, enable "Allow GitHub Actions to create
-  and approve pull requests". Keep the default token permissions read-only;
-  the workflows grant the write permissions needed by each job.
-- The default `GITHUB_TOKEN` needs no additional secret. CI on an automatically
-  created release PR requires the maintainer to select "Approve workflows to
-  run". A GitHub App installation token can remove that additional step if the
-  user wants it; app credentials must be configured before changing the token.
-- Tags or releases created with `GITHUB_TOKEN` do not start another push or
-  release workflow. Preserve the direct reusable-workflow call for publishing.
+  `main` with active rulesets requiring PRs, linear history, and the checks
+  named in `.github/workflows/ci.yml`. Block force pushes and deletion. Keep
+  the bypass lists empty. A solo maintainer can require PRs with zero review
+  approvals.
+- Allow only rebase merges at repository level and in the `development`
+  ruleset. The rulesets accept a fast-forward push of a PR head whose required
+  checks passed; that is how `main` moves.
+- Under Settings > Actions > General, keep the default token permissions
+  read-only; the workflows grant the write permissions needed by each job.
+- The default `GITHUB_TOKEN` needs no additional secret. Pushes, tags, and
+  releases created with it do not start other workflows, so the fast-forward
+  and release workflows call their successors directly. Preserve those calls.
 
 ## Image contract
 
 The public image is `ghcr.io/lukasganster/immich-recompress`, built for
 `linux/amd64` and `linux/arm64`. The publisher verifies that the release is
-published, the tag matches the root version, and the commit belongs to `main`.
-It runs CI for that exact commit before building the image.
+published and the tag commit belongs to `main`. It runs CI for that exact
+commit before building the image.
 
 Stable releases publish the full version, major.minor, `latest`, and a commit
 tag. Prereleases publish the full prerelease version and commit tag only. The
@@ -75,10 +72,18 @@ authenticating reverse proxy protects this app's media replacement operations.
 ## Verification and recovery
 
 Use `gh run list --workflow release.yml` and `gh run view <run-id> --log-failed`
-to inspect the release workflow. Check the release with
+to inspect the release workflow; after a `/fast-forward`, the run is listed
+under the Fast-forward main workflow. Check the release with
 `gh release view <tag> --json tagName,isDraft,isPrerelease,url` and inspect both
 image platforms with
 `docker buildx imagetools inspect ghcr.io/lukasganster/immich-recompress:<version>`.
+
+If the fast-forward fails, the workflow comments on the PR and `main` is
+unchanged. Fix the cause and comment `/fast-forward` again.
+
+If the release workflow fails before creating a GitHub release, fix the cause
+and run it again with `gh workflow run release.yml --ref main`. It finds the
+same commits and creates the missing release.
 
 For a failed container publish, inspect and fix the failure, then use
 Actions > Publish Docker image > Run workflow on `main`, supplying the existing
@@ -94,7 +99,3 @@ stable image tags, preventing an older recovery from downgrading `latest`.
 If recovery fails again for the same reason, report the failure and required
 fix instead of repeatedly publishing. Keep release tags in place and prepare
 source or workflow fixes through a PR.
-
-If the release workflow fails before creating a GitHub release, inspect the
-failure and rerun the Release workflow on `main` after fixing it. If the release
-already exists, use the publisher recovery above.
