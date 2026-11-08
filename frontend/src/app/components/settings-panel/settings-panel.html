@@ -4,6 +4,9 @@
     <dt class="text-muted">Video</dt><dd class="m-0 min-w-0 text-right font-medium wrap-anywhere">{{ videoSummary }}</dd>
     <dt class="text-muted">Output</dt><dd class="m-0 min-w-0 text-right font-medium wrap-anywhere">{{ outputSummary }}</dd>
     <dt class="text-muted">Photo</dt><dd class="m-0 min-w-0 text-right font-medium wrap-anywhere">{{ photoSummary }}</dd>
+    @if (skipSummary; as skip) {
+      <dt class="text-muted">Skip</dt><dd class="m-0 min-w-0 text-right font-medium wrap-anywhere">{{ skip }}</dd>
+    }
     <dt class="text-muted">Mode</dt>
     <dd class="m-0 min-w-0 text-right font-medium wrap-anywhere" [class.text-danger]="s.replace && !s.confirm">{{ modeSummary }}</dd>
   </dl>

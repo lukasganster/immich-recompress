@@ -5,6 +5,7 @@ import { mdiClose } from '@mdi/js';
 import { IconComponent } from '../icon/icon';
 import { StoreService } from '../../services/store.service';
 import { EncoderInfo, Settings } from '../../models/api.models';
+import { codecLabel } from '../../utils/codec-label';
 
 @Component({
   selector: 'app-settings-panel',
@@ -99,6 +100,12 @@ export class SettingsPanelComponent {
 
   get generalSummary(): string {
     return `${this.modeSummary} · min. ${this.s.min_savings}% savings`;
+  }
+
+  /** Codecs on the skip list, e.g. "HEVC, AV1"; empty when nothing is skipped. */
+  get skipSummary(): string {
+    return this.s.skip_codecs.split(',').map(c => c.trim()).filter(Boolean)
+      .map(codecLabel).join(', ');
   }
 
   get modeSummary(): string {
