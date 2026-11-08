@@ -94,3 +94,25 @@ describe('Photo output settings', () => {
     expect(photo.querySelector('.disclosure-value')!.classList.contains('warn')).toBe(false);
   });
 });
+
+describe('Compression settings summary', () => {
+  const summaryRow = (element: HTMLElement, term: string) => {
+    const dt = [...element.querySelectorAll('dt')].find(d => d.textContent!.trim() === term);
+    return dt?.nextElementSibling?.textContent!.trim();
+  };
+  const render = (skipCodecs: string) => {
+    TestBed.configureTestingModule({ imports: [SettingsPanelComponent] });
+    const fixture = TestBed.createComponent(SettingsPanelComponent);
+    TestBed.inject(StoreService).settings.update(s => ({ ...s, skip_codecs: skipCodecs }));
+    fixture.detectChanges();
+    return fixture.nativeElement as HTMLElement;
+  };
+
+  it('lists the codecs that will be skipped', () => {
+    expect(summaryRow(render('hevc, av1,'), 'Skip')).toBe('HEVC, AV1');
+  });
+
+  it('leaves the row out when nothing is skipped', () => {
+    expect(summaryRow(render(' , '), 'Skip')).toBeUndefined();
+  });
+});
