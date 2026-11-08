@@ -17,8 +17,14 @@ release is due, the workflow creates the tag and GitHub release with the
 generated notes, then calls `.github/workflows/publish.yml` directly to publish
 GHCR.
 
-1. Check what the next release would be before opening the PR:
-   `node .github/scripts/release-plan.mjs --to origin/development`.
+1. Add the release to `CHANGELOG.md` through a PR into `development`. On a
+   branch from `origin/development`, run
+   `node .github/scripts/release-plan.mjs --changelog CHANGELOG.md`, confirm
+   the planned version, and commit the file as
+   `docs(changelog): add X.Y.Z`. A `docs` commit does not change the plan.
+   When no release is due, the script says so and leaves the file alone. If
+   more commits reach `development` before the fast-forward, run it again:
+   it replaces the section, including when the version has moved.
 2. Open a PR from `development` to `main` and wait for CI.
 3. Comment `/fast-forward` on the PR when publication is requested.
    `.github/workflows/fast-forward.yml` pushes the PR head to `main`, GitHub
@@ -34,8 +40,9 @@ The merge button on a PR into `main` always creates new commits, which would
 split `main` from `development`. If that happened, fast-forward `development`
 to `main` through a PR so both point at one commit again.
 
-Versions live in tags only. The root `package.json` has no version and
-`CHANGELOG.md` covers releases up to 1.4.1; later notes are on GitHub Releases.
+Versions live in tags only; the root `package.json` has no version. The
+`CHANGELOG.md` section and the GitHub release notes come from the same
+commits, so they list the same entries.
 
 ## Repository setup
 
