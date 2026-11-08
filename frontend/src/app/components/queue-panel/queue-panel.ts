@@ -13,6 +13,7 @@ import { IconComponent } from '../icon/icon';
 import { StoreService } from '../../services/store.service';
 import { ApiService } from '../../services/api.service';
 import { JobPublic, JobStatus } from '../../models/api.models';
+import { statusLabel } from '../../utils/job-status';
 
 @Component({
   selector: 'app-queue-panel',
@@ -109,15 +110,7 @@ export class QueuePanelComponent {
     return mb.toFixed(1) + ' MB';
   }
 
-  statusLabel(status: JobStatus): string {
-    const map: Record<string, string> = {
-      idle: '–', queued: 'queued', encoding: 'encoding', downloading: 'downloading',
-      replacing: 'replacing', done: 'done', downloaded: 'downloaded', encoded: 'encoded',
-      review: 'review', skipped: 'skipped', error: 'error', cancelled: 'cancelled',
-      discarded: 'discarded', processed: 'done',
-    };
-    return map[status] ?? status;
-  }
+  readonly statusLabel = statusLabel;
 
   formatLabel(j: JobPublic): string {
     const from = j.codec ? j.codec.toUpperCase() : '?';

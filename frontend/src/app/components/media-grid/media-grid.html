@@ -111,11 +111,14 @@
   @let st = effectiveStatus(row);
   @let res = ['done','encoded','processed'].includes(st) ? jobResult(v) : null;
   @let pct = res?.oldSize ? Math.round((1 - res!.newSize / res!.oldSize) * 100) : 0;
+  @let job = jobOf(v);
   <!-- The result of a finished job sits beside its state: a second line
-       would not fit the row. The new size is in the title. -->
+       would not fit the row. The new size, or why it was skipped, is in the title. -->
   <div class="flex min-w-0 items-center gap-2 whitespace-nowrap"
-    [title]="res ? '→ ' + humanMB(res.newSize) + ' (−' + pct + '%)' : ''">
-    <span class="badge" [ngClass]="st">{{ statusLabel(st) }}</span>
+    [title]="res ? '→ ' + humanMB(res.newSize) + ' (−' + pct + '%)' : (st === 'skipped' ? job?.log ?? '' : '')">
+    <span class="badge min-w-0 max-w-full" [ngClass]="st">
+      <span class="truncate">{{ statusLabel(st, job?.skip_reason) }}</span>
+    </span>
     @if (res) { <span class="text-xs font-semibold text-success">−{{ pct }}%</span> }
   </div>
 </ng-template>

@@ -199,9 +199,12 @@
             <img [src]="rowThumbUrl(id)" alt="" loading="lazy"
               (error)="$any($event.target).classList.add('hidden')" />
           </div>
+          <!-- A skip below the minimum has both sizes too, but nothing was
+               saved, so it shows its reason rather than a green figure. -->
+          @let saved = j.old_size && j.new_size && j.status !== 'skipped';
           <div class="min-w-0 flex-1">
             <div class="truncate">{{ j.name || id }}</div>
-            @if (j.old_size && j.new_size) {
+            @if (saved) {
               <div class="flex items-center gap-1 text-xs text-muted">
                 <span>{{ humanMB(j.old_size) }}</span>
                 <app-icon [path]="mdiArrowRight" [size]="12" />
@@ -210,12 +213,13 @@
               </div>
             }
           </div>
-          @if (!(j.old_size && j.new_size)) {
-            <span class="badge gap-1" [ngClass]="j.status">
+          @if (!saved) {
+            <span class="badge gap-1" [ngClass]="j.status"
+              [title]="j.status === 'skipped' ? j.log : ''">
               @if (j.status === 'processed' || j.status === 'done') {
                 <app-icon [path]="mdiCheck" [size]="12" />
               }
-              {{ statusLabel(j.status) }}
+              {{ statusLabel(j.status, j.skip_reason) }}
             </span>
           }
           @if (immichUrl) {

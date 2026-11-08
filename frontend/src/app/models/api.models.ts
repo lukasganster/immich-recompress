@@ -100,6 +100,8 @@ export interface JobPublic {
   status: JobStatus;
   progress: number;
   log: string;
+  /** Short reason shown beside "skipped", e.g. "HEVC"; the log has the full sentence. */
+  skip_reason: string | null;
   codec: string | null;
   new_codec: string | null;
   new_id: string | null;
@@ -225,6 +227,7 @@ export interface SseJobUpdate {
   status: JobStatus;
   progress: number;
   log: string;
+  skip_reason?: string | null;
   new_size: number | null;
   savings: number | null;
 }

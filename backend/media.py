@@ -21,24 +21,52 @@ def has_free_space(num_bytes):
 
 
 
-def ffprobe_info(path):
-    """Return (codec, duration_seconds) for a media file via ffprobe."""
+def _run_ffprobe(args):
+    """Run ffprobe with JSON output; return the parsed result or None."""
     if not shutil.which("ffprobe"):
-        return None, None
+        return None
     try:
         out = subprocess.run(
-            ["ffprobe", "-v", "quiet", "-print_format", "json",
-             "-show_format", "-show_streams", path],
+            ["ffprobe", "-v", "quiet", "-print_format", "json", *args],
             capture_output=True, text=True, timeout=60,
         )
-        data = json.loads(out.stdout or "{}")
+        return json.loads(out.stdout or "{}")
     except (subprocess.SubprocessError, json.JSONDecodeError, OSError):
-        return None, None
-    codec = None
+        return None
+
+
+def _video_codec(data):
     for stream in data.get("streams", []):
         if stream.get("codec_type") == "video":
-            codec = stream.get("codec_name")
-            break
+            return stream.get("codec_name")
+    return None
+
+
+# Plain containers only: a playlist format (HLS, DASH) would make ffprobe
+# fetch the URLs inside it and send the API key header along.
+_REMOTE_PROBE_FORMATS = "mov,matroska,avi,mpegts,asf,flv,mpeg"
+
+
+def probe_remote_codec(url, headers):
+    """Return the video codec of a file served over HTTP, or None.
+
+    ffprobe reads only the container header through range requests, so this
+    takes seconds even for a multi-gigabyte original. TLS is verified because
+    ffprobe does not by default and the headers carry the API key.
+    """
+    header_lines = "".join(f"{name}: {value}\r\n" for name, value in headers.items())
+    data = _run_ffprobe(["-tls_verify", "1", "-format_whitelist", _REMOTE_PROBE_FORMATS,
+                         "-headers", header_lines, "-probesize", "65536",
+                         "-analyzeduration", "0", "-show_streams", url])
+    return _video_codec(data) if data else None
+
+
+def ffprobe_info(path):
+    """Return (codec, duration_seconds) for a media file via ffprobe."""
+    data = _run_ffprobe(["-show_format", "-show_streams", path])
+    if data is None:
+        return None, None
+    codec = _video_codec(data)
     duration = None
     fmt = data.get("format", {})
     if fmt.get("duration") is not None:

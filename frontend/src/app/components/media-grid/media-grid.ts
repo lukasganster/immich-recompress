@@ -13,8 +13,9 @@ import { UiGridComponent, GridOptions, GridColumnDef, GridCellTemplateContext } 
 import { Subscription } from 'rxjs';
 import { MAX_PER_PAGE, StoreService } from '../../services/store.service';
 import { ApiService } from '../../services/api.service';
-import { VideoSummary, JobStatus, SortField, SortOrder } from '../../models/api.models';
+import { VideoSummary, JobPublic, JobStatus, SortField, SortOrder } from '../../models/api.models';
 import { formatDate } from '../../utils/format-date';
+import { statusLabel } from '../../utils/job-status';
 
 /** The backend sorts the whole result set and returns one page of it. The
  *  grid would otherwise re-sort that page by its own rules (the Length
@@ -520,14 +521,11 @@ export class MediaGridComponent implements OnInit, OnDestroy {
     return formatDate(value, this.store.captureTimezone());
   }
 
-  statusLabel(status: JobStatus): string {
-    const map: Record<string, string> = {
-      idle: '–', queued: 'queued', encoding: 'encoding', downloading: 'downloading',
-      replacing: 'replacing', done: 'done', downloaded: 'downloaded', encoded: 'encoded',
-      review: 'review', skipped: 'skipped', error: 'error', cancelled: 'cancelled',
-      discarded: 'discarded', processed: 'done',
-    };
-    return map[status] ?? status;
+  readonly statusLabel = statusLabel;
+
+  /** The live job for a row, if one exists in this session. */
+  jobOf(v: VideoSummary): JobPublic | undefined {
+    return this.store.jobs()[v.id];
   }
 
   jobResult(v: VideoSummary): { oldSize: number; newSize: number } | null {
