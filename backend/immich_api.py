@@ -15,6 +15,7 @@ from backend.config import (
     RAW_PHOTO_EXTS, USER_CACHE_TTL, human_duration, human_size, parse_duration,
     utcnow_iso,
 )
+from backend.media import probe_remote_codec
 from backend.state import (
     _asset_key_lock, _asset_key_map, _jobs, _state_lock, is_cancelled,
 )
@@ -196,6 +197,12 @@ def download_original(env, asset_id, dest):
         if attempt < DOWNLOAD_RETRIES:
             time.sleep(min(2 ** attempt, 8))           # 2s, 4s, …
     return False, reason
+
+
+def probe_original_codec(env, asset_id):
+    """Read an asset's video codec from Immich without downloading the original."""
+    return probe_remote_codec(f"{env['url']}/api/assets/{asset_id}/original",
+                              {"x-api-key": env["api_key"]})
 
 
 def get_asset_meta(env, asset_id):

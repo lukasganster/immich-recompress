@@ -29,8 +29,8 @@ from backend.media import (
 from backend.immich_api import (
     asset_codec, capture_metadata_fields, copy_asset_metadata, copy_asset_tags, download_original,
     env_for_asset_verified, env_for_key, fetch_asset, get_asset_meta,
-    get_asset_tag_ids, immich_headers, set_live_photo_link, trash_asset,
-    update_asset, upload_new_asset,
+    get_asset_tag_ids, immich_headers, probe_original_codec, set_live_photo_link,
+    trash_asset, update_asset, upload_new_asset,
 )
 
 def broadcast(event, data):
@@ -59,6 +59,7 @@ def new_job(asset_id, params):
         "status": "queued",
         "progress": 0.0,
         "log": "",
+        "skip_reason": None,
         "codec": None,
         "new_codec": None,
         "new_id": None,
@@ -118,6 +119,7 @@ def emit_job_update(asset_id):
             "status": job["status"],
             "progress": job["progress"],
             "log": job["log"],
+            "skip_reason": job.get("skip_reason"),
             "new_size": job["new_size"],
             "savings": job["savings"],
         }
@@ -153,6 +155,36 @@ def compute_stats():
     return stats
 
 
+# skip_reason is the short label the UI shows beside "skipped"; the log
+# carries the full sentence.
+_CODEC_LABELS = {"hevc": "HEVC", "h264": "H.264", "av1": "AV1", "vp9": "VP9"}
+
+
+def codec_label(codec):
+    return _CODEC_LABELS.get(codec.lower(), codec.upper())
+
+
+def savings_shortfall(savings, savings_pct, min_savings):
+    """Return (log, skip_reason) for an output that did not save enough."""
+    if savings <= 0:
+        return "Output is not smaller than the original", "not smaller"
+    return (f"Savings {savings_pct:.1f}% < {min_savings}%",
+            f"<{float(min_savings):g}% saved")
+
+
+def skip_listed_codec(asset_id, name, codec, skip_codecs, old_size):
+    """Skip the job if its source codec is on the skip list; True if skipped."""
+    if not codec or codec.lower() not in skip_codecs:
+        return False
+    label = codec_label(codec)
+    update_job(asset_id, status="skipped", codec=codec, old_size=old_size,
+               skip_reason=label, log=f"Source is already {label}, which is on the skip list "
+                   "(Skip Codecs in Video settings)")
+    emit_job_update(asset_id)
+    append_csv_log([utcnow_iso(), asset_id, name, codec, old_size, None, None, "skipped"])
+    return True
+
+
 
 
 def persist_if_terminal(asset_id):
@@ -173,7 +205,7 @@ def load_persisted_jobs():
         job = new_job(aid, {"name": r.get("name") or aid,
                             "media": r.get("media") or "video"})
         for k in ("status", "old_size", "new_size", "savings",
-                  "codec", "new_codec", "log"):
+                  "codec", "new_codec", "log", "skip_reason"):
             job[k] = r.get(k)
         if job.get("new_size") is not None and job.get("savings") is not None:
             job["savings_human"] = human_size(job["savings"])
@@ -717,21 +749,27 @@ def process_image_job(env, asset_id, params):
     # JPEG XL accepts JPEG originals only. RAW conversion remains a separate
     # opt-in for JPEG output; no other input formats are silently converted.
     if not download_only:
-        skip_msg = None
+        skip_msg = skip_reason = None
         if photo_format not in ("jpeg", "jxl"):
-            skip_msg = "Unsupported photo output format"
+            skip_msg, skip_reason = "Unsupported photo output format", "bad format"
         elif is_jxl and fmt not in JPEG_PHOTO_EXTS:
             skip_msg = f"{src_fmt}: lossless JPEG XL requires a JPEG original"
+            skip_reason = "not JPEG"
         elif is_jxl and not (shutil.which("cjxl") and shutil.which("djxl")):
             skip_msg = "JPEG XL requires cjxl and djxl (install libjxl-tools)"
+            skip_reason = "no cjxl"
         elif is_raw and not compress_raw:
             skip_msg = f"{src_fmt}: RAW is not compressed (enable it in settings)"
+            skip_reason = "RAW off"
         elif is_raw and not shutil.which("sips"):
             skip_msg = f"{src_fmt}: RAW compression requires 'sips' (macOS only)"
+            skip_reason = "no sips"
         elif not is_raw and fmt not in JPEG_PHOTO_EXTS:
             skip_msg = f"{src_fmt}: only JPEG is compressed (no format conversion)"
+            skip_reason = "not JPEG"
         if skip_msg:
-            update_job(asset_id, status="skipped", codec=src_fmt, log=skip_msg)
+            update_job(asset_id, status="skipped", codec=src_fmt, log=skip_msg,
+                       skip_reason=skip_reason)
             emit_job_update(asset_id)
             append_csv_log([utcnow_iso(), asset_id, name, src_fmt,
                             None, None, None, "skipped"])
@@ -808,10 +846,10 @@ def process_image_job(env, asset_id, params):
     min_savings = params.get("min_savings", 10)
 
     if savings <= 0 or savings_pct < float(min_savings):
+        log, skip_reason = savings_shortfall(savings, savings_pct, min_savings)
         update_job(asset_id, status="skipped", new_size=new_size,
                    savings=max(savings, 0), savings_human=human_size(max(savings, 0)),
-                   log=("Output is not smaller than the original" if savings <= 0 else
-                        f"Savings {savings_pct:.1f}% < {min_savings}%"))
+                   log=log, skip_reason=skip_reason)
         emit_job_update(asset_id)
         append_csv_log([utcnow_iso(), asset_id, name, src_fmt,
                         old_size, new_size, savings, "skipped"])
@@ -878,7 +916,7 @@ def process_motionphoto_job(env, asset_id, params):
     detail = fetch_asset(env, asset_id)
     video_id = detail.get("livePhotoVideoId")
     if not video_id:
-        update_job(asset_id, status="skipped",
+        update_job(asset_id, status="skipped", skip_reason="no motion",
                    log="No motion video (livePhotoVideoId empty)")
         emit_job_update(asset_id)
         append_csv_log([utcnow_iso(), asset_id, name, "MOTION", None, None, None, "skipped"])
@@ -914,6 +952,7 @@ def process_motionphoto_job(env, asset_id, params):
     # 'keep' → report only, never touch the asset.
     if motion_action == "keep":
         update_job(asset_id, status="skipped", new_size=video_size, savings=0,
+                   skip_reason="kept",
                    log=f"Live Photo kept – motion video ({human_size(video_size)}) unchanged")
         emit_job_update(asset_id)
         append_csv_log([utcnow_iso(), asset_id, name, "MOTION", video_size, video_size, 0, "skipped"])
@@ -966,9 +1005,10 @@ def process_motionphoto_job(env, asset_id, params):
         min_savings = params.get("min_savings", 10)
         cleanup_temp(src_path)
         if savings_pct < float(min_savings):
+            log, skip_reason = savings_shortfall(savings, savings_pct, min_savings)
             update_job(asset_id, status="skipped", new_size=new_size,
                        savings=max(savings, 0), savings_human=human_size(max(savings, 0)),
-                       log=f"Savings {savings_pct:.1f}% < {min_savings}%")
+                       log=log, skip_reason=skip_reason)
             emit_job_update(asset_id)
             append_csv_log([utcnow_iso(), asset_id, name, "MOTION", video_size, new_size, savings, "skipped"])
             cleanup_temp(out_path, backup_path)
@@ -1075,6 +1115,18 @@ def process_job(asset_id):
     out_path = os.path.join(WORK_DIR, f"{asset_id}_out.mp4")
 
     job_size = params.get("size") or 0
+    if skip_codecs and not download_only:
+        # Probe the original over HTTP first so a skipped video is never
+        # downloaded. If the probe fails, the check after the download decides.
+        update_job(asset_id, status="downloading", started_at=utcnow_iso(),
+                   log="Checking source codec")
+        emit_job_update(asset_id)
+        remote_codec = probe_original_codec(env, asset_id)
+        # A cancel during the probe is left to download_original to report.
+        if not is_cancelled(asset_id) and skip_listed_codec(
+                asset_id, name, remote_codec, skip_codecs, job_size or None):
+            return
+
     ok_space, need = has_free_space(job_size)
     if job_size and not ok_space:
         free = shutil.disk_usage(WORK_DIR).free
@@ -1112,11 +1164,7 @@ def process_job(asset_id):
                         old_size, None, None, "downloaded"])
         return
 
-    if src_codec and src_codec.lower() in skip_codecs:
-        update_job(asset_id, status="skipped", log=f"Codec {src_codec} in skip list")
-        emit_job_update(asset_id)
-        append_csv_log([utcnow_iso(), asset_id, name, src_codec,
-                        old_size, None, None, "skipped"])
+    if skip_listed_codec(asset_id, name, src_codec, skip_codecs, old_size):
         cleanup_temp(src_path)
         return
 
@@ -1154,9 +1202,10 @@ def process_job(asset_id):
     min_savings = params.get("min_savings", 10)
 
     if savings_pct < float(min_savings):
+        log, skip_reason = savings_shortfall(savings, savings_pct, min_savings)
         update_job(asset_id, status="skipped", new_size=new_size,
                    savings=max(savings, 0), savings_human=human_size(max(savings, 0)),
-                   log=f"Savings {savings_pct:.1f}% < {min_savings}%")
+                   log=log, skip_reason=skip_reason)
         emit_job_update(asset_id)
         append_csv_log([utcnow_iso(), asset_id, name, src_codec or "",
                         old_size, new_size, savings, "skipped"])

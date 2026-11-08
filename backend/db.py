@@ -6,7 +6,7 @@ from backend.config import DB_PATH, utcnow_iso
 
 _db_lock = threading.Lock()
 _DB_COLS = ("id", "name", "media", "status", "old_size", "new_size",
-            "savings", "codec", "new_codec", "log", "updated_at")
+            "savings", "codec", "new_codec", "log", "updated_at", "skip_reason")
 
 
 def db_init():
@@ -16,7 +16,11 @@ def db_init():
                 "CREATE TABLE IF NOT EXISTS jobs ("
                 "id TEXT PRIMARY KEY, name TEXT, media TEXT, status TEXT,"
                 "old_size INTEGER, new_size INTEGER, savings INTEGER,"
-                "codec TEXT, new_codec TEXT, log TEXT, updated_at TEXT)")
+                "codec TEXT, new_codec TEXT, log TEXT, updated_at TEXT,"
+                "skip_reason TEXT)")
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(jobs)")}
+            if "skip_reason" not in columns:
+                conn.execute("ALTER TABLE jobs ADD COLUMN skip_reason TEXT")
     except sqlite3.Error:
         pass
 
@@ -26,7 +30,8 @@ def db_save_job(job):
         return
     row = (job.get("id"), job.get("name"), job.get("media"), job.get("status"),
            job.get("old_size"), job.get("new_size"), job.get("savings"),
-           job.get("codec"), job.get("new_codec"), job.get("log"), utcnow_iso())
+           job.get("codec"), job.get("new_codec"), job.get("log"), utcnow_iso(),
+           job.get("skip_reason"))
     try:
         with _db_lock, sqlite3.connect(DB_PATH, timeout=10) as conn:
             conn.execute(

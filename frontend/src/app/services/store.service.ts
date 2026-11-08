@@ -405,6 +405,7 @@ export class StoreService {
         status: update.status,
         progress: update.progress,
         log: update.log,
+        skip_reason: update.skip_reason ?? null,
         new_size: update.new_size ?? existing.new_size,
         savings: update.savings ?? existing.savings,
       };

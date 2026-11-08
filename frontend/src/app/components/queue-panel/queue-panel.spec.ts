@@ -86,3 +86,41 @@ describe('replace all media', () => {
     expect(button('Replace all media (2)')).toBeTruthy();
   });
 });
+
+describe('finished skips', () => {
+  let fixture: ComponentFixture<QueuePanelComponent>;
+  let store: StoreService;
+
+  const skipped = (changes: Partial<JobPublic>): JobPublic => ({
+    id: 'one', name: 'IMG_8138.MOV', media: 'video', status: 'skipped',
+    log: 'Source is already HEVC, which is on the skip list (Skip Codecs in Video settings)',
+    skip_reason: 'HEVC', old_size: 3_500_000_000, new_size: null, ...changes,
+  } as JobPublic);
+  const finished = (): HTMLElement => fixture.nativeElement.querySelector('[aria-label="Finished"]');
+  const show = async (job: JobPublic) => {
+    store.jobs.set({ [job.id]: job });
+    await fixture.whenStable();
+  };
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      imports: [QueuePanelComponent],
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    });
+    fixture = TestBed.createComponent(QueuePanelComponent);
+    store = TestBed.inject(StoreService);
+  });
+
+  it('names the reason and explains it on hover', async () => {
+    await show(skipped({}));
+    const badge = finished().querySelector<HTMLElement>('.badge')!;
+    expect(badge.textContent!.trim()).toBe('skipped · HEVC');
+    expect(badge.title).toContain('already HEVC');
+  });
+
+  it('shows a skip below the minimum as a skip, not as a saving', async () => {
+    await show(skipped({ skip_reason: '<10% saved', log: 'Savings 6.0% < 10%', old_size: 100, new_size: 94 }));
+    expect(finished().querySelector('.badge')!.textContent!.trim()).toBe('skipped · <10% saved');
+    expect(finished().querySelector('li .text-success')).toBeNull();
+  });
+});
