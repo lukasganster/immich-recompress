@@ -4,11 +4,13 @@
 // perf or revert bump patch. Other types do not produce a release.
 //
 // Usage: node .github/scripts/release-plan.mjs [--to <ref>] [--notes <file>]
+//                                               [--changelog <file>]
 // Prints the plan as JSON and, inside GitHub Actions, writes the tag,
 // version and sha outputs. The tag output is empty when nothing is due.
+// --changelog adds the release to that file under today's date.
 
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 
 const args = process.argv.slice(2);
 const option = (name) => {
@@ -17,6 +19,7 @@ const option = (name) => {
 };
 const to = option('--to') ?? 'HEAD';
 const notesFile = option('--notes');
+const changelogFile = option('--changelog');
 
 const git = (...gitArgs) => execFileSync('git', gitArgs, { encoding: 'utf8' }).trim();
 
@@ -85,23 +88,41 @@ const line = (commit) => {
   return `* ${scope}${commit.description} ([${short}](${repoUrl}/commit/${commit.hash}))`;
 };
 
-const notes = [];
+const sections = [];
 if (bump) {
   for (const [key, title] of SECTIONS) {
     const entries = releasable.filter((commit) =>
       key === 'breaking' ? commit.breaking : !commit.breaking && commit.type === key,
     );
     if (entries.length === 0) continue;
-    notes.push(`### ${title}`, '', ...entries.map(line), '');
+    sections.push(`### ${title}`, '', ...entries.map(line), '');
   }
-  notes.push(`**Full changelog:** ${repoUrl}/compare/${previousTag}...${tag}`, '');
 }
+const compareUrl = `${repoUrl}/compare/${previousTag}...${tag}`;
+const notes = bump ? [...sections, `**Full changelog:** ${compareUrl}`, ''] : [];
 
 if (notesFile) writeFileSync(notesFile, notes.join('\n'));
 if (process.env.GITHUB_OUTPUT) {
   appendFileSync(process.env.GITHUB_OUTPUT, `tag=${tag}\nversion=${version}\nsha=${sha}\n`);
 }
 
+// The changelog gets the same sections under a linked version heading, above
+// the previous release. A section that already compares from the previous
+// tag is this release written earlier, so it is replaced, even when commits
+// that landed since have changed the version.
+if (changelogFile && bump) {
+  const date = new Date().toISOString().slice(0, 10);
+  const entry = `${[`## [${version}](${compareUrl}) (${date})`, '', ...sections].join('\n')}\n`;
+  const parts = readFileSync(changelogFile, 'utf8').split(/^(?=## )/m);
+  const existing = parts.findIndex(
+    (part) => part.startsWith('## [') && part.split('\n')[0].includes(`/compare/${previousTag}...`),
+  );
+  if (existing !== -1) parts[existing] = entry;
+  else parts.splice(parts[0].startsWith('## ') ? 0 : 1, 0, entry);
+  writeFileSync(changelogFile, parts.join(''));
+}
+
 console.log(JSON.stringify({ previousTag, sha, bump, tag, commits: commits.length }, null, 2));
 if (!bump) console.log('No feat, fix, perf, revert or breaking commit since the last release.');
 else console.log(`\n${notes.join('\n')}`);
+if (changelogFile && bump) console.log(`Added ${version} to ${changelogFile}.`);
