@@ -116,8 +116,13 @@ ENCODER_CATALOG = [
      "hw": True,  "qmin": 18, "qmax": 40, "qdefault": 24, "qbetter": "low",  "threadopt": None},
     {"id": "qsv_h265",   "hb": "qsv_h265",   "label": "HEVC (Intel QSV)",
      "hw": True,  "qmin": 18, "qmax": 40, "qdefault": 24, "qbetter": "low",  "threadopt": None},
-    {"id": "vaapi_h265", "hb": "vaapi_h265", "label": "HEVC (VAAPI)",
+    {"id": "vaapi_hevc", "hb": "vaapi_hevc", "label": "HEVC (VAAPI)",
      "hw": True,  "qmin": 18, "qmax": 40, "qdefault": 24, "qbetter": "low",  "threadopt": None},
+    {"id": "vaapi_h264", "hb": "vaapi_h264", "label": "H.264 (VAAPI)",
+     "hw": True,  "qmin": 18, "qmax": 40, "qdefault": 22, "qbetter": "low",  "threadopt": None},
+    # HandBrake passes `-q` directly as AV1's 0–255 q_idx for vaapi_av1 (not 0–63 like svt_av1).
+    {"id": "vaapi_av1",  "hb": "vaapi_av1",  "label": "AV1 (VAAPI)",
+     "hw": True,  "qmin": 60, "qmax": 160, "qdefault": 110, "qbetter": "low", "threadopt": None},
     {"id": "vce_h265",   "hb": "vce_h265",   "label": "HEVC (AMD VCE)",
      "hw": True,  "qmin": 18, "qmax": 40, "qdefault": 24, "qbetter": "low",  "threadopt": None},
 ]
