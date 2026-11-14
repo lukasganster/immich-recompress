@@ -52,7 +52,7 @@ class DownloadProgressTest(unittest.TestCase):
         response.iter_content.side_effect = stream
         return response
 
-    def download(self, **kwargs):
+    def download(self, job_id="asset", **kwargs):
         return immich_api.download_original(
             ENV,
             "asset",
@@ -60,6 +60,7 @@ class DownloadProgressTest(unittest.TestCase):
             progress_callback=lambda written, total: self.reports.append(
                 (written, total)
             ),
+            job_id=job_id,
             **kwargs,
         )
 
@@ -210,7 +211,9 @@ class DownloadProgressTest(unittest.TestCase):
     def test_existing_callers_need_no_callback(self):
         self.get.return_value = self.response([b"original"])
         self.assertEqual(
-            immich_api.download_original(ENV, "asset", str(self.destination)),
+            immich_api.download_original(
+                ENV, "asset", str(self.destination), job_id="asset"
+            ),
             (True, ""),
         )
         self.assertEqual(self.destination.read_bytes(), b"original")
@@ -431,6 +434,67 @@ class JobDownloadProgressTest(unittest.TestCase):
                 self.assertFalse(
                     (self.directory / "backup" / "motion_motion.mov").exists()
                 )
+
+    def test_cancel_before_motion_encode_starts_skips_encoding(self):
+        probe = jobs.ffprobe_info
+
+        def cancel_during_probe(*args, **kwargs):
+            jobs.update_job("still", _cancel=True)
+            return probe(*args, **kwargs)
+
+        with (
+            patch.object(jobs, "ffprobe_info", side_effect=cancel_during_probe),
+            patch.object(jobs, "run_handbrake") as encode,
+        ):
+            self.run_job("motionphoto", motion_action="recompress")
+        self.assertEqual(_jobs["still"]["status"], "cancelled")
+        encode.assert_not_called()
+        self.assertEqual(list(self.directory.rglob("*.*")), [])
+
+    def test_cancel_as_motion_encode_finishes_is_not_success(self):
+        def encode_then_cancel(cmd, asset_id, duration):
+            self.encode_video(cmd, asset_id, duration)
+            jobs.update_job("still", _cancel=True)
+            return True
+
+        with patch.object(jobs, "run_handbrake", side_effect=encode_then_cancel):
+            self.run_job("motionphoto", motion_action="recompress")
+        self.assertEqual(_jobs["still"]["status"], "cancelled")
+        self.assertEqual(list(self.directory.rglob("*.*")), [])
+
+    def test_cancel_before_motion_removal_keeps_the_motion_video(self):
+        update = jobs.update_job
+
+        def cancel_when_analyzed(asset_id, **changes):
+            result = update(asset_id, **changes)
+            if changes.get("status") == "encoded":
+                update(asset_id, _cancel=True)
+            return result
+
+        for confirm in (True, False):
+            with (
+                self.subTest(confirm=confirm),
+                patch.object(jobs, "update_job", side_effect=cancel_when_analyzed),
+                patch.object(jobs, "do_strip_motion") as strip,
+            ):
+                self.run_job("motionphoto", motion_action="remove", confirm=confirm)
+                self.assertEqual(_jobs["still"]["status"], "cancelled")
+                self.assertIsNone(_jobs["still"]["_backup_path"])
+                strip.assert_not_called()
+                self.assertEqual(list(self.directory.rglob("*.*")), [])
+
+    def test_failed_motion_backup_leaves_no_partial_file(self):
+        download = jobs._download_for_job
+
+        def fail_after_download(*args, **kwargs):
+            download(*args, **kwargs)
+            return False, "HTTP 500"
+
+        with patch.object(jobs, "_download_for_job", side_effect=fail_after_download):
+            self.run_job("motionphoto", motion_action="remove")
+        self.assertEqual(_jobs["still"]["status"], "review")
+        self.assertIsNone(_jobs["still"]["_backup_path"])
+        self.assertEqual(list(self.directory.rglob("*.*")), [])
 
 
 if __name__ == "__main__":

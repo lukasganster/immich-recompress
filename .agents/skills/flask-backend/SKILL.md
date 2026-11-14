@@ -31,7 +31,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 python -m compileall backend/                          # CI compile check
 ```
 
-There is **no backend test suite**; CI gates on the ruff error-subset + `compileall`.
+Backend tests live next to the code as `backend/test_*.py`. Run them with `.venv/bin/python -m unittest discover -s backend -p 'test_*.py'`; CI runs the same command after the ruff error-subset and `compileall`.
 Keep `ruff check --select E9,F63,F7,F82 backend/` clean.
 
 ## Module architecture (see `server.py` docstring)

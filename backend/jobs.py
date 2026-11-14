@@ -148,14 +148,8 @@ def _download_for_job(
         update_job(job_id, progress=progress, log=f"{label} · {amount}")
         emit_job_update(job_id)
 
-    return download_original(
-        env,
-        asset_id,
-        dest,
-        progress_callback=report,
-        total_size=total_size,
-        job_id=job_id,
-    )
+    return download_original(env, asset_id, dest, progress_callback=report,
+                             total_size=total_size, job_id=job_id)
 
 
 def compute_stats():
@@ -379,6 +373,17 @@ def _replace_error(asset_id, name, codec, old_size, new_size, savings, log, out_
     persist_if_terminal(asset_id)
     broadcast_queue_update()
     return False
+
+
+def fail_replacement(asset_id, log):
+    """Report a confirmed replacement that raised, with the same cleanup and
+    CSV row as an ordinary replace error."""
+    with _state_lock:
+        job = dict(_jobs.get(asset_id) or {})
+    name = job.get("_upload_name") or job.get("name") or asset_id
+    return _replace_error(asset_id, name, job.get("codec"), job.get("old_size"),
+                          job.get("new_size"), job.get("savings"), log,
+                          job.get("_out_path"))
 
 
 def do_replace(env, asset_id, name, out_path, old_size, new_size, savings, codec,
@@ -915,6 +920,7 @@ def process_image_job(env, asset_id, params):
     try:
         shutil.copy2(src_path, backup_path)
     except OSError:
+        cleanup_temp(backup_path)
         backup_path = None
     cleanup_temp(src_path)
     record_backup(asset_id, backup_path)
@@ -928,6 +934,21 @@ def process_image_job(env, asset_id, params):
 
     do_replace(env, asset_id, upload_name, out_path, old_size, new_size,
                savings, src_fmt, mime=output_mime)
+
+
+def _end_motion_job(asset_id, name, video_size, status, log, *temp_paths):
+    """Stop a Live Photo job before review or replacement and delete its temp files."""
+    update_job(asset_id, status=status, log=log)
+    emit_job_update(asset_id)
+    append_csv_log([utcnow_iso(), asset_id, name, "MOTION", video_size, None, None, status])
+    cleanup_temp(*temp_paths)
+
+
+def _stop_motion_download(asset_id, name, video_size, reason, dest):
+    cancelled = reason == "cancelled"
+    _end_motion_job(asset_id, name, video_size, "cancelled" if cancelled else "error",
+                    "Cancelled" if cancelled else f"Motion video download failed: {reason}",
+                    dest)
 
 
 def process_motionphoto_job(env, asset_id, params):
@@ -973,29 +994,7 @@ def process_motionphoto_job(env, asset_id, params):
         ok, reason = _download_for_job(env, asset_id, video_id, dest, video_size,
                                        label="Downloading motion video")
         if not ok:
-            cancelled = reason == "cancelled"
-            update_job(
-                asset_id,
-                status="cancelled" if cancelled else "error",
-                log="Cancelled"
-                if cancelled
-                else f"Motion video download failed: {reason}",
-            )
-            emit_job_update(asset_id)
-            append_csv_log(
-                [
-                    utcnow_iso(),
-                    asset_id,
-                    name,
-                    "MOTION",
-                    video_size,
-                    None,
-                    None,
-                    "cancelled" if cancelled else "error",
-                ]
-            )
-            cleanup_temp(dest)
-            broadcast_queue_update()
+            _stop_motion_download(asset_id, name, video_size, reason, dest)
             return
         update_job(asset_id, status="downloaded", progress=100.0,
                    log=f"Motion video downloaded: {dest}")
@@ -1022,36 +1021,34 @@ def process_motionphoto_job(env, asset_id, params):
         ok, reason = _download_for_job(env, asset_id, video_id, src_path, video_size,
                                        label="Downloading motion video")
         if not ok:
-            cancelled = reason == "cancelled"
-            update_job(asset_id, status="cancelled" if cancelled else "error",
-                       log="Cancelled" if cancelled else f"Motion video download failed: {reason}")
-            emit_job_update(asset_id)
-            append_csv_log([utcnow_iso(), asset_id, name, "MOTION", video_size, None, None,
-                            "cancelled" if cancelled else "error"])
-            cleanup_temp(src_path)
+            _stop_motion_download(asset_id, name, video_size, reason, src_path)
             return
 
         backup_path = os.path.join(backup_dir, f"{video_id}_{video_name}")
         try:
             shutil.copy2(src_path, backup_path)
         except OSError:
+            cleanup_temp(backup_path)
             backup_path = None
 
         _, src_duration = ffprobe_info(src_path)
+        # Nothing to kill yet: a cancel during the backup or probe is only seen here.
+        if is_cancelled(asset_id):
+            _end_motion_job(asset_id, name, video_size, "cancelled", "Cancelled",
+                            src_path, backup_path)
+            return
         update_job(asset_id, status="encoding", progress=0.0, log="Compressing motion video")
         emit_job_update(asset_id)
         cmd = build_handbrake_cmd(src_path, out_path, params.get("encoder", "x265"),
                                   params.get("quality", 24), params.get("preset", "medium"),
                                   params.get("resolution", "original"), params.get("threads"))
         ok = run_handbrake(cmd, asset_id, src_duration)
-        if not ok or not os.path.isfile(out_path):
-            cancelled = is_cancelled(asset_id)
-            update_job(asset_id, status="cancelled" if cancelled else "error",
-                       log="Cancelled" if cancelled else "HandBrake error")
-            emit_job_update(asset_id)
-            append_csv_log([utcnow_iso(), asset_id, name, "MOTION", video_size, None, None,
-                            "cancelled" if cancelled else "error"])
-            cleanup_temp(src_path, out_path, backup_path)
+        cancelled = is_cancelled(asset_id)
+        if cancelled or not ok or not os.path.isfile(out_path):
+            _end_motion_job(asset_id, name, video_size,
+                            "cancelled" if cancelled else "error",
+                            "Cancelled" if cancelled else "HandBrake error",
+                            src_path, out_path, backup_path)
             return
 
         new_size = os.path.getsize(out_path)
@@ -1098,32 +1095,15 @@ def process_motionphoto_job(env, asset_id, params):
     backup_path = None
     if replace:
         backup_path = os.path.join(backup_dir, f"{video_id}_{video_name}")
-        ok, reason = _download_for_job(
-            env,
-            asset_id,
-            video_id,
-            backup_path,
-            video_size,
-            label="Downloading motion video backup",
-        )
+        ok, reason = _download_for_job(env, asset_id, video_id, backup_path, video_size,
+                                       label="Downloading motion video backup")
         if reason == "cancelled" or is_cancelled(asset_id):
-            update_job(asset_id, status="cancelled", log="Cancelled")
-            emit_job_update(asset_id)
-            append_csv_log(
-                [
-                    utcnow_iso(),
-                    asset_id,
-                    name,
-                    "MOTION",
-                    video_size,
-                    None,
-                    None,
-                    "cancelled",
-                ]
-            )
-            cleanup_temp(backup_path)
+            _end_motion_job(asset_id, name, video_size, "cancelled", "Cancelled", backup_path)
             return
         if not ok:
+            # Keep going without a backup, as the other media paths do, but drop
+            # the partial file so it is not mistaken for one.
+            cleanup_temp(backup_path)
             backup_path = None
 
     update_job(asset_id, status="encoded", progress=100.0, new_size=0,
@@ -1139,6 +1119,9 @@ def process_motionphoto_job(env, asset_id, params):
         append_csv_log([utcnow_iso(), asset_id, name, "MOTION", video_size, 0, video_size, "encoded"])
         return
 
+    if is_cancelled(asset_id):
+        _end_motion_job(asset_id, name, video_size, "cancelled", "Cancelled", backup_path)
+        return
     record_backup(asset_id, backup_path)
     if confirm:
         update_job(asset_id, status="review", _video_id=video_id,
@@ -1313,6 +1296,7 @@ def process_job(asset_id):
     try:
         shutil.copy2(src_path, backup_path)
     except OSError:
+        cleanup_temp(backup_path)
         backup_path = None
     cleanup_temp(src_path)
     record_backup(asset_id, backup_path)

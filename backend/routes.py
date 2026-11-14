@@ -38,7 +38,7 @@ from backend.immich_api import (
 from backend.browse import collect_filtered, discover, metadata_filters
 from backend.jobs import (
     broadcast, broadcast_queue_update, cleanup_encoded_file, cleanup_temp, compute_stats,
-    do_recompress_motion, do_replace, do_strip_motion, emit_job_update,
+    do_recompress_motion, do_replace, do_strip_motion, emit_job_update, fail_replacement,
     new_job, persist_if_terminal, public_job, update_job,
 )
 from backend.media import available_encoders, cpu_count, image_preview_path
@@ -863,26 +863,19 @@ def api_confirm(asset_id):
     if error:
         return jsonify({"ok": False, "error": error}), status
     broadcast_queue_update()
-    threading.Thread(
-        target=_replace_in_order,
-        args=([(asset_id, work)],),
-        name=f"confirm-{asset_id}",
-        daemon=True,
-    ).start()
+    threading.Thread(target=_run_replacements, args=([(asset_id, work)],),
+                     name=f"confirm-{asset_id}", daemon=True).start()
     return jsonify({"ok": True})
 
 
-def _replace_in_order(claimed):
-    """Run confirmed replacements one at a time. A failure stays on its own
-    job, so the ones behind it still run."""
+def _run_replacements(claimed):
+    """Run one or more confirmed replacements in order. A failure stays on its
+    own job, so the ones behind it still run."""
     for asset_id, work in claimed:
         try:
             work()
         except Exception as exc:
-            update_job(asset_id, status="error", log=f"Replace failed: {exc}")
-            emit_job_update(asset_id)
-            persist_if_terminal(asset_id)
-            broadcast_queue_update()
+            fail_replacement(asset_id, f"Replace failed: {exc}")
 
 
 @bp.route("/api/confirm-all", methods=["POST"])
@@ -911,7 +904,7 @@ def api_confirm_all():
         claimed.append((asset_id, work))
     if claimed:
         broadcast_queue_update()
-        threading.Thread(target=_replace_in_order, args=(claimed,),
+        threading.Thread(target=_run_replacements, args=(claimed,),
                          name="confirm-all", daemon=True).start()
     return jsonify({"ok": True, "confirmed": [asset_id for asset_id, _ in claimed],
                     "skipped": skipped})

@@ -1,11 +1,13 @@
 """Bulk replacement regressions: only listed reviews run, one at a time."""
 
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from flask import Flask
 
-from backend import routes
+from backend import jobs, routes
 from backend.state import _jobs
 
 FIRST = "30000000-0000-4000-8000-000000000001"
@@ -41,6 +43,12 @@ class ConfirmAllTest(unittest.TestCase):
         for name, value in (("get_env", ENV), ("emit_job_update", None),
                             ("broadcast_queue_update", None), ("persist_if_terminal", None)):
             patcher = patch.object(routes, name, return_value=value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        # A failed replacement is reported through jobs, which logs and persists.
+        for name in ("emit_job_update", "broadcast_queue_update", "persist_if_terminal",
+                     "append_csv_log"):
+            patcher = patch.object(jobs, name)
             patcher.start()
             self.addCleanup(patcher.stop)
         thread = patch.object(routes.threading, "Thread", Inline)
@@ -92,7 +100,11 @@ class ConfirmAllTest(unittest.TestCase):
         self.assertEqual(_jobs[FIRST]["status"], "error")
 
     def test_single_confirmation_failure_is_reported_and_persisted(self):
-        _jobs[FIRST] = reviewed(FIRST)
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        encoded = Path(directory.name) / "encoded.mp4"
+        encoded.write_bytes(b"encoded")
+        _jobs[FIRST] = {**reviewed(FIRST), "_out_path": str(encoded)}
         self.failing = FIRST
 
         response = self.client.post(f"/api/confirm/{FIRST}")
@@ -100,8 +112,11 @@ class ConfirmAllTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(_jobs[FIRST]["status"], "error")
         self.assertEqual(_jobs[FIRST]["log"], "Replace failed: upload died")
-        routes.persist_if_terminal.assert_called_once_with(FIRST)
-        routes.emit_job_update.assert_called_with(FIRST)
+        jobs.persist_if_terminal.assert_called_once_with(FIRST)
+        jobs.emit_job_update.assert_called_with(FIRST)
+        jobs.append_csv_log.assert_called_once()
+        self.assertEqual(jobs.append_csv_log.call_args.args[0][-1], "error")
+        self.assertFalse(encoded.exists())
 
     def test_single_confirmation_cannot_run_twice(self):
         _jobs[FIRST] = reviewed(FIRST)
