@@ -38,6 +38,8 @@ class PhotoOutputTest(unittest.TestCase):
         self.output = self.directory / f"{self.asset_id}_out.jxl"
         self.preview = Path(image_preview_path(str(self.output)))
         self.addCleanup(lambda: _jobs.pop(self.asset_id, None))
+        self.addCleanup(lambda: _queue_order.remove(self.asset_id)
+                        if self.asset_id in _queue_order else None)
         app = Flask(__name__)
         app.register_blueprint(bp)
         self.client = app.test_client()
@@ -46,7 +48,7 @@ class PhotoOutputTest(unittest.TestCase):
         Path(path).write_bytes(b"original jpeg" * 100)
         return True, ""
 
-    def encode(self, src, out, asset_id, threads, preview=True):
+    def encode(self, src, out, asset_id, threads, preview=True, distance=0):
         Path(out).write_bytes(b"encoded jxl" * 50)
         if preview:
             Path(image_preview_path(out)).write_bytes(b"png-preview")
@@ -82,6 +84,20 @@ class PhotoOutputTest(unittest.TestCase):
         backup = self.directory / "backup" / f"{self.asset_id}_holiday.JPEG"
         self.assertEqual(backup.read_bytes(), b"original jpeg" * 100)
         self.assertEqual(job["_backup_path"], str(backup))
+
+    def test_lossy_distance_reaches_encoder_and_review(self):
+        job = self.process(photo_jxl_distance=1.5, photo_target_savings="not applicable")
+        self.assertEqual(job["status"], "review")
+        self.assertEqual(job["photo_jxl_distance"], 1.5)
+        self.assertEqual(self.encoder.call_args.kwargs, {"preview": True, "distance": 1.5})
+        self.assertEqual(job["_output_mime"], "image/jxl")
+        self.assertEqual(job["_upload_name"], "holiday.jxl")
+        self.assertTrue(self.preview.exists())
+
+    def test_lossy_automatic_replacement_skips_preview_and_uses_jxl_mime(self):
+        self.process(photo_jxl_distance=2, confirm=False)
+        self.assertEqual(self.encoder.call_args.kwargs, {"preview": False, "distance": 2})
+        self.assertEqual(self.replace.call_args.kwargs["mime"], "image/jxl")
 
     def test_keep_original_retains_jxl_and_preview_until_discarded(self):
         job = self.process(replace=False, confirm=False)
@@ -157,6 +173,12 @@ class PhotoOutputTest(unittest.TestCase):
         self.assertFalse(self.preview.exists())
         self.replace.assert_not_called()
 
+    def test_minimum_savings_applies_to_lossy_output(self):
+        self.assertEqual(self.process(photo_jxl_distance=1, min_savings=90)["status"], "skipped")
+        self.assertFalse(self.output.exists())
+        self.assertFalse(self.preview.exists())
+        self.replace.assert_not_called()
+
     def test_jpeg_remains_the_default_and_uses_existing_encoder(self):
         def jpeg(src, out, *args):
             Path(out).write_bytes(b"jpeg" * 100)
@@ -177,10 +199,81 @@ class PhotoOutputTest(unittest.TestCase):
                 self.assertEqual(response.status_code, 400)
         self.assertNotIn(self.asset_id, _queue_order)
 
+    def test_invalid_distance_is_rejected_before_enqueue(self):
+        for value in (-1, 25.1, None, True, "1", [], {}, float("nan"), float("inf")):
+            with self.subTest(value=value):
+                response = self.client.post("/api/enqueue", json={
+                    "ids": [self.asset_id], "photo_format": "jxl", "photo_jxl_distance": value,
+                })
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("distance", response.json["error"])
+        self.assertNotIn(self.asset_id, _queue_order)
+        self.assertNotIn(self.asset_id, _jobs)
+
+    def test_enqueue_preserves_distance_and_defaults_to_lossless(self):
+        for setting in ({}, {"photo_jxl_distance": 0}, {"photo_jxl_distance": 0.5},
+                        {"photo_jxl_distance": 25}):
+            with self.subTest(setting=setting), patch("backend.routes._work_queue"), patch(
+                    "backend.routes.broadcast_queue_update"):
+                _jobs.pop(self.asset_id, None)
+                response = self.client.post("/api/enqueue", json={
+                    "ids": [self.asset_id], "photo_format": "jxl", "media": "image", **setting,
+                })
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json["added"], [self.asset_id])
+                self.assertEqual(_jobs[self.asset_id]["photo_jxl_distance"],
+                                 setting.get("photo_jxl_distance", 0))
+
 
 @unittest.skipUnless(all(shutil.which(tool) for tool in ("cjxl", "djxl", "ffmpeg")),
                      "requires cjxl, djxl and ffmpeg")
 class JpegXlToolTest(unittest.TestCase):
+    def test_api_to_real_encoder_and_review_with_lossless_and_lossy_distance(self):
+        with tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+            directory = Path(tmp)
+            src = directory / "original.jpg"
+            subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i",
+                            "testsrc=size=256x128", "-frames:v", "1", "-q:v", "2", str(src)],
+                           check=True, capture_output=True)
+            original = src.read_bytes()
+            asset_id = "12345678-1234-1234-1234-123456789abc"
+            stack.callback(lambda: _jobs.pop(asset_id, None))
+            stack.callback(lambda: _queue_order.remove(asset_id)
+                           if asset_id in _queue_order else None)
+            stack.enter_context(patch("backend.jobs.WORK_DIR", tmp))
+            stack.enter_context(patch("backend.routes._work_queue"))
+            stack.enter_context(patch("backend.jobs.append_csv_log"))
+
+            def download(env, requested_id, path):
+                self.assertEqual(requested_id, asset_id)
+                Path(path).write_bytes(original)
+                return True, ""
+
+            stack.enter_context(patch("backend.jobs.download_original", side_effect=download))
+            app = Flask(__name__)
+            app.register_blueprint(bp)
+            client = app.test_client()
+            for distance in (0, 1.5, 25):
+                with self.subTest(distance=distance):
+                    _jobs.pop(asset_id, None)
+                    response = client.post("/api/enqueue", json={
+                        "ids": [asset_id], "names": {asset_id: "photo.jpg"}, "media": "image",
+                        "photo_format": "jxl", "photo_jxl_distance": distance,
+                        "min_savings": 0, "threads": 1, "backup_dir": str(directory / "backup"),
+                    })
+                    self.assertEqual(response.json["added"], [asset_id])
+                    process_image_job({}, asset_id, dict(_jobs[asset_id]))
+                    job = client.get("/api/jobs").json["jobs"][asset_id]
+                    self.assertEqual(job["status"], "review", job["log"])
+                    self.assertEqual(job["photo_jxl_distance"], distance)
+                    self.assertEqual(job["new_codec"], "JPEG XL")
+                    self.assertLess(job["new_size"], job["old_size"])
+                    self.assertEqual(Path(_jobs[asset_id]["_backup_path"]).read_bytes(), original)
+                    preview = client.get(f"/api/preview/{asset_id}")
+                    self.assertEqual(preview.mimetype, "image/png")
+                    self.assertEqual(preview.data[:8], b"\x89PNG\r\n\x1a\n")
+                    preview.close()
+
     def test_real_lossless_round_trip_including_metadata_and_oriented_preview(self):
         with tempfile.TemporaryDirectory() as tmp:
             src, out = Path(tmp) / "original.jpg", Path(tmp) / "encoded.jxl"
@@ -209,6 +302,36 @@ class JpegXlToolTest(unittest.TestCase):
             ok, _ = _encode_jxl_image(str(src), str(out), "corrupt-jpeg")
             self.assertFalse(ok)
             self.assertFalse(Path(image_preview_path(str(out))).exists())
+
+    def test_real_lossy_encoding_changes_pixels_and_honors_distance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "original.jpg"
+            subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i",
+                            "testsrc=size=64x32", "-frames:v", "1", str(src)],
+                           check=True, capture_output=True)
+            exif = b"Exif\0\0II" + struct.pack("<HIHHHIHHI", 42, 8, 1, 274, 3, 1, 6, 0, 0)
+            original = src.read_bytes()
+            src.write_bytes(original[:2] + b"\xff\xe1" + struct.pack(">H", len(exif) + 2)
+                            + exif + original[2:])
+
+            def pixels(path):
+                return subprocess.run(["ffmpeg", "-v", "error", "-i", str(path),
+                                       "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+                                      check=True, capture_output=True).stdout
+
+            original_pixels = pixels(src)
+            results = []
+            for distance in (1, 5):
+                out = Path(tmp) / f"encoded-{distance}.jxl"
+                ok, error = _encode_jxl_image(str(src), str(out), "tool-lossy",
+                                              threads=1, distance=distance)
+                self.assertTrue(ok, error)
+                preview = Path(image_preview_path(str(out)))
+                self.assertEqual(struct.unpack(">II", preview.read_bytes()[16:24]), (32, 64))
+                results.append(pixels(preview))
+                self.assertEqual(len(results[-1]), len(original_pixels))
+                self.assertNotEqual(results[-1], original_pixels)
+            self.assertNotEqual(*results)
 
     def test_mislabeled_png_is_not_lossily_transcoded(self):
         with tempfile.TemporaryDirectory() as tmp:

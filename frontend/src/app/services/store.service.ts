@@ -137,6 +137,7 @@ export class StoreService {
     threads: 0,  // 0 = use all cores; set to the detected max once caps load
     photo_target_savings: 40,
     photo_format: 'jpeg',
+    photo_jxl_distance: 0,
     compress_raw: false,
     preset: 'medium',
     resolution: 'original',
@@ -291,6 +292,11 @@ export class StoreService {
         // older versions so a stale path can't be sent on enqueue.
         delete saved.backup_dir;
         if (saved.photo_format !== 'jxl') saved.photo_format = 'jpeg';
+        if (typeof saved.photo_jxl_distance !== 'number'
+          || !Number.isFinite(saved.photo_jxl_distance)
+          || saved.photo_jxl_distance < 0 || saved.photo_jxl_distance > 25) {
+          saved.photo_jxl_distance = 0;
+        }
         this.settings.update(s => ({ ...s, ...saved }));
       }
     } catch { /* ignore */ }

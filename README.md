@@ -15,8 +15,12 @@ Find the large videos and photos in your [Immich](https://immich.app/) library,
   people and location.
 - Re-encode videos with HandBrake (x264 / x265 / AV1, optional resolution cap),
   on the GPU when available. See [Hardware acceleration](#hardware-acceleration).
-- Recompress JPEGs to a target size, or convert them to lossless JPEG XL
-  (`djxl photo.jxl restored.jpg` restores the original JPEG).
+- Recompress JPEGs to a target size, or convert them to JPEG XL with configurable
+  distance (0 to 25). Distance 0 is the default and preserves exact JPEG
+  reconstruction (`djxl photo.jxl restored.jpg`). Positive distances use lossy
+  compression; 1 aims to be visually lossless, and higher values trade quality
+  for smaller files. Both JPEG XL modes skip non-JPEG originals and files below
+  the minimum savings.
 - Strip the hidden motion video from Live Photos.
 - **Review** every result (size, savings, preview) before it replaces the original.
 - Queue with live progress and persistent job history.

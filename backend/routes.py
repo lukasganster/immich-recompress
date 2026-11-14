@@ -700,6 +700,11 @@ def api_enqueue():
     photo_format = body.get("photo_format", "jpeg")
     if photo_format not in ("jpeg", "jxl"):
         return jsonify({"error": "Photo format must be jpeg or jxl"}), 400
+    photo_jxl_distance = body.get("photo_jxl_distance", 0)
+    if (isinstance(photo_jxl_distance, bool)
+            or not isinstance(photo_jxl_distance, (int, float))
+            or not 0 <= photo_jxl_distance <= 25):
+        return jsonify({"error": "JPEG XL distance must be a number from 0 to 25"}), 400
 
     params = {
         "media": default_media,
@@ -707,6 +712,7 @@ def api_enqueue():
         "quality": body.get("quality", 24),
         "photo_target_savings": body.get("photo_target_savings", 40),
         "photo_format": photo_format,
+        "photo_jxl_distance": photo_jxl_distance,
         "compress_raw": bool(body.get("compress_raw", False)),
         "preset": body.get("preset", "medium"),
         "threads": _clamp_threads(body.get("threads")),

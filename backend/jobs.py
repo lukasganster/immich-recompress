@@ -73,6 +73,7 @@ def new_job(asset_id, params):
         "quality": params.get("quality", 24),
         "photo_target_savings": params.get("photo_target_savings", 40),
         "photo_format": params.get("photo_format", "jpeg"),
+        "photo_jxl_distance": params.get("photo_jxl_distance", 0),
         "compress_raw": params.get("compress_raw", False),
         "preset": params.get("preset", "medium"),
         "threads": params.get("threads"),
@@ -694,17 +695,17 @@ def compress_image_to_target(src, out, old_size, target_pct, asset_id):
     return False, None, 0.0
 
 
-def _encode_jxl_image(src, out, asset_id, threads=None, preview=True):
-    """Losslessly transcode JPEG, optionally rendering the result for review."""
+def _encode_jxl_image(src, out, asset_id, threads=None, preview=True, distance=0):
+    """Encode JPEG to JPEG XL, optionally rendering the result for review."""
     # cjxl ignores --lossless_jpeg for non-JPEG input and defaults to a lossy
     # pixel encode. Check the actual file before promising JPEG reconstruction.
     try:
         with open(src, "rb") as source:
             if source.read(2) != b"\xff\xd8":
-                return False, "Lossless JPEG XL requires JPEG file contents"
+                return False, "JPEG XL requires JPEG file contents"
     except OSError as exc:
         return False, str(exc)
-    commands = [build_cjxl_cmd(src, out, threads)]
+    commands = [build_cjxl_cmd(src, out, threads, distance=distance)]
     if preview:
         commands.append(["djxl", out, image_preview_path(out)])
     for cmd in commands:
@@ -719,7 +720,7 @@ def _encode_jxl_image(src, out, asset_id, threads=None, preview=True):
 
 
 def process_image_job(env, asset_id, params):
-    """Download, recompress to JPEG or lossless JPEG XL, and optionally replace."""
+    """Download, recompress to JPEG or JPEG XL, and optionally replace."""
     name = params.get("name") or asset_id
     download_only = params.get("download_only", False)
     replace = params.get("replace", True)
@@ -728,6 +729,7 @@ def process_image_job(env, asset_id, params):
     target_savings = params.get("photo_target_savings", 40)
     compress_raw = params.get("compress_raw", False)
     photo_format = params.get("photo_format", "jpeg")
+    jxl_distance = params.get("photo_jxl_distance", 0)
     is_jxl = photo_format == "jxl"
     output_ext = ".jxl" if is_jxl else ".jpg"
     output_mime = "image/jxl" if is_jxl else "image/jpeg"
@@ -753,7 +755,7 @@ def process_image_job(env, asset_id, params):
         if photo_format not in ("jpeg", "jxl"):
             skip_msg, skip_reason = "Unsupported photo output format", "bad format"
         elif is_jxl and fmt not in JPEG_PHOTO_EXTS:
-            skip_msg = f"{src_fmt}: lossless JPEG XL requires a JPEG original"
+            skip_msg = f"{src_fmt}: JPEG XL requires a JPEG original"
             skip_reason = "not JPEG"
         elif is_jxl and not (shutil.which("cjxl") and shutil.which("djxl")):
             skip_msg = "JPEG XL requires cjxl and djxl (install libjxl-tools)"
@@ -813,16 +815,18 @@ def process_image_job(env, asset_id, params):
                         old_size, None, None, "downloaded"])
         return
 
+    jxl_setting = (f"lossy, distance {jxl_distance}" if jxl_distance > 0
+                   else "lossless JPEG reconstruction")
     update_job(asset_id, status="encoding", progress=0.0,
-               log=("Compressing photo to lossless JPEG XL" if is_jxl else
+               log=(f"Compressing photo to JPEG XL ({jxl_setting})" if is_jxl else
                     f"Compressing photo (target ~{float(target_savings):.0f}%)"))
     emit_job_update(asset_id)
 
     if is_jxl:
         ok, err = _encode_jxl_image(
             src_path, out_path, asset_id, params.get("threads"),
-            preview=confirm or not replace)
-        used_q = "lossless JPEG reconstruction"
+            preview=confirm or not replace, distance=jxl_distance)
+        used_q = jxl_setting
         if not ok:
             update_job(asset_id, log=f"JPEG XL: {err}")
     else:

@@ -227,9 +227,10 @@ def build_handbrake_cmd(src, out, encoder, quality, preset, resolution="original
     return cmd
 
 
-def build_cjxl_cmd(src, out, threads=None):
-    """Recompress a JPEG with its original JPEG reconstruction data intact."""
-    cmd = ["cjxl", src, out, "--lossless_jpeg=1", "--effort=7"]
+def build_cjxl_cmd(src, out, threads=None, distance=0):
+    """Keep JPEG reconstruction at zero distance; re-encode pixels above zero."""
+    cmd = ["cjxl", src, out, f"--lossless_jpeg={0 if distance > 0 else 1}",
+           f"--distance={distance}", "--effort=7"]
     if threads:
         cmd.append(f"--num_threads={int(threads)}")
     return cmd

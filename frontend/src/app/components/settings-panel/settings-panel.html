@@ -117,11 +117,11 @@
               <select id="photoFormat" [ngModel]="s.photo_format"
                 (ngModelChange)="update({photo_format: $event})" aria-describedby="photoFormatHelp">
                 <option value="jpeg">JPEG</option>
-                <option value="jxl" [disabled]="!store.jpegXlAvailable()">JPEG XL (lossless)</option>
+                <option value="jxl" [disabled]="!store.jpegXlAvailable()">JPEG XL</option>
               </select>
               <small id="photoFormatHelp">
                 @if (s.photo_format === 'jxl') {
-                  Converts JPEG originals to JPEG XL without additional quality loss.
+                  Converts JPEG originals to JPEG XL at the selected distance.
                   Savings vary by photo; files below the minimum savings are skipped.
                   Other formats, including RAW and existing JPEG XL files, are skipped.
                 } @else {
@@ -137,6 +137,24 @@
                 }
               }
             </div>
+
+            @if (s.photo_format === 'jxl') {
+            <div class="field full">
+              <label for="setJxlDistance">Distance: {{ s.photo_jxl_distance }}{{ s.photo_jxl_distance === 0 ? ' (lossless)' : ' (lossy)' }}</label>
+              <div class="rangewrap">
+                <input id="setJxlDistance" type="range" min="0" max="25" step="0.1"
+                  [ngModel]="s.photo_jxl_distance" (ngModelChange)="onJxlDistance($event)"
+                  aria-describedby="jxlDistanceHelp" />
+                <input #jxlDistanceValue type="number" min="0" max="25" step="0.1" class="num-input"
+                  aria-label="JPEG XL distance value" aria-describedby="jxlDistanceHelp"
+                  [ngModel]="s.photo_jxl_distance" (ngModelChange)="onJxlDistance($event)"
+                  (blur)="jxlDistanceValue.value = s.photo_jxl_distance.toString()" />
+              </div>
+              <small id="jxlDistanceHelp">0 preserves the original JPEG without additional quality loss
+                and allows exact JPEG reconstruction. Positive values use lossy compression;
+                1 aims to be visually lossless. Higher values trade quality for smaller files.</small>
+            </div>
+            }
 
             @if (s.photo_format === 'jpeg') {
             <div class="field full">

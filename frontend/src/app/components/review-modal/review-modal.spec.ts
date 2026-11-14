@@ -23,4 +23,23 @@ describe('JPEG XL review', () => {
     expect(element.textContent).not.toContain('Target savings');
     expect(element.querySelector('img[data-role="result"]')!.getAttribute('src')).toBe('/api/preview/photo');
   });
+
+  it('shows the encoded distance even when the current settings have changed', () => {
+    TestBed.configureTestingModule({
+      imports: [ReviewModalComponent], providers: [provideHttpClient()],
+    });
+    const fixture = TestBed.createComponent(ReviewModalComponent);
+    const store = TestBed.inject(StoreService);
+    store.settings.update(s => ({ ...s, photo_jxl_distance: 0 }));
+    store.jobs.set({ photo: {
+      id: 'photo', name: 'photo.jpg', media: 'image', status: 'review', codec: 'JPEG',
+      new_codec: 'JPEG XL', photo_format: 'jxl', photo_jxl_distance: 1.5,
+      old_size: 1000, new_size: 750,
+    } as JobPublic });
+    fixture.componentInstance.show('photo');
+    fixture.detectChanges();
+    const element: HTMLElement = fixture.nativeElement;
+    expect(element.textContent).toContain('Lossy JPEG XL · distance 1.5');
+    expect(element.textContent).not.toContain('Lossless JPEG reconstruction');
+  });
 });

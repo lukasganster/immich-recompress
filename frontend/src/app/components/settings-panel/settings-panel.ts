@@ -43,6 +43,12 @@ export class SettingsPanelComponent {
     this.store.saveSettings();
   }
 
+  onJxlDistance(value: number | null): void {
+    if (value !== null && Number.isFinite(value)) {
+      this.update({ photo_jxl_distance: Math.min(25, Math.max(0, value)) });
+    }
+  }
+
   /** Switching encoders changes the quality scale, so reset quality to the new
    *  encoder's default rather than carry an out-of-range value across scales. */
   onEncoder(id: string): void {
@@ -76,7 +82,11 @@ export class SettingsPanelComponent {
   }
 
   get photoSummary(): string {
-    if (this.s.photo_format === 'jxl') return 'JPEG XL · lossless';
+    if (this.s.photo_format === 'jxl') {
+      return this.s.photo_jxl_distance > 0
+        ? `JPEG XL · lossy · distance ${this.s.photo_jxl_distance}`
+        : 'JPEG XL · lossless';
+    }
     return `JPEG · −${this.s.photo_target_savings}% target${this.s.compress_raw ? ' · RAW→JPEG' : ''}`;
   }
 
