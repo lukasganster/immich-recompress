@@ -34,6 +34,58 @@ describe('Photo output settings', () => {
     expect(fixture.componentInstance.photoSummary).toBe('JPEG XL · lossless');
   });
 
+  it('sets a fractional lossy distance and restores the lossless setting', async () => {
+    TestBed.configureTestingModule({ imports: [SettingsPanelComponent] });
+    const fixture = TestBed.createComponent(SettingsPanelComponent);
+    const store = TestBed.inject(StoreService);
+    store.jpegXlAvailable.set(true);
+    store.settings.update(s => ({ ...s, photo_format: 'jxl' }));
+    fixture.componentInstance.open.set(true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const element: HTMLElement = fixture.nativeElement;
+    const input = element.querySelector<HTMLInputElement>('input[aria-label="JPEG XL distance value"]')!;
+    input.value = '1.5';
+    input.dispatchEvent(new Event('input'));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(store.settings().photo_jxl_distance).toBe(1.5);
+    expect(fixture.componentInstance.photoSummary).toBe('JPEG XL · lossy · distance 1.5');
+    expect(element.querySelector('#compressRaw')).toBeNull();
+    expect(element.querySelector('#setTargetSavings')).toBeNull();
+    expect(element.textContent).toContain('Positive values use lossy compression');
+
+    input.value = '0';
+    input.dispatchEvent(new Event('input'));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(store.settings().photo_jxl_distance).toBe(0);
+    expect(fixture.componentInstance.photoSummary).toBe('JPEG XL · lossless');
+  });
+
+  it('restores the stored distance after clearing or entering out-of-range values', async () => {
+    TestBed.configureTestingModule({ imports: [SettingsPanelComponent] });
+    const fixture = TestBed.createComponent(SettingsPanelComponent);
+    const store = TestBed.inject(StoreService);
+    store.jpegXlAvailable.set(true);
+    store.settings.update(s => ({ ...s, photo_format: 'jxl', photo_jxl_distance: 25 }));
+    fixture.componentInstance.open.set(true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const input = (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLInputElement>('input[aria-label="JPEG XL distance value"]')!;
+    for (const [entered, expected] of [['30', 25], ['', 25], ['-1', 0]] as const) {
+      input.value = entered;
+      input.dispatchEvent(new Event('input'));
+      await fixture.whenStable();
+      fixture.detectChanges();
+      input.dispatchEvent(new Event('blur'));
+      await fixture.whenStable();
+      expect(store.settings().photo_jxl_distance).toBe(expected);
+      expect(input.value).toBe(String(expected));
+    }
+  });
+
   it('explains the missing tools and disables unavailable JPEG XL output', () => {
     TestBed.configureTestingModule({ imports: [SettingsPanelComponent] });
     const fixture = TestBed.createComponent(SettingsPanelComponent);

@@ -117,7 +117,11 @@ export class QueuePanelComponent {
     if (j.media === 'motionphoto') {
       return j.motion_action === 'recompress' ? 'Live Photo motion → recompressed' : 'Live Photo → still';
     }
-    if (j.media === 'image') return `${from} → JPEG · .jpg`;
+    if (j.media === 'image') {
+      return j.new_codec === 'JPEG XL' || j.photo_format === 'jxl'
+        ? `${from} → JPEG XL · .jxl`
+        : `${from} → JPEG · .jpg`;
+    }
     const target = j.new_codec?.toUpperCase() ?? this.store.encoderLabel(j.encoder);
     return `${from} → ${target} · .mp4`;
   }

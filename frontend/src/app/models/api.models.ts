@@ -116,6 +116,7 @@ export interface JobPublic {
   threads: number | null;
   photo_target_savings: number;
   photo_format: PhotoFormat;
+  photo_jxl_distance: number;
   compress_raw: boolean;
   preset: string;
   resolution: string;
@@ -183,6 +184,7 @@ export interface Settings {
   threads: number;
   photo_target_savings: number;
   photo_format: PhotoFormat;
+  photo_jxl_distance: number;
   compress_raw: boolean;
   preset: string;
   resolution: string;

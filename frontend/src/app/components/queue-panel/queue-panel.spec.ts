@@ -40,6 +40,19 @@ describe('replace all media', () => {
     expect(element().querySelector('.replace-all')).toBeNull();
   });
 
+  it.each([0, 1.5])('labels JPEG XL reviews with distance %s as .jxl output', async distance => {
+    store.jobs.set({ photo: {
+      ...reviewed('photo'), name: 'photo.jpg', codec: 'JPEG', new_codec: 'JPEG XL',
+      photo_format: 'jxl', photo_jxl_distance: distance,
+    } });
+    await fixture.whenStable();
+    const review = element().querySelector('[aria-label="Awaiting review"]')!;
+    expect(review.textContent).toContain('JPEG → JPEG XL · .jxl');
+    expect(review.textContent).not.toContain('JPEG → JPEG · .jpg');
+    expect(review.querySelector('img[alt="The recompressed image"]')!.getAttribute('src'))
+      .toBe('/api/preview/photo');
+  });
+
   it('counts the reviews and states what they reclaim together', async () => {
     await show('one', 'two', 'three');
     expect(button('Replace all media (3)')).toBeTruthy();

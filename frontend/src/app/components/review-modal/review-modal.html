@@ -64,7 +64,9 @@
             @if (j.media === 'image') {
               <dt class="text-muted">Setting</dt>
               <dd class="m-0">{{ j.photo_format === 'jxl' || j.new_codec === 'JPEG XL'
-                ? 'Lossless JPEG reconstruction'
+                ? ((j.photo_jxl_distance ?? 0) > 0
+                  ? 'Lossy JPEG XL · distance ' + j.photo_jxl_distance
+                  : 'Lossless JPEG reconstruction')
                 : 'Target savings ' + (j.photo_target_savings ?? '—') + '%' }}</dd>
             } @else {
               <dt class="text-muted">Encoder</dt><dd class="m-0">{{ encoderDetail(j) }}</dd>

@@ -17,14 +17,17 @@ describe('StoreService', () => {
   let store: StoreService;
 
   beforeEach(() => {
-    // Reset persisted keys so each test starts from defaults. (Some test
-    // environments expose a localStorage without a working clear().)
-    for (const k of ['immich_browse', 'immich_processed', 'immich_settings']) {
-      try { localStorage.removeItem(k); } catch { /* not available here */ }
-    }
+    const saved = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => saved.get(key) ?? null,
+      setItem: (key: string, value: string) => saved.set(key, value),
+      removeItem: (key: string) => saved.delete(key),
+    });
     TestBed.configureTestingModule({});
     store = TestBed.inject(StoreService);
   });
+
+  afterEach(() => vi.unstubAllGlobals());
 
   it('is created', () => {
     expect(store).toBeTruthy();
@@ -119,11 +122,33 @@ describe('StoreService', () => {
     expect(store.estimatedSavingsFraction()!).toBeLessThan(rf26);
   });
 
-  it('does not promise target savings for lossless JPEG XL', () => {
+  it('does not promise target savings for either JPEG XL mode', () => {
     store.media.set('image');
     store.settings.update(s => ({ ...s, photo_format: 'jxl', photo_target_savings: 90 }));
     expect(store.estimatedSavingsFraction()).toBeNull();
     expect(store.estimatedSavingsBytes()).toBeNull();
+    store.settings.update(s => ({ ...s, photo_jxl_distance: 1.5 }));
+    expect(store.estimatedSavingsFraction()).toBeNull();
+    expect(store.estimatedSavingsBytes()).toBeNull();
+  });
+
+  it('persists fractional JPEG XL distance', () => {
+    store.settings.update(s => ({ ...s, photo_format: 'jxl', photo_jxl_distance: 1.5 }));
+    store.saveSettings();
+    store.settings.update(s => ({ ...s, photo_jxl_distance: 0 }));
+    store.loadFromStorage();
+    expect(store.settings().photo_jxl_distance).toBe(1.5);
+  });
+
+  it('uses lossless distance for older or invalid saved settings', () => {
+    for (const value of [undefined, null, -1, 26, '1', true]) {
+      localStorage.setItem('immich_settings', JSON.stringify({
+        photo_format: 'jxl', photo_jxl_distance: value,
+      }));
+      store.loadFromStorage();
+      expect(store.settings().photo_format).toBe('jxl');
+      expect(store.settings().photo_jxl_distance).toBe(0);
+    }
   });
 
   it('keeps JPEG as the default and exposes JPEG XL tool availability', () => {
