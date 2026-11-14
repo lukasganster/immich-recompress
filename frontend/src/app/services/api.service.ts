@@ -103,6 +103,10 @@ export class ApiService {
     return `/api/thumbnail/${encodeURIComponent(id)}?size=${size}`;
   }
 
+  keyOwnerAvatarUrl(keyIdx: number, version?: string): string {
+    return `/api/keys/${keyIdx}/avatar${version ? '?v=' + encodeURIComponent(version) : ''}`;
+  }
+
   downloadUrl(id: string, name?: string): string {
     return `/api/download/${encodeURIComponent(id)}${name ? '?name=' + encodeURIComponent(name) : ''}`;
   }

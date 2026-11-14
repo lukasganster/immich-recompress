@@ -23,7 +23,7 @@ describe('BrowseDialogComponent', () => {
       removeItem: (key: string) => saved.delete(key),
     });
     options = vi.fn((kind: string) => of({ items: kind === 'albums' ? [album] : [alex] }));
-    TestBed.configureTestingModule({ providers: [{ provide: ApiService, useValue: { browseOptions: options } }] });
+    TestBed.configureTestingModule({ providers: [{ provide: ApiService, useValue: { browseOptions: options, keyOwnerAvatarUrl: (idx: number, v?: string) => `/api/keys/${idx}/avatar?v=${v}` } }] });
     store = TestBed.inject(StoreService);
     store.immichVersion.set('3.3.0');
     store.keyOwners.set([
@@ -37,6 +37,23 @@ describe('BrowseDialogComponent', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   function show(): void { component.show(); fixture.detectChanges(); }
+
+  it('shows owner profile pictures and falls back to the icon when one fails', () => {
+    store.keyOwners.set([
+      { key_idx: 0, id: 'user-a', name: 'Library A', email: '', has_avatar: true, avatar_version: 't1' },
+      { key_idx: 1, id: 'user-b', name: 'Library B', email: '', has_avatar: false },
+    ]);
+    show();
+    const rows = () => Array.from(fixture.nativeElement.querySelectorAll('.select-row')) as HTMLElement[];
+    expect(rows().length).toBe(2);
+    const img = rows()[0].querySelector('img.owner-avatar') as HTMLImageElement;
+    expect(img.getAttribute('src')).toBe('/api/keys/0/avatar?v=t1');
+    expect(rows()[1].querySelector('img')).toBeNull();
+    img.dispatchEvent(new Event('error'));
+    fixture.detectChanges();
+    expect(rows()[0].querySelector('img')).toBeNull();
+    expect(rows()[0].querySelector('app-icon')).not.toBeNull();
+  });
 
   it('keeps drafts separate until Apply and persists filter values', () => {
     show();

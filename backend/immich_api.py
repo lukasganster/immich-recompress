@@ -142,6 +142,8 @@ def fetch_key_owners(env, force=False):
             "id": info.get("id") or "",
             "name": info.get("name") or info.get("email") or f"Key {idx + 1}",
             "email": info.get("email") or "",
+            "has_avatar": bool(info.get("profileImagePath")),
+            "avatar_version": info.get("profileChangedAt") or "",
         })
     with _user_lock:
         _key_owner_cache["scope"] = (env["url"], tuple(env.get("api_keys") or []))
