@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.6.0](https://github.com/lukasganster/immich-recompress/compare/v1.5.0...v1.6.0) (2026-11-14)
+
+### Features
+
+* **jobs:** skip listed codecs before download and say why ([dd7ff36](https://github.com/lukasganster/immich-recompress/commit/dd7ff3603d2bc5cd205c1c46f1c2a389568b8a77))
+* **settings:** list skipped codecs in the settings summary ([458380c](https://github.com/lukasganster/immich-recompress/commit/458380c7af0cc122189a9cd774f1427a0d7f22cc))
+* **ui:** show quality labels on each encoder's own scale ([aac7b6d](https://github.com/lukasganster/immich-recompress/commit/aac7b6d82e5a7fa25608e527cf992d6e43ce0ee6))
+* **grid:** sort videos by bitrate ([d374678](https://github.com/lukasganster/immich-recompress/commit/d374678d49b77419655ab22485c217d1402a6bb6))
+* **photos:** add configurable lossy jpeg xl ([ea01b6a](https://github.com/lukasganster/immich-recompress/commit/ea01b6a2e6dc3e5c1093a761f16999fbc9bded9a))
+* **browse:** show profile pictures in library selector ([48de6e3](https://github.com/lukasganster/immich-recompress/commit/48de6e3725c221c0f5592449863d845474858da5))
+* **jobs:** add server-wide concurrency controls ([1e83388](https://github.com/lukasganster/immich-recompress/commit/1e83388870976eab387a58cb278fc6f81e3e4d7e))
+
+### Bug Fixes
+
+* **media:** map VAAPI encoders to HandBrake's names ([7ff36c4](https://github.com/lukasganster/immich-recompress/commit/7ff36c4c404ea4929f6ad565dfe05a9821245919))
+* **jobs:** show live download progress ([d5b28ea](https://github.com/lukasganster/immich-recompress/commit/d5b28ea79b4687f07f34d68df23041c865d36d00))
+* **jobs:** honor cancellation and report replace failures ([cd71b45](https://github.com/lukasganster/immich-recompress/commit/cd71b4533eb08f2fbd2f72e5953adc22c9b9ede7))
+* **jobs:** close remaining live photo cancellation gaps ([72d1ced](https://github.com/lukasganster/immich-recompress/commit/72d1ced50b540ee919e40193bc9b9eef5f214c32))
+
 ## [1.5.0](https://github.com/lukasganster/immich-recompress/compare/v1.4.1...v1.5.0) (2026-11-07)
 
 ### Features
