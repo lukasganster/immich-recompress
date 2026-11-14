@@ -203,6 +203,10 @@ export interface EncoderInfo {
   qdefault: number;
   /** Quality direction: 'low' = lower is better (RF/CRF), 'high' = higher is better (VideoToolbox). */
   qbetter: 'low' | 'high';
+  /** HandBrake's name for the quality scale: RF, CQ, ICQ or QP. */
+  qterm: string;
+  /** Label cutoffs from best to worst quality (near-lossless, high, balanced, smaller). */
+  qbands: number[];
   /** Whether a CPU-core count can be set for this (software) encoder. */
   cores: boolean;
 }

@@ -5,6 +5,7 @@ import { IconComponent } from '../icon/icon';
 import { ApiService } from '../../services/api.service';
 import { StoreService } from '../../services/store.service';
 import { JobPublic } from '../../models/api.models';
+import { qualityTerm } from '../../utils/quality-scale';
 
 @Component({
   selector: 'app-review-modal',
@@ -83,11 +84,11 @@ export class ReviewModalComponent {
     return `${from} → ${this.store.encoderLabel(j.encoder)} · .mp4`;
   }
 
-  /** Encoder summary line: friendly label, quality (RF or CQ), and preset for
+  /** Encoder summary line: friendly label, quality on its own scale, and preset for
    *  software encoders only (hardware encoders don't use HandBrake presets). */
   encoderDetail(j: JobPublic): string {
     const e = this.store.encoders().find(x => x.id === j.encoder);
-    const term = e?.qbetter === 'high' ? 'CQ' : 'RF';
+    const term = qualityTerm(e);
     const head = `${this.store.encoderLabel(j.encoder)} · ${term} ${j.quality}`;
     return (!e || !e.hw) ? `${head} · ${j.preset}` : head;
   }

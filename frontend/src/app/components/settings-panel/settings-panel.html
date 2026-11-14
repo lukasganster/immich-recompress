@@ -42,21 +42,25 @@
             </div>
 
             <div class="field">
-              <label for="setQuality">Quality ({{ enc?.qbetter === 'high' ? 'CQ' : 'RF' }}): {{ s.quality }} · {{ qualityLabel(s.quality) }}</label>
+              <label for="setQuality">Quality ({{ qualityTerm }}): {{ s.quality }} · {{ qualityLabel(s.quality) }}</label>
               <div class="rangewrap">
                 <input id="setQuality" type="range" [min]="enc?.qmin ?? 18" [max]="enc?.qmax ?? 32"
                   [ngModel]="s.quality" (ngModelChange)="update({quality: +$event})" />
                 <input type="number" [min]="enc?.qmin ?? 18" [max]="enc?.qmax ?? 32" class="num-input" aria-label="Quality value"
                   [ngModel]="s.quality" (ngModelChange)="update({quality: +$event})" />
               </div>
+              @let b = qualityBands;
               @if (enc?.qbetter === 'high') {
-                <small>Constant-quality target (0–100).
+                <small>Constant-quality target ({{ enc?.qmin }} to {{ enc?.qmax }}).
                   <strong>Higher = better quality &amp; bigger files; lower = smaller files.</strong>
-                  ~55–65 is a good balance.</small>
+                  {{ b[0] }} and up is near-lossless, about {{ b[2] }} to {{ b[1] }} is a good balance,
+                  below {{ b[3] }} is small but visibly soft.</small>
               } @else {
-                <small>Constant-quality target for the encoder (HandBrake's RF, like CRF).
+                <small>Constant-quality target for the encoder (HandBrake's {{ qualityTerm }}{{ qualityTerm === 'RF' ? ', like CRF' : '' }}).
                   <strong>Lower = better quality &amp; bigger files; higher = smaller files &amp; lower quality.</strong>
-                  Roughly each +6 halves the size. 18 ≈ near-lossless, ~22–26 is the sweet spot, 32 is small but visibly soft.</small>
+                  @if (qualityTerm === 'RF') { Roughly each +6 halves the size. }
+                  {{ b[0] }} or lower is near-lossless, about {{ b[1] }} to {{ b[2] }} is the sweet spot,
+                  above {{ b[3] }} is small but visibly soft.</small>
               }
             </div>
 
