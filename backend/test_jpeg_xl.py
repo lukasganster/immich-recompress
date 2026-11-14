@@ -244,7 +244,7 @@ class JpegXlToolTest(unittest.TestCase):
             stack.enter_context(patch("backend.routes._work_queue"))
             stack.enter_context(patch("backend.jobs.append_csv_log"))
 
-            def download(env, requested_id, path):
+            def download(env, requested_id, path, **kwargs):
                 self.assertEqual(requested_id, asset_id)
                 Path(path).write_bytes(original)
                 return True, ""
