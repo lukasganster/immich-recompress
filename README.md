@@ -23,7 +23,7 @@ Find the large videos and photos in your [Immich](https://immich.app/) library,
   the minimum savings.
 - Strip the hidden motion video from Live Photos.
 - **Review** every result (size, savings, preview) before it replaces the original.
-- Queue with live progress and persistent job history.
+- Queue with live progress, configurable parallel jobs and persistent job history.
 
 Replacing uploads the compressed file as a new asset, copies the original's
 metadata, tags, albums, capture date and location, and moves the original to
@@ -68,7 +68,7 @@ services:
       # See SECURITY.md.
       - "127.0.0.1:${PORT:-5050}:${PORT:-5050}"
     volumes:
-      - immich-recompress-data:/data # job-history SQLite DB
+      - immich-recompress-data:/data # history and settings SQLite DB
       - immich-recompress-backups:/tmp/immich_recompress_backup # pre-replace backups
       - immich-recompress-work:/tmp/immich_recompress_ui # download/encode scratch
 
@@ -111,7 +111,27 @@ Set in `.env` (see [`.env.example`](.env.example)):
 | `IMMICH_URL`     | yes      | Base URL of your Immich server                       |
 | `PORT`           | no       | Listen port (default `5050`)                         |
 | `HOST`           | no       | Dev-server bind address (default `127.0.0.1`)        |
-| `IMMICH_DB`      | no       | SQLite job-history path (default `./immich_recompress.db`) |
+| `IMMICH_DB`      | no       | SQLite history and server-settings path (default `./immich_recompress.db`) |
+
+Set **Concurrent jobs** under **Compression settings > General** to process
+1 to 8 jobs at once. The default is 1. The value is saved on the server and
+shared by every browser session. Each job downloads, encodes and optionally
+uploads its result; those stages can overlap across different jobs.
+
+Increasing the value starts more jobs immediately. Lowering it lets running
+jobs finish before admitting more. Reviews free their processing slots;
+confirmed replacements use the same limit and get the next available slot
+ahead of ordinary queued jobs. **CPU cores per job** still applies to each
+software encode, so several encodes share the available CPU or GPU resources.
+
+Jobs wait with **Waiting for disk space** when their estimated storage needs,
+including reservations for running jobs, exceed the available space. The
+scheduler retries automatically and does not delete existing files to make
+room. Estimates are reserved conservatively until a job releases its slot.
+Blocked jobs retain their priority while unrelated, eligible jobs can continue.
+Related Live Photo assets stay protected until their review is resolved.
+Active jobs and pending reviews remain in memory and are not resumed after
+a server restart; the concurrency setting and finished history are retained.
 
 ## Hardware acceleration
 

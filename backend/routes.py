@@ -6,6 +6,7 @@ import os
 import queue
 import shutil
 import threading
+import sqlite3
 import time
 from datetime import date, datetime, time as datetime_time, timedelta, timezone
 from functools import partial
@@ -23,10 +24,19 @@ from backend.config import (
     average_bitrate, get_env, human_duration, human_size, parse_duration, utcnow_iso,
 )
 from backend.state import (
-    _asset_key_lock, _asset_key_map, _jobs, _queue_order, _state_lock,
-    _sub_lock, _subscribers, _work_queue, active_id, kill_proc,
+    _asset_key_lock,
+    _asset_key_map,
+    _jobs,
+    _queue_order,
+    _state_lock,
+    _sub_lock,
+    _subscribers,
+    _job_updates,
+    _server_session,
+    kill_proc,
 )
 from backend.db import db_delete_jobs
+from backend import scheduler, statuses
 from backend.immich_api import (
     UUID_RE, asset_codec, collect_motion_photos, detect_immich_version,
     env_for_asset_verified, env_for_key, fetch_asset, fetch_key_owners,
@@ -37,9 +47,21 @@ from backend.immich_api import (
 )
 from backend.browse import collect_filtered, discover, metadata_filters
 from backend.jobs import (
-    broadcast, broadcast_queue_update, cleanup_encoded_file, cleanup_temp, compute_stats,
-    do_recompress_motion, do_replace, do_strip_motion, emit_job_update, fail_replacement,
-    new_job, persist_if_terminal, public_job, update_job,
+    broadcast,
+    broadcast_queue_update,
+    cleanup_encoded_file,
+    cleanup_temp,
+    compute_stats,
+    do_recompress_motion,
+    do_replace,
+    do_strip_motion,
+    emit_job_update,
+    new_job,
+    persist_if_terminal,
+    public_job,
+    update_job,
+    schedule_job,
+    schedule_confirmation,
 )
 from backend.media import available_encoders, cpu_count, image_preview_path
 
@@ -760,8 +782,9 @@ def api_enqueue():
             continue
         with _state_lock:
             existing = _jobs.get(asset_id)
-            if existing and existing["status"] in ("queued", "downloading",
-                                                   "encoding", "replacing", "review"):
+            if scheduler.has_task(asset_id) or (
+                existing and existing["status"] in statuses.UNSETTLED
+            ):
                 continue
             job_params = dict(params)
             if asset_id in medias:
@@ -774,7 +797,7 @@ def api_enqueue():
             _jobs[asset_id] = new_job(asset_id, job_params)
             if asset_id not in _queue_order:
                 _queue_order.append(asset_id)
-        _work_queue.put(asset_id)
+        schedule_job(asset_id)
         added.append(asset_id)
 
     broadcast_queue_update()
@@ -788,7 +811,7 @@ def api_cancel(asset_id):
         if not job:
             return jsonify({"ok": False, "error": "Unknown job"}), 404
         status = job["status"]
-        if status not in ("queued", "downloading", "encoding"):
+        if status not in statuses.CANCELLABLE:
             return jsonify({"ok": False, "error": "Job not cancellable"}), 409
         job["_cancel"] = True
         if status == "queued":
@@ -797,6 +820,8 @@ def api_cancel(asset_id):
         else:
             job["log"] = "Cancellation requested…"
     if status == "queued":
+        scheduler.cancel_pending(asset_id)
+        scheduler.release_assets(asset_id)
         persist_if_terminal(asset_id)
     else:
         kill_proc(asset_id)   # stop the running encode; the worker sets 'cancelled'
@@ -806,7 +831,7 @@ def api_cancel(asset_id):
 
 
 def _claim_confirmation(env_base, asset_id):
-    """Move a reviewed job to replacing, so it can only be confirmed once.
+    """Claim a review for queued replacement so it can only be confirmed once.
 
     Returns (work, None, None), where work performs the replacement, or
     (None, error, status) when the job cannot be confirmed.
@@ -827,7 +852,7 @@ def _claim_confirmation(env_base, asset_id):
             out_path = job.get("_out_path")
             new_size = job.get("new_size")
             savings = job.get("savings")
-            job["status"] = "replacing"
+            job["status"] = "queued_replace"
             job["log"] = ("Confirmed – motion video will be recompressed"
                           if motion_action == "recompress"
                           else "Confirmed – motion video will be removed")
@@ -840,8 +865,9 @@ def _claim_confirmation(env_base, asset_id):
             savings = job.get("savings")
             codec = job.get("codec")
             mime = job.get("_output_mime") or ("image/jpeg" if media == "image" else "video/mp4")
-            job["status"] = "replacing"
+            job["status"] = "queued_replace"
             job["log"] = "Confirmed – original will be replaced"
+        job["_confirmed"] = True
     env = env_for_key(env_base, key_idx)
     emit_job_update(asset_id)
 
@@ -863,28 +889,16 @@ def api_confirm(asset_id):
     if error:
         return jsonify({"ok": False, "error": error}), status
     broadcast_queue_update()
-    threading.Thread(target=_run_replacements, args=([(asset_id, work)],),
-                     name=f"confirm-{asset_id}", daemon=True).start()
+    schedule_confirmation(asset_id, work)
     return jsonify({"ok": True})
-
-
-def _run_replacements(claimed):
-    """Run one or more confirmed replacements in order. A failure stays on its
-    own job, so the ones behind it still run."""
-    for asset_id, work in claimed:
-        try:
-            work()
-        except Exception as exc:
-            fail_replacement(asset_id, f"Replace failed: {exc}")
 
 
 @bp.route("/api/confirm-all", methods=["POST"])
 def api_confirm_all():
-    """Confirm the reviewed jobs the client listed, replacing them in order.
+    """Submit only the reviews explicitly confirmed by the client.
 
-    The ids come from the client rather than from every job in review, so a
-    job that reached review after the user decided is not replaced unseen.
-    Replacing one by one keeps a large batch from uploading to Immich at once.
+    A job that reached review after the user decided is not replaced unseen.
+    All replacements use the global scheduler and its concurrency limit.
     """
     ids = (request.get_json(silent=True) or {}).get("ids")
     if not isinstance(ids, list):
@@ -904,8 +918,8 @@ def api_confirm_all():
         claimed.append((asset_id, work))
     if claimed:
         broadcast_queue_update()
-        threading.Thread(target=_run_replacements, args=(claimed,),
-                         name="confirm-all", daemon=True).start()
+        for asset_id, work in claimed:
+            schedule_confirmation(asset_id, work)
     return jsonify({"ok": True, "confirmed": [asset_id for asset_id, _ in claimed],
                     "skipped": skipped})
 
@@ -928,6 +942,7 @@ def api_discard(asset_id):
     cleanup_encoded_file(out_path)
     if backup_path:
         cleanup_temp(backup_path)
+    scheduler.release_assets(asset_id)
     persist_if_terminal(asset_id)
     emit_job_update(asset_id)
     broadcast_queue_update()
@@ -961,11 +976,12 @@ def api_preview(asset_id):
 def api_clear():
     removed = []
     outputs = []
-    finished = {"done", "downloaded", "encoded", "skipped",
-                "error", "cancelled", "discarded"}
     with _state_lock:
         for asset_id in list(_jobs.keys()):
-            if _jobs[asset_id]["status"] in finished:
+            if (
+                _jobs[asset_id]["status"] in statuses.FINISHED
+                and asset_id not in scheduler.active_jobs()
+            ):
                 outputs.append(_jobs[asset_id].get("_out_path"))
                 del _jobs[asset_id]
                 if asset_id in _queue_order:
@@ -982,17 +998,44 @@ def api_clear():
 @bp.route("/api/jobs")
 def api_jobs():
     with _state_lock:
-        active = active_id()
-        queue_ids = [aid for aid in _queue_order
-                     if aid in _jobs and _jobs[aid]["status"] in
-                     ("queued", "downloading", "encoding", "replacing")]
+        queue_ids = [
+            aid
+            for aid in _queue_order
+            if aid in _jobs and _jobs[aid]["status"] in statuses.IN_QUEUE
+        ]
         jobs = {aid: public_job(job) for aid, job in _jobs.items()}
-    return jsonify({
-        "active": active,
-        "queue": queue_ids,
-        "stats": compute_stats(),
-        "jobs": jobs,
-    })
+        active = scheduler.active_jobs()
+        revision = next(_job_updates)
+    return jsonify(
+        {
+            "active": active[0] if active else None,
+            "active_ids": active,
+            "concurrent_jobs": scheduler.concurrency(),
+            "revision": revision,
+            "session_id": _server_session,
+            "queue": queue_ids,
+            "stats": compute_stats(),
+            "jobs": jobs,
+        }
+    )
+
+
+@bp.route("/api/settings", methods=["GET", "PUT"])
+def api_settings():
+    if request.method == "GET":
+        return jsonify({"concurrent_jobs": scheduler.concurrency()})
+    body = request.get_json(silent=True)
+    value = body.get("concurrent_jobs") if isinstance(body, dict) else None
+    try:
+        scheduler.save_concurrency(value)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except sqlite3.Error:
+        return jsonify(
+            {"error": "Could not save server settings. Check the database and retry."}
+        ), 503
+    broadcast_queue_update()
+    return jsonify({"concurrent_jobs": value})
 
 
 # --------------------------------------------------------------------------- #

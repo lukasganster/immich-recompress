@@ -77,15 +77,15 @@
 
             @if (enc?.cores) {
               <div class="field">
-                <label for="setCores">CPU cores: {{ cores }} / {{ store.cpuCount() }}</label>
+                <label for="setCores">CPU cores per job: {{ cores }} / {{ store.cpuCount() }}</label>
                 <div class="rangewrap">
                   <input id="setCores" type="range" min="1" [max]="store.cpuCount()"
                     [ngModel]="cores" (ngModelChange)="update({threads: +$event})" />
                   <input type="number" min="1" [max]="store.cpuCount()" class="num-input" aria-label="CPU cores value"
                     [ngModel]="cores" (ngModelChange)="update({threads: +$event})" />
                 </div>
-                <small>How many CPU cores the software encoder may use — {{ store.cpuCount() }} detected.
-                  Fewer keeps the machine responsive; the max is fastest.</small>
+                <small>How many CPU cores each software encode may use. {{ store.cpuCount() }} detected.
+                  Parallel jobs share the same machine.</small>
               </div>
             }
 
@@ -198,6 +198,30 @@
         <details class="disclosure">
           <summary class="text-primary">General<span class="disclosure-value">{{ generalSummary }}</span></summary>
           <div class="disclosure-body settings-form">
+            <div class="field">
+              <label for="setConcurrentJobs">Concurrent jobs</label>
+              <div class="flex items-center gap-3">
+                <button type="button" class="btn ghost sm" aria-label="Decrease concurrent jobs"
+                  [disabled]="!store.serverSettingsLoaded() || savingConcurrency() || store.concurrentJobs() <= 1"
+                  (click)="onConcurrency(store.concurrentJobs() - 1)">−</button>
+                <input #concurrencyModel="ngModel" id="setConcurrentJobs" type="number" min="1" max="8" step="1"
+                  class="num-input" aria-describedby="concurrencyHelp concurrencyStatus"
+                  [disabled]="!store.serverSettingsLoaded() || savingConcurrency()"
+                  [attr.aria-invalid]="concurrencyError() ? 'true' : null"
+                  [ngModel]="concurrencyDraft()" (ngModelChange)="onConcurrency($event)"
+                  (blur)="restoreConcurrency()" />
+                <button type="button" class="btn ghost sm" aria-label="Increase concurrent jobs"
+                  [disabled]="!store.serverSettingsLoaded() || savingConcurrency() || store.concurrentJobs() >= 8"
+                  (click)="onConcurrency(store.concurrentJobs() + 1)">+</button>
+              </div>
+              <small id="concurrencyHelp">Maximum number of jobs processed simultaneously. Applies server-wide to all browser sessions.</small>
+              <small id="concurrencyStatus" aria-live="polite">
+                @if (concurrencyError()) { {{ concurrencyError() }} }
+                @else if (store.serverSettingsError()) { {{ store.serverSettingsError() }} }
+                @else if (savingConcurrency()) { Saving… }
+                @else if (!store.serverSettingsLoaded()) { Waiting for server settings… }
+              </small>
+            </div>
             <div class="field">
               <label for="setMinSavings">Min. Savings: {{ s.min_savings }}%</label>
               <div class="rangewrap">

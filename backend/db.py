@@ -1,4 +1,6 @@
-"""SQLite persistence for terminal job history (survives restarts)."""
+"""SQLite persistence for terminal job history and server-wide settings."""
+
+from contextlib import closing
 import sqlite3
 import threading
 
@@ -11,13 +13,16 @@ _DB_COLS = ("id", "name", "media", "status", "old_size", "new_size",
 
 def db_init():
     try:
-        with _db_lock, sqlite3.connect(DB_PATH, timeout=10) as conn:
+        with _db_lock, closing(sqlite3.connect(DB_PATH, timeout=10)) as conn, conn:
             conn.execute(
                 "CREATE TABLE IF NOT EXISTS jobs ("
                 "id TEXT PRIMARY KEY, name TEXT, media TEXT, status TEXT,"
                 "old_size INTEGER, new_size INTEGER, savings INTEGER,"
                 "codec TEXT, new_codec TEXT, log TEXT, updated_at TEXT,"
                 "skip_reason TEXT)")
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value INTEGER NOT NULL)"
+            )
             columns = {row[1] for row in conn.execute("PRAGMA table_info(jobs)")}
             if "skip_reason" not in columns:
                 conn.execute("ALTER TABLE jobs ADD COLUMN skip_reason TEXT")
@@ -33,7 +38,7 @@ def db_save_job(job):
            job.get("codec"), job.get("new_codec"), job.get("log"), utcnow_iso(),
            job.get("skip_reason"))
     try:
-        with _db_lock, sqlite3.connect(DB_PATH, timeout=10) as conn:
+        with _db_lock, closing(sqlite3.connect(DB_PATH, timeout=10)) as conn, conn:
             conn.execute(
                 "INSERT OR REPLACE INTO jobs (%s) VALUES (%s)"
                 % (",".join(_DB_COLS), ",".join("?" * len(_DB_COLS))), row)
@@ -45,7 +50,7 @@ def db_delete_jobs(ids):
     if not ids:
         return
     try:
-        with _db_lock, sqlite3.connect(DB_PATH, timeout=10) as conn:
+        with _db_lock, closing(sqlite3.connect(DB_PATH, timeout=10)) as conn, conn:
             conn.executemany("DELETE FROM jobs WHERE id=?", [(i,) for i in ids])
     except sqlite3.Error:
         pass
@@ -53,8 +58,28 @@ def db_delete_jobs(ids):
 
 def db_load_jobs():
     try:
-        with _db_lock, sqlite3.connect(DB_PATH, timeout=10) as conn:
+        with _db_lock, closing(sqlite3.connect(DB_PATH, timeout=10)) as conn, conn:
             conn.row_factory = sqlite3.Row
             return [dict(r) for r in conn.execute("SELECT * FROM jobs").fetchall()]
     except sqlite3.Error:
         return []
+
+
+def db_load_concurrency() -> int:
+    try:
+        with _db_lock, closing(sqlite3.connect(DB_PATH, timeout=10)) as conn, conn:
+            row = conn.execute(
+                "SELECT value FROM settings WHERE key = 'concurrent_jobs'"
+            ).fetchone()
+    except sqlite3.Error:
+        return 1
+    value = row[0] if row else 1
+    return value if type(value) is int and 1 <= value <= 8 else 1
+
+
+def db_save_concurrency(value: int) -> None:
+    with _db_lock, closing(sqlite3.connect(DB_PATH, timeout=10)) as conn, conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES ('concurrent_jobs', ?)",
+            (value,),
+        )

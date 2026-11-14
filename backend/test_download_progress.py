@@ -410,7 +410,7 @@ class JobDownloadProgressTest(unittest.TestCase):
     def test_motion_download_cancellation_at_end_of_stream_is_not_success(self):
         self.run_job("motionphoto", download_only=True, cancel_after_chunks=4)
         self.assertEqual(_jobs["still"]["status"], "cancelled")
-        self.assertFalse((self.directory / "motion_motion.mov").exists())
+        self.assertFalse((self.directory / "still_motion.mov").exists())
 
     def test_cancel_after_motion_backup_prevents_removal_or_review(self):
         download = jobs._download_for_job
@@ -432,7 +432,7 @@ class JobDownloadProgressTest(unittest.TestCase):
                 self.assertEqual(_jobs["still"]["status"], "cancelled")
                 strip.assert_not_called()
                 self.assertFalse(
-                    (self.directory / "backup" / "motion_motion.mov").exists()
+                    (self.directory / "backup" / "still_motion.mov").exists()
                 )
 
     def test_cancel_before_motion_encode_starts_skips_encoding(self):

@@ -7,9 +7,8 @@ import queue
 import re
 import shutil
 import subprocess
-import threading
 import time
-from typing import Optional
+from typing import Callable, Optional
 
 from werkzeug.utils import secure_filename
 
@@ -18,11 +17,21 @@ from backend.config import (
     WORK_DIR, get_env, human_duration, human_size, utcnow_iso,
 )
 from backend.state import (
-    _asset_key_lock, _asset_key_map, _jobs, _queue_order, _state_lock,
-    _sub_lock, _subscribers, _work_queue, active_id, is_cancelled,
-    register_proc, set_active_id, unregister_proc,
+    _asset_key_lock,
+    _asset_key_map,
+    _jobs,
+    _queue_order,
+    _state_lock,
+    _sub_lock,
+    _subscribers,
+    _job_updates,
+    _server_session,
+    is_cancelled,
+    register_proc,
+    unregister_proc,
 )
 from backend.db import db_load_jobs, db_save_job
+from backend import scheduler, statuses
 from backend.media import (
     append_csv_log, build_cjxl_cmd, build_ffmpeg_image_cmd, build_handbrake_cmd,
     ffprobe_info, has_free_space, image_preview_path,
@@ -55,6 +64,7 @@ def broadcast_queue_update():
 def new_job(asset_id, params):
     return {
         "id": asset_id,
+        "revision": next(_job_updates),
         "name": params.get("name", asset_id),
         "size": params.get("size"),
         "status": "queued",
@@ -107,6 +117,7 @@ def update_job(asset_id, **changes):
         if not job:
             return None
         job.update(changes)
+        job["revision"] = next(_job_updates)
         snapshot = public_job(job)
     return snapshot
 
@@ -116,6 +127,7 @@ def emit_job_update(asset_id):
         job = _jobs.get(asset_id)
         if not job:
             return
+        job["revision"] = next(_job_updates)
         data = {
             "id": asset_id,
             "status": job["status"],
@@ -124,7 +136,10 @@ def emit_job_update(asset_id):
             "skip_reason": job.get("skip_reason"),
             "new_size": job["new_size"],
             "savings": job["savings"],
+            "revision": job["revision"],
+            "session_id": _server_session,
         }
+    data["running"] = asset_id in scheduler.active_jobs()
     broadcast("job_update", data)
 
 
@@ -158,13 +173,13 @@ def compute_stats():
     with _state_lock:
         for job in _jobs.values():
             status = job["status"]
-            if status == "queued":
+            if status in statuses.WAITING:
                 stats["queued"] += 1
-            elif status in ("encoding", "downloading", "replacing"):
+            elif status in statuses.RUNNING:
                 stats["active"] += 1
             elif status == "review":
                 stats["review"] += 1
-            elif status in ("done", "downloaded", "encoded"):
+            elif status in statuses.SUCCEEDED:
                 stats["done"] += 1
             elif status == "skipped":
                 stats["skipped"] += 1
@@ -755,6 +770,28 @@ def _encode_jxl_image(src, out, asset_id, threads=None, preview=True, distance=0
     return True, ""
 
 
+def _image_skip_reason(src_fmt: str, params: dict) -> tuple[str, str]:
+    if params.get("download_only"):
+        return "", ""
+    fmt = src_fmt.lower()
+    photo_format = params.get("photo_format", "jpeg")
+    is_raw = fmt in RAW_PHOTO_EXTS
+    if photo_format not in ("jpeg", "jxl"):
+        return "Unsupported photo output format", "bad format"
+    if photo_format == "jxl":
+        if fmt not in JPEG_PHOTO_EXTS:
+            return f"{src_fmt}: JPEG XL requires a JPEG original", "not JPEG"
+        if not (shutil.which("cjxl") and shutil.which("djxl")):
+            return "JPEG XL requires cjxl and djxl (install libjxl-tools)", "no cjxl"
+    if is_raw and not params.get("compress_raw", False):
+        return f"{src_fmt}: RAW is not compressed (enable it in settings)", "RAW off"
+    if is_raw and not shutil.which("sips"):
+        return f"{src_fmt}: RAW compression requires 'sips' (macOS only)", "no sips"
+    if not is_raw and fmt not in JPEG_PHOTO_EXTS:
+        return f"{src_fmt}: only JPEG is compressed (no format conversion)", "not JPEG"
+    return "", ""
+
+
 def process_image_job(env, asset_id, params):
     """Download, recompress to JPEG or JPEG XL, and optionally replace."""
     name = params.get("name") or asset_id
@@ -763,7 +800,6 @@ def process_image_job(env, asset_id, params):
     confirm = params.get("confirm", True)
     backup_dir = params.get("backup_dir") or BACKUP_DIR
     target_savings = params.get("photo_target_savings", 40)
-    compress_raw = params.get("compress_raw", False)
     photo_format = params.get("photo_format", "jpeg")
     jxl_distance = params.get("photo_jxl_distance", 0)
     is_jxl = photo_format == "jxl"
@@ -784,39 +820,25 @@ def process_image_job(env, asset_id, params):
     # Format conversions need the output extension in the uploaded filename.
     upload_name = (os.path.splitext(name)[0] + output_ext) if is_raw or is_jxl else name
 
-    # JPEG XL accepts JPEG originals only. RAW conversion remains a separate
-    # opt-in for JPEG output; no other input formats are silently converted.
-    if not download_only:
-        skip_msg = skip_reason = None
-        if photo_format not in ("jpeg", "jxl"):
-            skip_msg, skip_reason = "Unsupported photo output format", "bad format"
-        elif is_jxl and fmt not in JPEG_PHOTO_EXTS:
-            skip_msg = f"{src_fmt}: JPEG XL requires a JPEG original"
-            skip_reason = "not JPEG"
-        elif is_jxl and not (shutil.which("cjxl") and shutil.which("djxl")):
-            skip_msg = "JPEG XL requires cjxl and djxl (install libjxl-tools)"
-            skip_reason = "no cjxl"
-        elif is_raw and not compress_raw:
-            skip_msg = f"{src_fmt}: RAW is not compressed (enable it in settings)"
-            skip_reason = "RAW off"
-        elif is_raw and not shutil.which("sips"):
-            skip_msg = f"{src_fmt}: RAW compression requires 'sips' (macOS only)"
-            skip_reason = "no sips"
-        elif not is_raw and fmt not in JPEG_PHOTO_EXTS:
-            skip_msg = f"{src_fmt}: only JPEG is compressed (no format conversion)"
-            skip_reason = "not JPEG"
-        if skip_msg:
-            update_job(asset_id, status="skipped", codec=src_fmt, log=skip_msg,
-                       skip_reason=skip_reason)
-            emit_job_update(asset_id)
-            append_csv_log([utcnow_iso(), asset_id, name, src_fmt,
-                            None, None, None, "skipped"])
-            broadcast_queue_update()
-            return
+    skip_msg, skip_reason = _image_skip_reason(src_fmt, params)
+    if skip_msg:
+        update_job(
+            asset_id,
+            status="skipped",
+            codec=src_fmt,
+            log=skip_msg,
+            skip_reason=skip_reason,
+        )
+        emit_job_update(asset_id)
+        append_csv_log(
+            [utcnow_iso(), asset_id, name, src_fmt, None, None, None, "skipped"]
+        )
+        broadcast_queue_update()
+        return
 
     job_size = params.get("size") or 0
     ok_space, need = has_free_space(job_size)
-    if job_size and not ok_space:
+    if job_size and not ok_space and not params.get("_admitted"):
         free = shutil.disk_usage(WORK_DIR).free
         update_job(asset_id, status="error",
                    log=f"Not enough disk space: {human_size(free)} free, ~{human_size(need)} needed")
@@ -969,7 +991,7 @@ def process_motionphoto_job(env, asset_id, params):
                codec="MOTION", log="Searching for motion video…")
     emit_job_update(asset_id)
 
-    detail = fetch_asset(env, asset_id)
+    detail = params.get("_source_detail") or fetch_asset(env, asset_id)
     video_id = detail.get("livePhotoVideoId")
     if not video_id:
         update_job(asset_id, status="skipped", skip_reason="no motion",
@@ -979,7 +1001,7 @@ def process_motionphoto_job(env, asset_id, params):
         broadcast_queue_update()
         return
 
-    vdetail = fetch_asset(env, video_id)
+    vdetail = params.get("_motion_detail") or fetch_asset(env, video_id)
     vinfo = vdetail.get("exifInfo") or {}
     try:
         video_size = int(vinfo.get("fileSizeInByte") or vdetail.get("fileSizeInByte") or 0)
@@ -990,7 +1012,7 @@ def process_motionphoto_job(env, asset_id, params):
 
     if download_only:
         ext = os.path.splitext(video_name)[1] or ".mov"
-        dest = os.path.join(WORK_DIR, f"{video_id}_motion{ext}")
+        dest = os.path.join(WORK_DIR, f"{asset_id}_motion{ext}")
         ok, reason = _download_for_job(env, asset_id, video_id, dest, video_size,
                                        label="Downloading motion video")
         if not ok:
@@ -1014,7 +1036,7 @@ def process_motionphoto_job(env, asset_id, params):
 
     if motion_action == "recompress":
         vext = os.path.splitext(video_name)[1] or ".mov"
-        src_path = os.path.join(WORK_DIR, f"{video_id}_src{vext}")
+        src_path = os.path.join(WORK_DIR, f"{asset_id}_motion_src{vext}")
         out_path = os.path.join(WORK_DIR, f"{asset_id}_out.mp4")
         update_job(asset_id, log="Downloading motion video…")
         emit_job_update(asset_id)
@@ -1133,7 +1155,7 @@ def process_motionphoto_job(env, asset_id, params):
     do_strip_motion(env, asset_id, video_id, name, video_size)
 
 
-def process_job(asset_id):
+def process_job(asset_id: str, env: Optional[dict] = None) -> None:
     _env = get_env()
     with _state_lock:
         job = _jobs.get(asset_id)
@@ -1148,7 +1170,8 @@ def process_job(asset_id):
 
     # Use the key that actually owns this asset, not just the one captured at
     # enqueue (which can be wrong/stale in multi-user setups → Immich 400).
-    env = env_for_asset_verified(_env, asset_id, params.get("_key_idx", 0))
+    if env is None:
+        env = env_for_asset_verified(_env, asset_id, params.get("_key_idx", 0))
     with _asset_key_lock:
         resolved_idx = _asset_key_map.get(asset_id, params.get("_key_idx", 0))
     # Persist the corrected key on the job so the confirm/replace path uses it too.
@@ -1177,7 +1200,7 @@ def process_job(asset_id):
     out_path = os.path.join(WORK_DIR, f"{asset_id}_out.mp4")
 
     job_size = params.get("size") or 0
-    if skip_codecs and not download_only:
+    if skip_codecs and not download_only and not params.get("_codec_checked"):
         # Probe the original over HTTP first so a skipped video is never
         # downloaded. If the probe fails, the check after the download decides.
         update_job(asset_id, status="downloading", started_at=utcnow_iso(),
@@ -1190,7 +1213,7 @@ def process_job(asset_id):
             return
 
     ok_space, need = has_free_space(job_size)
-    if job_size and not ok_space:
+    if job_size and not ok_space and not params.get("_admitted"):
         free = shutil.disk_usage(WORK_DIR).free
         update_job(asset_id, status="error",
                    log=f"Not enough disk space: {human_size(free)} free, ~{human_size(need)} needed")
@@ -1311,38 +1334,234 @@ def process_job(asset_id):
                savings, src_codec)
 
 
-def worker_loop():
-    """Background worker: process queued jobs one at a time."""
-    while True:
-        asset_id = _work_queue.get()
-        try:
-            with _state_lock:
-                job = _jobs.get(asset_id)
-                if not job or job.get("_cancel") or job["status"] != "queued":
-                    if job and job.get("_cancel"):
-                        job["status"] = "cancelled"
-                    set_active_id(None)
-                else:
-                    set_active_id(asset_id)
-            if active_id() != asset_id:
-                broadcast_queue_update()
-                continue
-            broadcast_queue_update()
-            process_job(asset_id)
-        except Exception as exc:  # keep the worker alive on unexpected errors
-            update_job(asset_id, status="error", log=f"Worker error: {exc}")
+def _non_negative_int(value: object) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (ValueError, TypeError, OverflowError):
+        return 0
+
+
+def _asset_size(detail: dict) -> int:
+    return _non_negative_int(
+        (detail.get("exifInfo") or {}).get("fileSizeInByte")
+        or detail.get("fileSizeInByte")
+    )
+
+
+def _jxl_scratch_size(params: dict, detail: dict, size: int) -> int:
+    """JPEG XL output kept for review or download is decoded for a preview."""
+    if params.get("photo_format") != "jxl" or not (
+        params.get("confirm", True) or not params.get("replace", True)
+    ):
+        return 0
+    exif = detail.get("exifInfo") or {}
+    pixels = _non_negative_int(
+        exif.get("exifImageWidth") or exif.get("imageWidth")
+    ) * _non_negative_int(exif.get("exifImageHeight") or exif.get("imageHeight"))
+    return max(size, pixels * 4 + 1024**2)
+
+
+def _disk_needs(
+    asset_id: str, params: dict, detail: dict, size: int, backup_dir: str
+) -> tuple[scheduler.DiskNeed, ...]:
+    """What a job may still write. Work files are named after the job id; a
+    Live Photo's motion backup is named after its linked video id."""
+    work_prefix = f"{asset_id}_"
+    if params.get("download_only"):
+        return (scheduler.DiskNeed(WORK_DIR, size, work_prefix),)
+    replace = params.get("replace", True)
+    if params.get("media") == "motionphoto":
+        video_id = detail.get("livePhotoVideoId")
+        action = params.get("motion_action")
+        if not video_id or action == "keep":
+            return ()
+        backup = (
+            (scheduler.DiskNeed(backup_dir, size, f"{video_id}_"),) if replace else ()
+        )
+        if action == "remove":
+            return backup
+        return (scheduler.DiskNeed(WORK_DIR, size * 2, work_prefix),) + backup
+    work_size = size * 2
+    if params.get("media") == "image":
+        # JPEG quality search briefly keeps a probe as well as the final output.
+        work_size += size + _jxl_scratch_size(params, detail, size)
+    backup = (scheduler.DiskNeed(backup_dir, size, work_prefix),) if replace else ()
+    return (scheduler.DiskNeed(WORK_DIR, work_size, work_prefix),) + backup
+
+
+def _prepare_job(asset_id: str) -> scheduler.PreparedWork:
+    with _state_lock:
+        params = dict(_jobs[asset_id])
+    if params.get("_cancel"):
+        return scheduler.PreparedWork(run=lambda: False)
+    env = env_for_asset_verified(get_env(), asset_id, params.get("_key_idx", 0))
+    with _asset_key_lock:
+        resolved_idx = _asset_key_map.get(asset_id, params.get("_key_idx", 0))
+    detail = fetch_asset(env, asset_id)
+    if detail.get("isTrashed"):
+        raise RuntimeError("Original asset is in the Immich trash. Refresh the selection.")
+    assets = {asset_id}
+    motion = {}
+    size = _asset_size(detail) or _non_negative_int(params.get("size"))
+    if params.get("media") == "motionphoto":
+        video_id = detail.get("livePhotoVideoId")
+        if video_id:
+            assets.add(video_id)
+            motion = fetch_asset(env, video_id)
+            if motion.get("isTrashed"):
+                raise RuntimeError("Motion video is in the Immich trash. Refresh the selection.")
+            size = _asset_size(motion)
+        else:
+            size = 0
+        if params.get("motion_action") == "keep" and not params.get("download_only"):
+            size = 0
+    if params.get("media") == "image":
+        name = params.get("name") or asset_id
+        fmt = (os.path.splitext(name)[1].lstrip(".") or "img").upper()
+        if _image_skip_reason(fmt, params)[0]:
+
+            def skip_image() -> scheduler.KeepClaims:
+                process_job(asset_id, env)
+                return False
+
+            return scheduler.PreparedWork(run=skip_image, assets=frozenset(assets))
+    elif params.get("media") != "motionphoto" and not params.get("download_only"):
+        skip_codecs = [
+            codec.strip().lower()
+            for codec in str(params.get("skip_codecs", "")).split(",")
+            if codec.strip()
+        ]
+        if skip_codecs:
+            codec = probe_original_codec(env, asset_id)
+            if not is_cancelled(asset_id) and skip_listed_codec(
+                asset_id, params.get("name") or asset_id, codec, skip_codecs, size
+            ):
+                return scheduler.PreparedWork(run=lambda: False)
+            update_job(asset_id, _codec_checked=True)
+    os.makedirs(WORK_DIR, exist_ok=True)
+    backup_dir = params.get("backup_dir") or BACKUP_DIR
+    os.makedirs(backup_dir, exist_ok=True)
+    disk = _disk_needs(asset_id, params, detail, size, backup_dir)
+    update_job(
+        asset_id,
+        _key_idx=resolved_idx,
+        _source_detail=detail,
+        _motion_detail=motion,
+        size=size,
+        _admitted=True,
+    )
+
+    def run() -> scheduler.KeepClaims:
+        process_job(asset_id, env)
+        with _state_lock:
+            job = _jobs.get(asset_id)
+            return bool(job and job["status"] in statuses.HOLDS_CLAIMS)
+
+    return scheduler.PreparedWork(run=run, assets=frozenset(assets), disk=disk)
+
+
+def _update_unless_cancelled(asset_id: str, **changes) -> bool:
+    """Apply changes atomically, unless the user already cancelled the job."""
+    with _state_lock:
+        job = _jobs.get(asset_id)
+        if not job or job.get("_cancel"):
+            return False
+        job.update(changes)
+        job["revision"] = next(_job_updates)
+        return True
+
+
+def _is_confirmed(asset_id: str) -> bool:
+    with _state_lock:
+        job = _jobs.get(asset_id)
+        return bool(job and job.get("_confirmed"))
+
+
+def _wait_log(asset_id: str, reason: scheduler.WaitReason) -> str:
+    """Name the job holding a related asset, so a stalled wait is explained."""
+    owner = scheduler.blocker(asset_id) if reason is scheduler.WaitReason.ASSET else None
+    with _state_lock:
+        job = _jobs.get(owner) if owner else None
+        if not job:
+            return reason.value
+        name = job.get("name") or owner
+        status = job["status"]
+    if status == "review":
+        return f"{reason.value}: {name} is awaiting review"
+    return f"{reason.value}: {name} is being processed"
+
+
+def _task_notify(asset_id: str, event: object) -> None:
+    if event is scheduler.TaskEvent.PREPARING:
+        # A queued job cancelled just as it was picked up must stay cancelled.
+        if not _update_unless_cancelled(
+            asset_id,
+            status="queued_replace" if _is_confirmed(asset_id) else "preparing",
+            log="Checking asset",
+            started_at=utcnow_iso(),
+        ):
+            return
+    elif isinstance(event, scheduler.WaitReason):
+        if not _update_unless_cancelled(
+            asset_id,
+            status="queued_replace" if _is_confirmed(asset_id) else "queued",
+            log=_wait_log(asset_id, event),
+        ):
+            return
+    elif event is scheduler.TaskEvent.CANCELLED:
+        update_job(asset_id, status="cancelled", log="Cancelled")
+    elif event is scheduler.TaskEvent.SETTLED:
+        unregister_proc(asset_id)
+        update_job(asset_id, _source_detail=None, _motion_detail=None, _codec_checked=False)
+        persist_if_terminal(asset_id)
+        return
+    emit_job_update(asset_id)
+    broadcast_queue_update()
+
+
+def _task_failed(asset_id: str, exc: Exception, confirmed: bool = False) -> None:
+    if confirmed:
+        fail_replacement(asset_id, f"Replace failed: {exc}")
+    else:
+        update_job(asset_id, status="error", log=f"Job failed: {exc}")
+        emit_job_update(asset_id)
+        broadcast_queue_update()
+
+
+def schedule_job(asset_id: str) -> None:
+    scheduler.submit(
+        scheduler.Task(
+            job_id=asset_id,
+            prepare=lambda: _prepare_job(asset_id),
+            notify=lambda event: _task_notify(asset_id, event),
+            failed=lambda exc: _task_failed(asset_id, exc),
+            cancelled=lambda: is_cancelled(asset_id),
+        )
+    )
+
+
+def schedule_confirmation(asset_id: str, work: Callable[[], object]) -> None:
+    def prepare():
+        with _state_lock:
+            job = dict(_jobs[asset_id])
+        assets = {asset_id}
+        if job.get("_video_id"):
+            assets.add(job["_video_id"])
+
+        def replace() -> scheduler.KeepClaims:
+            update_job(asset_id, status="replacing", log="Replacing confirmed asset")
             emit_job_update(asset_id)
-        finally:
-            with _state_lock:
-                set_active_id(None)
-            unregister_proc(asset_id)
-            persist_if_terminal(asset_id)   # save finished jobs to the DB
-            broadcast_queue_update()
-            _work_queue.task_done()
+            work()
+            return False
 
+        return scheduler.PreparedWork(run=replace, assets=frozenset(assets))
 
-
-
-def start_worker():
-    thread = threading.Thread(target=worker_loop, name="encode-worker", daemon=True)
-    thread.start()
+    scheduler.submit(
+        scheduler.Task(
+            job_id=asset_id,
+            prepare=prepare,
+            priority=True,
+            notify=lambda event: _task_notify(asset_id, event),
+            failed=lambda exc: _task_failed(asset_id, exc, confirmed=True),
+        )
+    )

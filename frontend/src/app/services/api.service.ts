@@ -2,7 +2,7 @@ import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import {
-  Capabilities, JobsResponse, Settings, StatusResponse, VideoDetail,
+  Capabilities, JobsResponse, ServerSettings, Settings, StatusResponse, VideoDetail,
   VideosResponse, VideoSummary, User, KeyOwner, MediaType, SortField, SortOrder,
   CaptureDateFilter, BrowseOption, MetadataFilter,
 } from '../models/api.models';
@@ -66,6 +66,10 @@ export class ApiService {
 
   jobs(): Observable<JobsResponse> {
     return this.http.get<JobsResponse>('/api/jobs');
+  }
+
+  setConcurrentJobs(value: number): Observable<ServerSettings> {
+    return this.http.put<ServerSettings>('/api/settings', { concurrent_jobs: value });
   }
 
   enqueue(ids: string[], names: Record<string, string>, sizes: Record<string, number>, settings: Settings, medias: Record<string, string> = {}, downloadOnly = false): Observable<{ added: string[] }> {

@@ -56,7 +56,7 @@ RUN pip install --no-cache-dir -r requirements.txt gunicorn
 COPY backend/*.py ./backend/
 COPY --from=frontend /app/backend/static ./backend/static
 
-# Default DB location: a /data volume so job history survives container
+# Default DB location: a /data volume so history and settings survive container
 # recreation (overridable via IMMICH_DB). Pre-created so it works even unmounted.
 ENV IMMICH_DB=/data/immich_recompress.db \
     PORT=5050 \
@@ -69,7 +69,7 @@ EXPOSE 5050
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD python -c "import os,sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:%s/api/status' % os.environ.get('PORT','5050'), timeout=4).status==200 else 1)"
 
-# Single gthread worker: the app keeps all queue state in memory and runs one
-# background encode thread, so it must not be scaled to multiple workers.
+# One Gunicorn process owns the shared in-memory scheduler. Its concurrency
+# limit controls background jobs; do not scale to multiple server workers.
 # timeout 0 keeps long-lived SSE (/api/events) connections from being killed.
 CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:${PORT:-5050} --workers 1 --threads 8 --worker-class gthread --timeout 0 --pythonpath /app backend.server:app"]

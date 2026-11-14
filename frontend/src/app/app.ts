@@ -9,6 +9,7 @@ import {
 import { StoreService } from './services/store.service';
 import { ApiService } from './services/api.service';
 import { EventsService } from './services/events.service';
+import { QueueSyncService } from './services/queue-sync.service';
 
 import { HeaderComponent } from './components/header/header';
 import { DashboardComponent } from './components/dashboard/dashboard';
@@ -41,6 +42,7 @@ export class App implements OnInit {
   readonly store = inject(StoreService);
   private readonly api = inject(ApiService);
   private readonly events = inject(EventsService);
+  private readonly sync = inject(QueueSyncService);
 
   readonly grid = viewChild.required(MediaGridComponent);
   readonly drawer = viewChild.required(DetailDrawerComponent);
@@ -91,11 +93,7 @@ export class App implements OnInit {
       this.store.applyJobUpdate(update);
     });
     this.events.queueUpdate$.subscribe(() => {
-      this.api.jobs().subscribe(data => {
-        this.store.jobs.set(data.jobs ?? {});
-        this.store.activeId.set(data.active);
-        this.store.savedBytes.set(data.stats?.saved_bytes ?? 0);
-      });
+      this.sync.refreshJobs();
     });
   }
 
@@ -110,14 +108,7 @@ export class App implements OnInit {
     this.api.capabilities().subscribe(c => this.store.applyCapabilities(c));
     this.api.users().subscribe(data => this.store.users.set(data.users ?? []));
     this.api.keyOwners().subscribe(data => this.store.keyOwners.set(data.owners ?? []));
-    this.api.jobs().subscribe(data => {
-      this.store.jobs.set(data.jobs ?? {});
-      this.store.activeId.set(data.active);
-      this.store.savedBytes.set(data.stats?.saved_bytes ?? 0);
-      for (const [id, job] of Object.entries(data.jobs ?? {})) {
-        if (job.status === 'done') this.store.markProcessed(id, job);
-      }
-    });
+    this.sync.refreshJobs();
   }
 
   onSearch(val: string): void {
@@ -158,10 +149,7 @@ export class App implements OnInit {
       return;
     }
     this.api.enqueue(ids, names, sizes, { ...this.store.settings(), media: this.store.media() }, medias).subscribe(() => {
-      this.api.jobs().subscribe(data => {
-        this.store.jobs.set(data.jobs ?? {});
-        this.store.activeId.set(data.active);
-      });
+      this.sync.refreshJobs();
     });
   }
 
@@ -174,10 +162,6 @@ export class App implements OnInit {
   }
 
   onJobsRefresh(): void {
-    this.api.jobs().subscribe(data => {
-      this.store.jobs.set(data.jobs ?? {});
-      this.store.activeId.set(data.active);
-      this.store.savedBytes.set(data.stats?.saved_bytes ?? 0);
-    });
+    this.sync.refreshJobs();
   }
 }

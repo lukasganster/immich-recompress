@@ -1,18 +1,21 @@
 """Immich Recompress — Flask entrypoint.
 
 A web dashboard to browse, inspect, download and re-encode videos and photos
-from an Immich library. All state is kept in memory and lost on restart.
+from an Immich library. Active queue state is in memory. Finished history and
+global settings persist in SQLite.
 
 The application is split into focused modules:
   - config       configuration, env loading, formatting helpers
   - state        shared in-memory queue state + cancellation primitives
-  - db           SQLite persistence of terminal job history
+  - db           SQLite persistence of terminal job history and settings
   - media        ffprobe / HandBrake / ffmpeg command builders
   - immich_api   Immich HTTP client + parsing/summary helpers
-  - jobs         job lifecycle, encode pipeline, background worker, SSE
+  - jobs         job lifecycle, encode pipeline, SSE
+  - statuses     job status groups shared across modules
+  - scheduler    concurrent jobs, disk admission and related-asset ownership
   - routes       Flask blueprint with all HTTP routes
 
-A single background worker thread processes the encoding queue sequentially.
+A scheduler dispatches whole jobs under a server-wide concurrency limit.
 """
 import os
 import sys
@@ -27,17 +30,19 @@ from flask import Flask
 
 from backend import config  # noqa: F401  (import loads .env + defines constants)
 from backend.db import db_init
-from backend.jobs import load_persisted_jobs, start_worker
+from backend.scheduler import load_concurrency, start_scheduler
+from backend.jobs import load_persisted_jobs
 from backend.routes import bp
 
 app = Flask(__name__, static_folder=None)
 app.register_blueprint(bp)
 
-# Startup: restore finished-job history and launch the encode worker. Runs at
+# Startup: restore finished-job history and launch the job scheduler. Runs at
 # import time so it works under gunicorn too (not just `python server.py`).
 db_init()
+load_concurrency()
 load_persisted_jobs()
-start_worker()
+start_scheduler()
 
 
 if __name__ == "__main__":
