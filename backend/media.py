@@ -10,6 +10,8 @@ import shutil
 import subprocess
 
 from backend.config import CSV_LOG, MIN_FREE_BYTES, WORK_DIR
+from backend.state import _csv_lock
+
 
 def has_free_space(num_bytes):
     """True if the work dir has room for ~2.5x the asset (src + out + backup)."""
@@ -258,12 +260,23 @@ def build_ffmpeg_image_cmd(src, out, quality):
 def append_csv_log(row):
     try:
         os.makedirs(WORK_DIR, exist_ok=True)
-        exists = os.path.isfile(CSV_LOG)
-        with open(CSV_LOG, "a", newline="") as fh:
-            writer = csv.writer(fh)
-            if not exists:
-                writer.writerow(["timestamp", "asset_id", "name", "codec",
-                                 "old_size", "new_size", "savings", "status"])
-            writer.writerow(row)
+        with _csv_lock:
+            exists = os.path.isfile(CSV_LOG)
+            with open(CSV_LOG, "a", newline="") as fh:
+                writer = csv.writer(fh)
+                if not exists:
+                    writer.writerow(
+                        [
+                            "timestamp",
+                            "asset_id",
+                            "name",
+                            "codec",
+                            "old_size",
+                            "new_size",
+                            "savings",
+                            "status",
+                        ]
+                    )
+                writer.writerow(row)
     except OSError:
         pass

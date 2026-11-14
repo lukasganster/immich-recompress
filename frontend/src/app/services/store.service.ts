@@ -1,9 +1,10 @@
 import { computed, effect, Injectable, signal } from '@angular/core';
 import {
   Capabilities, CaptureDateFilter, MetadataFilter, emptyMetadataFilter, EncoderInfo, JobPublic, JobStatus, KeyOwner, MediaType, ProcessedEntry,
-  Settings, SortField, SortOrder, SseJobUpdate, User, VideoSummary,
+  Settings, SortField, SortOrder, SseJobUpdate, User, VideoSummary, JobsResponse,
 } from '../models/api.models';
 import { rfEquivalent } from '../utils/quality-scale';
+import { BUSY, DONE, SUCCEEDED, TERMINAL, WAITING } from '../utils/job-status';
 
 const LS_BROWSE = 'immich_browse';
 const LS_PROCESSED = 'immich_processed';
@@ -38,10 +39,6 @@ const LOADING_HINTS: ReadonlyArray<readonly [number, string]> = [
   [130_000, 'Over two minutes. If the endpoint or key is wrong, this is where it shows…'],
 ];
 
-const BUSY: ReadonlySet<JobStatus> = new Set(['downloading', 'encoding', 'replacing']);
-const TERMINAL: ReadonlySet<JobStatus> = new Set(['done', 'downloaded', 'encoded', 'skipped', 'error', 'cancelled', 'discarded']);
-/** Already-optimized success states — not eligible for (re-)selection. */
-const DONE: ReadonlySet<JobStatus> = new Set(['done', 'downloaded', 'encoded', 'processed']);
 
 const PRESET_SAVINGS_MULT: Record<string, number> = {
   ultrafast: 0.62, superfast: 0.70, veryfast: 0.80, faster: 0.90,
@@ -120,7 +117,12 @@ export class StoreService {
 
   // --- queue ---
   readonly jobs = signal<Record<string, JobPublic>>({});
-  readonly activeId = signal<string | null>(null);
+  readonly activeIds = signal<string[]>([]);
+  readonly concurrentJobs = signal(1);
+  readonly serverSettingsLoaded = signal(false);
+  readonly serverSettingsError = signal('');
+  private serverSession = '';
+  private snapshotRevision = 0;
   readonly savedBytes = signal(0);
 
   // --- selection ---
@@ -226,10 +228,10 @@ export class StoreService {
     const s = { queued: 0, active: 0, review: 0, done: 0, skipped: 0, error: 0 };
     for (const id in j) {
       const st = j[id].status;
-      if (st === 'queued') s.queued++;
+      if (WAITING.has(st)) s.queued++;
       else if (BUSY.has(st)) s.active++;
       else if (st === 'review') s.review++;
-      else if (st === 'done' || st === 'downloaded' || st === 'encoded') s.done++;
+      else if (SUCCEEDED.has(st)) s.done++;
       else if (st === 'skipped') s.skipped++;
       else if (st === 'error') s.error++;
     }
@@ -404,6 +406,12 @@ export class StoreService {
   }
 
   applyJobUpdate(update: SseJobUpdate): void {
+    this.acceptServerSession(update.session_id);
+    const current = this.jobs()[update.id];
+    if (update.revision !== undefined && (
+      (current?.revision !== undefined && current.revision >= update.revision)
+      || (!current && update.revision <= this.snapshotRevision)
+    )) return;
     this.jobs.update(jobs => {
       const existing = jobs[update.id] ?? ({} as JobPublic);
       const updated: JobPublic = {
@@ -411,6 +419,7 @@ export class StoreService {
         id: update.id,
         status: update.status,
         progress: update.progress,
+        revision: update.revision ?? existing.revision,
         log: update.log,
         skip_reason: update.skip_reason ?? null,
         new_size: update.new_size ?? existing.new_size,
@@ -422,11 +431,44 @@ export class StoreService {
       return { ...jobs, [update.id]: updated };
     });
 
-    if (BUSY.has(update.status)) {
-      this.activeId.set(update.id);
-    } else if (this.activeId() === update.id) {
-      this.activeId.set(null);
+    this.activeIds.update(ids => update.running ?? BUSY.has(update.status)
+      ? [...new Set([...ids, update.id])]
+      : ids.filter(id => id !== update.id));
+  }
+
+  applyJobsSnapshot(data: JobsResponse): void {
+    this.acceptServerSession(data.session_id);
+    const jobs = { ...data.jobs };
+    const active = new Set(data.active_ids ?? (data.active ? [data.active] : []));
+    const wasActive = this.activeIds();
+    for (const [id, job] of Object.entries(this.jobs())) {
+      const incomingRevision = jobs[id]?.revision ?? (jobs[id] ? undefined : data.revision);
+      if (job.revision !== undefined && incomingRevision !== undefined && job.revision > incomingRevision) {
+        jobs[id] = job;
+        if (wasActive.includes(id)) active.add(id);
+        else active.delete(id);
+      }
     }
+    this.snapshotRevision = data.revision ?? this.snapshotRevision;
+    this.jobs.set(jobs);
+    this.activeIds.set([...active]);
+    this.concurrentJobs.set(data.concurrent_jobs ?? 1);
+    this.serverSettingsLoaded.set(true);
+    this.serverSettingsError.set('');
+    this.savedBytes.set(data.stats?.saved_bytes ?? 0);
+    for (const [id, job] of Object.entries(data.jobs ?? {})) {
+      if (job.status === 'done') this.markProcessed(id, job);
+    }
+  }
+
+  private acceptServerSession(session?: string): void {
+    if (!session) return;
+    if (this.serverSession && session !== this.serverSession) {
+      this.jobs.set({});
+      this.activeIds.set([]);
+      this.snapshotRevision = 0;
+    }
+    this.serverSession = session;
   }
 
   // --- selection ---

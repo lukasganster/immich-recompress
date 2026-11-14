@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, Component, HostListener, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, inject, linkedSignal, signal, viewChild } from '@angular/core';
 import { CdkTrapFocus } from '@angular/cdk/a11y';
-import { FormsModule } from '@angular/forms';
+import { FormsModule, NgModel } from '@angular/forms';
 import { mdiClose } from '@mdi/js';
 import { IconComponent } from '../icon/icon';
 import { StoreService } from '../../services/store.service';
+import { QueueSyncService } from '../../services/queue-sync.service';
 import { EncoderInfo, Settings } from '../../models/api.models';
 import { codecLabel } from '../../utils/codec-label';
 import { qualityBands, qualityLabel, qualityTerm } from '../../utils/quality-scale';
@@ -18,6 +19,12 @@ import { qualityBands, qualityLabel, qualityTerm } from '../../utils/quality-sca
 })
 export class SettingsPanelComponent {
   readonly store = inject(StoreService);
+  private readonly sync = inject(QueueSyncService);
+  readonly savingConcurrency = this.sync.savingConcurrency;
+  readonly concurrencyError = this.sync.concurrencyError;
+  /** What the input shows; follows the saved value whenever that changes. */
+  readonly concurrencyDraft = linkedSignal<number | null>(() => this.store.concurrentJobs());
+  private readonly concurrencyModel = viewChild<NgModel>('concurrencyModel');
 
   readonly mdiClose = mdiClose;
 
@@ -41,6 +48,26 @@ export class SettingsPanelComponent {
   update(patch: Partial<Settings>): void {
     this.store.settings.update(s => ({ ...s, ...patch }));
     this.store.saveSettings();
+  }
+
+  onConcurrency(value: number | null): void {
+    this.concurrencyDraft.set(value);
+    this.sync.saveConcurrentJobs(value).subscribe(saved => {
+      if (!saved) this.showSavedConcurrency();
+    });
+  }
+
+  /** Leaving the field drops an unsaved or invalid entry. */
+  restoreConcurrency(): void {
+    if (!this.savingConcurrency()) this.showSavedConcurrency();
+  }
+
+  private showSavedConcurrency(): void {
+    const saved = this.store.concurrentJobs();
+    this.concurrencyDraft.set(saved);
+    this.concurrencyModel()?.control.setValue(saved, {
+      emitEvent: false, emitViewToModelChange: false,
+    });
   }
 
   onJxlDistance(value: number | null): void {

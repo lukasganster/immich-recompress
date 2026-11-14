@@ -1,5 +1,5 @@
 export type JobStatus =
-  | 'idle' | 'queued' | 'downloading' | 'encoding' | 'replacing'
+  | 'idle' | 'queued' | 'queued_replace' | 'preparing' | 'downloading' | 'encoding' | 'replacing'
   | 'review' | 'done' | 'downloaded' | 'encoded' | 'skipped'
   | 'error' | 'cancelled' | 'discarded' | 'processed';
 
@@ -95,6 +95,7 @@ export interface VideoDetail {
 
 export interface JobPublic {
   id: string;
+  revision?: number;
   name: string;
   size: number | null;
   status: JobStatus;
@@ -129,8 +130,17 @@ export interface JobPublic {
   started_at: string | null;
 }
 
+/** GET/PUT /api/settings: server-wide settings shared by all browser sessions. */
+export interface ServerSettings {
+  concurrent_jobs: number;
+}
+
 export interface JobsResponse {
   active: string | null;
+  active_ids: string[];
+  concurrent_jobs: number;
+  revision?: number;
+  session_id?: string;
   queue: string[];
   stats: {
     queued: number;
@@ -240,4 +250,7 @@ export interface SseJobUpdate {
   skip_reason?: string | null;
   new_size: number | null;
   savings: number | null;
+  running?: boolean;
+  revision?: number;
+  session_id?: string;
 }

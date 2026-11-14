@@ -137,3 +137,29 @@ describe('finished skips', () => {
     expect(finished().querySelector('li .text-success')).toBeNull();
   });
 });
+
+describe('Concurrent queue activity', () => {
+  it('shows every running job and the global limit while confirmations wait', async () => {
+    TestBed.configureTestingModule({
+      imports: [QueuePanelComponent],
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    });
+    const fixture = TestBed.createComponent(QueuePanelComponent);
+    const store = TestBed.inject(StoreService);
+    store.concurrentJobs.set(3);
+    store.applyJobUpdate({ id: 'one', status: 'encoding', progress: 25, log: 'Encoding', new_size: null, savings: null, running: true });
+    store.applyJobUpdate({ id: 'two', status: 'downloading', progress: 50, log: 'Downloading original', new_size: null, savings: null, running: true });
+    store.applyJobUpdate({ id: 'confirmed', status: 'queued_replace', progress: 100, log: 'Confirmed, waiting for its turn', new_size: null, savings: null, running: false });
+    await fixture.whenStable();
+    const element: HTMLElement = fixture.nativeElement;
+    const running = element.querySelector('[aria-label="Running"]')!;
+    expect(running.textContent).toContain('Running 2 / 3');
+    expect(running.querySelectorAll('li')).toHaveLength(2);
+    expect(element.querySelector('[aria-label="Waiting"]')!.textContent).toContain('confirmed');
+    expect(element.querySelector('[aria-label="Waiting"] button[aria-label="Cancel"]')).toBeNull();
+    store.applyJobUpdate({ id: 'one', status: 'review', progress: 100, log: 'Ready', new_size: 50, savings: 50, running: false });
+    await fixture.whenStable();
+    expect(running.textContent).toContain('Running 1 / 3');
+    expect(store.activeIds()).toEqual(['two']);
+  });
+});

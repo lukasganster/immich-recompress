@@ -7,6 +7,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from uuid import uuid4
 
 import requests
 from flask import jsonify
@@ -306,7 +307,7 @@ def upload_new_asset(env, path, name, file_created_at, file_modified_at, mime):
     is 'created' or 'duplicate', or (None, error_string) on failure."""
     url = f"{env['url']}/api/assets"
     now = utcnow_iso()
-    device_asset_id = f"recompress-{int(time.time()*1000)}"
+    device_asset_id = f"recompress-{uuid4().hex}"
     try:
         with open(path, "rb") as fh:
             files = {"assetData": (name, fh, mime)}

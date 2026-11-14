@@ -159,21 +159,67 @@ describe('StoreService', () => {
     expect(store.jpegXlAvailable()).toBe(false);
   });
 
-  it('applyJobUpdate stores the job and tracks the active id', () => {
+  it('applyJobUpdate stores the job and tracks all active ids', () => {
     store.applyJobUpdate({
       id: 'x', status: 'encoding', progress: 0.5, log: 'working',
       new_size: null, savings: null,
     });
     expect(store.jobs()['x'].status).toBe('encoding');
-    expect(store.activeId()).toBe('x');
+    expect(store.activeIds()).toEqual(['x']);
 
     // A terminal update for the active job clears the active id.
     store.applyJobUpdate({
       id: 'x', status: 'done', progress: 1, log: 'done',
       new_size: 500, savings: 0.5,
     });
-    expect(store.activeId()).toBeNull();
+    expect(store.activeIds()).toEqual([]);
     expect(store.processed()['x']).toBeTruthy();
+  });
+
+  it('keeps concurrent activity independent across interleaved updates and snapshots', () => {
+    const update = { progress: 50, log: '', new_size: null, savings: null };
+    store.applyJobUpdate({ ...update, id: 'a', status: 'encoding', running: true });
+    store.applyJobUpdate({ ...update, id: 'b', status: 'downloading', running: true });
+    store.applyJobUpdate({ ...update, id: 'a', status: 'review', running: false });
+    expect(store.activeIds()).toEqual(['b']);
+    store.applyJobsSnapshot({ active: 'b', active_ids: ['b', 'c'], concurrent_jobs: 4,
+      queue: [], stats: { queued: 0, active: 2, review: 0, done: 0, skipped: 0, error: 0, saved_bytes: 0 }, jobs: store.jobs(),
+    });
+    expect(store.activeIds()).toEqual(['b', 'c']);
+    expect(store.concurrentJobs()).toBe(4);
+    expect(store.serverSettingsLoaded()).toBe(true);
+    store.applyJobUpdate({ ...update, id: 'b', status: 'done', running: false });
+    expect(store.activeIds()).toEqual(['c']);
+  });
+
+  it('does not overwrite newer live progress or activity with an older snapshot', () => {
+    const update = { log: '', new_size: null, savings: null, session_id: 'server' };
+    store.applyJobUpdate({ ...update, id: 'a', status: 'encoding', progress: 70, revision: 20, running: true });
+    store.applyJobUpdate({ ...update, id: 'b', status: 'downloading', progress: 40, revision: 21, running: true });
+    store.applyJobsSnapshot({ active: 'a', active_ids: ['a'], concurrent_jobs: 3, revision: 15,
+      session_id: 'server', queue: [], stats: { queued: 0, active: 1, review: 0, done: 0, skipped: 0, error: 0, saved_bytes: 0 },
+      jobs: { a: { ...store.jobs()['a'], progress: 10, revision: 14 } },
+    });
+    expect(store.jobs()['a'].progress).toBe(70);
+    expect(store.jobs()['b'].progress).toBe(40);
+    expect(store.activeIds()).toEqual(['a', 'b']);
+    store.applyJobUpdate({ ...update, id: 'a', status: 'downloading', progress: 5, revision: 13, running: false });
+    expect(store.jobs()['a'].progress).toBe(70);
+    expect(store.activeIds()).toEqual(['a', 'b']);
+  });
+
+  it('ignores late events for cleared jobs and accepts fresh revisions after a server restart', () => {
+    const snapshot = { active: null, active_ids: [], concurrent_jobs: 1, revision: 30,
+      session_id: 'old', queue: [], jobs: {},
+      stats: { queued: 0, active: 0, review: 0, done: 0, skipped: 0, error: 0, saved_bytes: 0 },
+    };
+    store.applyJobsSnapshot(snapshot);
+    store.applyJobUpdate({ id: 'a', status: 'done', progress: 100, log: '', new_size: 50, savings: 50, revision: 20, session_id: 'old' });
+    expect(store.jobs()['a']).toBeUndefined();
+    store.applyJobsSnapshot({ ...snapshot, session_id: 'new', revision: 1 });
+    store.applyJobUpdate({ id: 'a', status: 'encoding', progress: 5, log: '', new_size: null, savings: null, revision: 2, session_id: 'new', running: true });
+    expect(store.jobs()['a'].progress).toBe(5);
+    expect(store.activeIds()).toEqual(['a']);
   });
 
   it('effectiveStatus prefers a live job, then processed history, then the asset status', () => {

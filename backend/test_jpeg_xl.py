@@ -70,12 +70,11 @@ class PhotoOutputTest(unittest.TestCase):
         self.assertEqual(response.data, b"png-preview")
         response.close()
         with (
-            patch("backend.routes.threading.Thread") as thread,
+            patch("backend.routes.schedule_confirmation") as schedule,
             patch("backend.routes.do_replace") as replace,
         ):
             response = self.client.post(f"/api/confirm/{self.asset_id}")
-            thread_args = thread.call_args.kwargs
-            thread_args["target"](*thread_args.get("args", ()))
+            schedule.call_args.args[1]()
         self.assertEqual(response.status_code, 200)
         replace.assert_called_once()
         self.assertEqual(replace.call_args.args[2:4], ("holiday.jxl", str(self.output)))
@@ -218,8 +217,11 @@ class PhotoOutputTest(unittest.TestCase):
     def test_enqueue_preserves_distance_and_defaults_to_lossless(self):
         for setting in ({}, {"photo_jxl_distance": 0}, {"photo_jxl_distance": 0.5},
                         {"photo_jxl_distance": 25}):
-            with self.subTest(setting=setting), patch("backend.routes._work_queue"), patch(
-                    "backend.routes.broadcast_queue_update"):
+            with (
+                self.subTest(setting=setting),
+                patch("backend.routes.schedule_job"),
+                patch("backend.routes.broadcast_queue_update"),
+            ):
                 _jobs.pop(self.asset_id, None)
                 response = self.client.post("/api/enqueue", json={
                     "ids": [self.asset_id], "photo_format": "jxl", "media": "image", **setting,
@@ -246,7 +248,7 @@ class JpegXlToolTest(unittest.TestCase):
             stack.callback(lambda: _queue_order.remove(asset_id)
                            if asset_id in _queue_order else None)
             stack.enter_context(patch("backend.jobs.WORK_DIR", tmp))
-            stack.enter_context(patch("backend.routes._work_queue"))
+            stack.enter_context(patch("backend.routes.schedule_job"))
             stack.enter_context(patch("backend.jobs.append_csv_log"))
 
             def download(env, requested_id, path, **kwargs):

@@ -13,7 +13,7 @@ import { IconComponent } from '../icon/icon';
 import { StoreService } from '../../services/store.service';
 import { ApiService } from '../../services/api.service';
 import { JobPublic, JobStatus } from '../../models/api.models';
-import { statusLabel } from '../../utils/job-status';
+import { CANCELLABLE, statusLabel, WAITING } from '../../utils/job-status';
 
 @Component({
   selector: 'app-queue-panel',
@@ -51,10 +51,10 @@ export class QueuePanelComponent {
 
   get orderedJobs(): [string, JobPublic][] {
     const jobs = this.store.jobs();
-    const active = this.store.activeId();
+    const active = this.store.activeIds();
     return Object.entries(jobs).sort(([a], [b]) => {
-      if (a === active) return -1;
-      if (b === active) return 1;
+      if (active.includes(a) && !active.includes(b)) return -1;
+      if (active.includes(b) && !active.includes(a)) return 1;
       return 0;
     });
   }
@@ -83,13 +83,13 @@ export class QueuePanelComponent {
 
   isActive(id: string): boolean {
     const st = this.store.jobs()[id]?.status;
-    return id === this.store.activeId() || this.store.isBusy(st as JobStatus);
+    return this.store.activeIds().includes(id) || this.store.isBusy(st as JobStatus);
   }
 
   /** Replacing is asynchronous but irreversible, so only queue and encoder
    * states expose cancellation. This mirrors the backend contract. */
   isCancellable(j: JobPublic): boolean {
-    return j.status === 'queued' || j.status === 'downloading' || j.status === 'encoding';
+    return CANCELLABLE.has(j.status);
   }
 
   get immichUrl(): string { return this.store.immichUrl(); }
@@ -136,19 +136,19 @@ export class QueuePanelComponent {
     return this.entries().filter(([, j]) => j.status === 'review');
   }
 
-  /** The one job actually encoding right now, if any. */
+  /** Jobs currently holding a server processing slot. */
   get runningJobs(): [string, JobPublic][] {
     return this.entries().filter(([id]) => this.isActive(id));
   }
 
   get waitingJobs(): [string, JobPublic][] {
-    return this.entries().filter(([id, j]) => j.status === 'queued' && !this.isActive(id));
+    return this.entries().filter(([id, j]) => WAITING.has(j.status) && !this.isActive(id));
   }
 
   /** Everything already resolved, plus anything that failed. */
   get finishedJobs(): [string, JobPublic][] {
     return this.entries().filter(([id, j]) =>
-      j.status !== 'review' && j.status !== 'queued' && !this.isActive(id));
+      j.status !== 'review' && !WAITING.has(j.status) && !this.isActive(id));
   }
 
   private entries(): [string, JobPublic][] {

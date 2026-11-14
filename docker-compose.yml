@@ -9,7 +9,7 @@ services:
     env_file:
       - .env
     environment:
-      # Persist job history on the named volume below (overrides the in-image
+      # Persist job history and settings on the named volume below (overrides the in-image
       # default, which already points here).
       IMMICH_DB: /data/immich_recompress.db
     ports:
@@ -37,7 +37,7 @@ services:
     #           count: all
     #           capabilities: [gpu]
     volumes:
-      # Job-history SQLite DB.
+      # Job-history and settings SQLite DB.
       - immich-recompress-data:/data
       # Local backups taken before any replace / RAW conversion / Live-Photo
       # strip. Deleted once the replacement succeeds, kept if it fails.

@@ -1,9 +1,12 @@
+import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { SettingsPanelComponent } from './settings-panel';
 import { StoreService } from '../../services/store.service';
 
 describe('Photo output settings', () => {
   beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
     for (const key of ['immich_browse', 'immich_processed', 'immich_settings']) {
       try { localStorage.removeItem(key); } catch { /* not available here */ }
     }
@@ -148,6 +151,7 @@ describe('Photo output settings', () => {
 });
 
 describe('Compression settings summary', () => {
+  beforeEach(() => TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] }));
   const summaryRow = (element: HTMLElement, term: string) => {
     const dt = [...element.querySelectorAll('dt')].find(d => d.textContent!.trim() === term);
     return dt?.nextElementSibling?.textContent!.trim();
@@ -166,5 +170,88 @@ describe('Compression settings summary', () => {
 
   it('leaves the row out when nothing is skipped', () => {
     expect(summaryRow(render(' , '), 'Skip')).toBeUndefined();
+  });
+});
+
+describe('Server-wide concurrency', () => {
+  beforeEach(() => TestBed.configureTestingModule({
+    imports: [SettingsPanelComponent],
+    providers: [provideHttpClient(), provideHttpClientTesting()],
+  }));
+  afterEach(() => TestBed.inject(HttpTestingController).verify());
+
+  it('edits the global limit in General and waits for server confirmation', async () => {
+    const fixture = TestBed.createComponent(SettingsPanelComponent);
+    const store = TestBed.inject(StoreService);
+    store.concurrentJobs.set(2);
+    store.serverSettingsLoaded.set(true);
+    fixture.componentInstance.show();
+    await fixture.whenStable();
+    const element: HTMLElement = fixture.nativeElement;
+    const input = element.querySelector<HTMLInputElement>('#setConcurrentJobs')!;
+    expect(input.closest('details')!.querySelector('summary')!.textContent).toContain('General');
+    expect(input.min).toBe('1');
+    expect(input.max).toBe('8');
+    const increase = element.querySelector<HTMLButtonElement>('[aria-label="Increase concurrent jobs"]')!;
+    increase.click();
+    await fixture.whenStable();
+    const request = TestBed.inject(HttpTestingController).expectOne('/api/settings');
+    expect(request.request.method).toBe('PUT');
+    expect(request.request.body).toEqual({ concurrent_jobs: 3 });
+    expect(store.concurrentJobs()).toBe(2);
+    expect(input.disabled).toBe(true);
+    request.flush({ concurrent_jobs: 3 });
+    await fixture.whenStable();
+    expect(input.value).toBe('3');
+    expect(input.disabled).toBe(false);
+    expect(element.textContent).toContain('Applies server-wide to all browser sessions');
+    expect(store.settings()).not.toHaveProperty('concurrent_jobs');
+  });
+
+  it('restores the saved value and exposes an error when saving fails', async () => {
+    const fixture = TestBed.createComponent(SettingsPanelComponent);
+    const store = TestBed.inject(StoreService);
+    store.serverSettingsLoaded.set(true);
+    fixture.componentInstance.show();
+    await fixture.whenStable();
+    const input = (fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>('#setConcurrentJobs')!;
+    input.value = '4';
+    input.dispatchEvent(new Event('input'));
+    TestBed.inject(HttpTestingController).expectOne('/api/settings')
+      .flush({ error: 'unavailable' }, { status: 503, statusText: 'Unavailable' });
+    await fixture.whenStable();
+    expect(input.value).toBe('1');
+    expect(store.concurrentJobs()).toBe(1);
+    expect(fixture.nativeElement.textContent).toContain('Could not save concurrent jobs');
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+  });
+
+  it('does not restore the old value when saving disables the focused input', async () => {
+    const fixture = TestBed.createComponent(SettingsPanelComponent);
+    const store = TestBed.inject(StoreService);
+    store.serverSettingsLoaded.set(true);
+    fixture.componentInstance.show();
+    await fixture.whenStable();
+    const input = (fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>('#setConcurrentJobs')!;
+    input.focus();
+    input.value = '8';
+    input.dispatchEvent(new Event('input'));
+    input.dispatchEvent(new Event('blur'));
+    expect(fixture.componentInstance.concurrencyDraft()).toBe(8);
+    TestBed.inject(HttpTestingController).expectOne('/api/settings').flush({ concurrent_jobs: 8 });
+    await fixture.whenStable();
+    expect(input.value).toBe('8');
+    expect(store.concurrentJobs()).toBe(8);
+  });
+
+  it('rejects invalid inputs locally and disables editing until settings load', async () => {
+    const fixture = TestBed.createComponent(SettingsPanelComponent);
+    fixture.componentInstance.show();
+    await fixture.whenStable();
+    const input = (fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>('#setConcurrentJobs')!;
+    expect(input.disabled).toBe(true);
+    for (const value of [null, 0, 9, 2.5]) fixture.componentInstance.onConcurrency(value);
+    TestBed.inject(HttpTestingController).expectNone('/api/settings');
+    expect(fixture.componentInstance.concurrencyError()).toContain('whole number from 1 to 8');
   });
 });

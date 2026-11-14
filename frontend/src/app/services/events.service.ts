@@ -29,6 +29,7 @@ export class EventsService implements OnDestroy {
     this.es.addEventListener('connected', () => {
       this.connected.set(true);
       this.reconnectDelay = 3000;
+      this.queueUpdate$.next();
     });
     this.es.addEventListener('job_update', (e: MessageEvent) => {
       try {
