@@ -5,7 +5,7 @@ export type JobStatus =
 
 export type MediaType = 'video' | 'image' | 'motionphoto';
 export type PhotoFormat = 'jpeg' | 'jxl';
-export type SortField = 'size' | 'savings' | 'date' | 'name' | 'duration';
+export type SortField = 'size' | 'savings' | 'date' | 'name' | 'duration' | 'bitrate';
 export type SortOrder = 'asc' | 'desc';
 
 export interface CaptureDateFilter {

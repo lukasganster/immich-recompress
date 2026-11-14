@@ -12,7 +12,7 @@ from flask import jsonify
 
 from backend.config import (
     FRONTEND_PER_PAGE, HTTP_TIMEOUT, IMMICH_PER_PAGE, JPEG_PHOTO_EXTS,
-    RAW_PHOTO_EXTS, USER_CACHE_TTL, human_duration, human_size, parse_duration,
+    RAW_PHOTO_EXTS, USER_CACHE_TTL, average_bitrate, human_duration, human_size, parse_duration,
     utcnow_iso,
 )
 from backend.media import probe_remote_codec
@@ -608,6 +608,12 @@ def paginate_summaries(summaries, sort, order, page, per_page):
         summaries.sort(key=lambda v: v["size"], reverse=reverse)
     elif sort == "duration":
         summaries.sort(key=lambda v: v["duration"], reverse=reverse)
+    elif sort == "bitrate":
+        # Assets without a known bitrate go last in either direction.
+        if reverse:
+            summaries.sort(key=lambda v: (v["bitrate"] is not None, v["bitrate"] or 0), reverse=True)
+        else:
+            summaries.sort(key=lambda v: (v["bitrate"] is None, v["bitrate"] or 0))
     elif sort == "savings":
         summaries.sort(key=lambda v: v["potential"], reverse=reverse)
     elif sort == "name":
@@ -668,7 +674,8 @@ def video_summary(env, asset, media="video"):
         "duration_human": human_duration(duration),
         "codec": codec,
         "resolution": resolution,
-        "bitrate": info.get("bitrate") or info.get("bitRate"),
+        "bitrate": (info.get("bitrate") or info.get("bitRate")
+                    or (average_bitrate(size, duration) if media == "video" else None)),
         "date": asset.get("fileCreatedAt") or asset.get("createdAt"),
         "owner_id": asset.get("ownerId"),
         "owner_name": owner_name_for(env, asset.get("ownerId")),

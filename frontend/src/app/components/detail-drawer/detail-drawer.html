@@ -82,7 +82,7 @@
           <app-icon class="text-muted" [path]="mdiFileVideoOutline" [size]="24" />
           <div class="min-w-0">
             <p class="m-0">{{ ex.codec || '—' }}</p>
-            <p class="m-0 text-sm text-muted">{{ d.mime_type }} · Bitrate {{ ex.bitrate ?? '—' }}</p>
+            <p class="m-0 text-sm text-muted">{{ d.mime_type }} · Bitrate {{ formatBitrate(ex.bitrate) }}</p>
           </div>
         </div>
 

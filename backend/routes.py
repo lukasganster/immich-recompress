@@ -20,7 +20,7 @@ from flask import (
 from backend.config import (
     ASSET_CACHE_TTL, BACKUP_DIR, FRONTEND_PER_PAGE, HTTP_TIMEOUT,
     MAX_PER_PAGE, STATIC_DIR,
-    get_env, human_duration, human_size, parse_duration, utcnow_iso,
+    average_bitrate, get_env, human_duration, human_size, parse_duration, utcnow_iso,
 )
 from backend.state import (
     _asset_key_lock, _asset_key_map, _jobs, _queue_order, _state_lock,
@@ -278,7 +278,7 @@ def api_assets():
 
     other_codec = media == "video" and codec_filter in ("__other__", "other")
 
-    if sort not in ("size", "date", "name", "duration", "savings"):
+    if sort not in ("size", "date", "name", "duration", "savings", "bitrate"):
         sort = "size"
     if order not in ("asc", "desc"):
         order = "desc"
@@ -518,7 +518,9 @@ def api_asset_detail(asset_id):
             "resolution": f"{width}x{height}" if width and height else "",
             "width": width,
             "height": height,
-            "bitrate": info.get("bitrate") or info.get("bitRate"),
+            "bitrate": (info.get("bitrate") or info.get("bitRate")
+                        or (average_bitrate(size, duration)
+                            if asset.get("type") == "VIDEO" else None)),
             "fps": info.get("fps") or info.get("framerate"),
             "make": info.get("make"),
             "model": info.get("model"),
