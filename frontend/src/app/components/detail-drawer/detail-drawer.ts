@@ -17,6 +17,7 @@ import { IconComponent } from '../icon/icon';
 import { ApiService } from '../../services/api.service';
 import { StoreService } from '../../services/store.service';
 import { VideoDetail } from '../../models/api.models';
+import { formatBitrate } from '../../utils/format-bitrate';
 import { formatDate } from '../../utils/format-date';
 
 @Component({
@@ -93,6 +94,8 @@ export class DetailDrawerComponent {
   joined(sep: string, ...parts: (string | null | undefined)[]): string {
     return parts.filter(p => !!p).join(sep) || '—';
   }
+
+  readonly formatBitrate = formatBitrate;
 
   fmtDate(iso: string | null | undefined): string {
     return formatDate(iso, this.store.captureTimezone());

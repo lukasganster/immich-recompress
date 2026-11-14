@@ -14,6 +14,7 @@ import { Subscription } from 'rxjs';
 import { MAX_PER_PAGE, StoreService } from '../../services/store.service';
 import { ApiService } from '../../services/api.service';
 import { VideoSummary, JobPublic, JobStatus, SortField, SortOrder } from '../../models/api.models';
+import { formatBitrate } from '../../utils/format-bitrate';
 import { formatDate } from '../../utils/format-date';
 import { statusLabel } from '../../utils/job-status';
 
@@ -130,13 +131,13 @@ export class MediaGridComponent implements OnInit, OnDestroy {
     // cannot say what went wrong. Render our own state instead.
     if (!this.store.loaded() || this.store.loadError() || this.pageLoading()) return null;
     this.hostWidth();
-    const hideClipCols = this.store.media() !== 'video';  // duration/codec only apply to videos
+    const hideClipCols = this.store.media() !== 'video';  // duration/bitrate/codec only apply to videos
     // Size is wide because it carries the drawn quantity as well as the
     // number — the rule beside each value is what makes the expensive rows
     // visible before anything is read.
     const widths = hideClipCols
       ? { select: this.selectColWidth, name: '27%', size: '17%', resolution: '11%', date: '11%', user: '10%', status: '13%', actions: '7%' }
-      : { select: this.selectColWidth, name: '18%', size: '14%', resolution: '9%', duration: '7%', codec: '10%', date: '10%', user: '9%', status: '10%', actions: '9%' };
+      : { select: this.selectColWidth, name: '16%', size: '12%', resolution: '8%', duration: '7%', bitrate: '10%', codec: '9%', date: '9%', user: '8%', status: '9%', actions: '7%' };
     const cols: GridColumnDef[] = [
       {
         name: 'select', displayName: ' ', field: 'id', width: widths.select,
@@ -156,6 +157,8 @@ export class MediaGridComponent implements OnInit, OnDestroy {
       { name: 'resolution', displayName: 'Resolution', field: 'resolution', enableSorting: false, width: widths.resolution },
       ...(hideClipCols ? [] : [
         { name: 'duration', displayName: 'Length', field: 'duration_human', enableSorting: true, sortingAlgorithm: keepServerOrder, width: widths.duration } as GridColumnDef,
+        { name: 'bitrate', displayName: 'Bitrate', field: 'bitrate', enableSorting: true, sortingAlgorithm: keepServerOrder, width: widths.bitrate,
+          formatter: (v) => formatBitrate(v) } as GridColumnDef,
         { name: 'codec', displayName: 'Codec', field: 'codec', enableSorting: false, width: widths.codec } as GridColumnDef,
       ]),
       { name: 'date', displayName: 'Date', field: 'date', enableSorting: true, sortingAlgorithm: keepServerOrder, width: widths.date,
@@ -290,7 +293,7 @@ export class MediaGridComponent implements OnInit, OnDestroy {
 
   /** Grid column name to the API's sort field, for the sortable columns. */
   private static readonly sortFields: Record<string, SortField> = {
-    name: 'name', size: 'size', duration: 'duration', date: 'date',
+    name: 'name', size: 'size', duration: 'duration', bitrate: 'bitrate', date: 'date',
   };
 
   /** The sort buttons are glyph-only. The grid gives them an aria-label

@@ -126,6 +126,24 @@ def human_duration(seconds):
     return f"{m}:{s:02d}"
 
 
+def average_bitrate(size_bytes, duration_seconds):
+    """Overall bitrate in bits per second from file size and duration.
+
+    Immich does not report a stream bitrate, so this is the container
+    average: video, audio and overhead together. Returns None when either
+    input is missing or not positive, so callers can tell "unknown" apart
+    from a real value.
+    """
+    try:
+        size = float(size_bytes)
+        duration = float(duration_seconds)
+    except (TypeError, ValueError):
+        return None
+    if size <= 0 or duration <= 0:
+        return None
+    return int(size * 8 / duration)
+
+
 def parse_duration(value):
     """Parse Immich milliseconds or legacy HH:MM:SS.fraction strings."""
     if value is None:
