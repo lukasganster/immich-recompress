@@ -69,12 +69,17 @@ class PhotoOutputTest(unittest.TestCase):
         self.assertEqual(response.mimetype, "image/png")
         self.assertEqual(response.data, b"png-preview")
         response.close()
-        with patch("backend.routes.threading.Thread") as thread:
+        with (
+            patch("backend.routes.threading.Thread") as thread,
+            patch("backend.routes.do_replace") as replace,
+        ):
             response = self.client.post(f"/api/confirm/{self.asset_id}")
+            thread_args = thread.call_args.kwargs
+            thread_args["target"](*thread_args.get("args", ()))
         self.assertEqual(response.status_code, 200)
-        work = thread.call_args.kwargs["target"]
-        self.assertEqual(work.args[2:4], ("holiday.jxl", str(self.output)))
-        self.assertEqual(work.keywords, {"mime": "image/jxl"})
+        replace.assert_called_once()
+        self.assertEqual(replace.call_args.args[2:4], ("holiday.jxl", str(self.output)))
+        self.assertEqual(replace.call_args.kwargs, {"mime": "image/jxl"})
 
     def test_automatic_replacement_uploads_jxl_and_records_backup(self):
         job = self.process(confirm=False)

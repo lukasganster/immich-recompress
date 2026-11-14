@@ -215,6 +215,21 @@ class DownloadProgressTest(unittest.TestCase):
         )
         self.assertEqual(self.destination.read_bytes(), b"original")
 
+    def test_cancelled_owner_stops_linked_download_before_request(self):
+        with patch.object(
+            immich_api, "is_cancelled", side_effect=lambda aid: aid == "still"
+        ):
+            self.assertEqual(self.download(job_id="still"), (False, "cancelled"))
+        self.get.assert_not_called()
+
+    def test_linked_asset_flag_does_not_cancel_a_different_owning_job(self):
+        self.get.return_value = self.response([b"original"])
+        with patch.object(
+            immich_api, "is_cancelled", side_effect=lambda aid: aid == "asset"
+        ):
+            self.assertEqual(self.download(job_id="still"), (True, ""))
+        self.assertEqual(self.destination.read_bytes(), b"original")
+
 
 class JobDownloadProgressTest(unittest.TestCase):
     def setUp(self):
@@ -275,13 +290,21 @@ class JobDownloadProgressTest(unittest.TestCase):
         return True, 80, 99
 
     def run_job(
-        self, media, download_only=False, motion_action="recompress", known_total=True
+        self,
+        media,
+        download_only=False,
+        motion_action="recompress",
+        known_total=True,
+        confirm=True,
+        cancel_after_chunks=None,
     ):
         def stream(chunk_size):
             for index in range(4):
                 self.now += 1.1
                 yield b"x" * (1024 * 1024)
                 self.observations.append(dict(_jobs["still"]))
+                if index + 1 == cancel_after_chunks:
+                    jobs.update_job("still", _cancel=True)
 
         response = MagicMock(status_code=200, headers={})
         response.__enter__.return_value = response
@@ -295,7 +318,7 @@ class JobDownloadProgressTest(unittest.TestCase):
             "skip_codecs": "",
             "motion_action": motion_action,
             "replace": motion_action == "remove",
-            "confirm": True,
+            "confirm": confirm,
         }
         # The queued Live Photo size belongs to the still, not its motion clip.
         if media == "motionphoto":
@@ -353,6 +376,61 @@ class JobDownloadProgressTest(unittest.TestCase):
         downloading = [u for u in updates if u["status"] == "downloading"]
         self.assertTrue(any("2.0 MB downloaded" in u["log"] for u in downloading))
         self.assertTrue(all(u["progress"] == 0.0 for u in downloading))
+
+    def test_motion_download_cancellation_stops_each_workflow(self):
+        scenarios = (
+            (True, "recompress", True),
+            (False, "recompress", True),
+            (False, "remove", True),
+            (False, "remove", False),
+        )
+        for download_only, action, confirm in scenarios:
+            with self.subTest(
+                download_only=download_only, action=action, confirm=confirm
+            ):
+                with (
+                    patch.object(jobs, "run_handbrake") as encode,
+                    patch.object(jobs, "do_strip_motion") as strip,
+                ):
+                    self.run_job(
+                        "motionphoto",
+                        download_only=download_only,
+                        motion_action=action,
+                        confirm=confirm,
+                        cancel_after_chunks=1,
+                    )
+                self.assertEqual(_jobs["still"]["status"], "cancelled")
+                encode.assert_not_called()
+                strip.assert_not_called()
+                self.assertEqual(list(self.directory.rglob("*.*")), [])
+
+    def test_motion_download_cancellation_at_end_of_stream_is_not_success(self):
+        self.run_job("motionphoto", download_only=True, cancel_after_chunks=4)
+        self.assertEqual(_jobs["still"]["status"], "cancelled")
+        self.assertFalse((self.directory / "motion_motion.mov").exists())
+
+    def test_cancel_after_motion_backup_prevents_removal_or_review(self):
+        download = jobs._download_for_job
+
+        def cancel_after_download(*args, **kwargs):
+            result = download(*args, **kwargs)
+            jobs.update_job("still", _cancel=True)
+            return result
+
+        for confirm in (True, False):
+            with (
+                self.subTest(confirm=confirm),
+                patch.object(
+                    jobs, "_download_for_job", side_effect=cancel_after_download
+                ),
+                patch.object(jobs, "do_strip_motion") as strip,
+            ):
+                self.run_job("motionphoto", motion_action="remove", confirm=confirm)
+                self.assertEqual(_jobs["still"]["status"], "cancelled")
+                strip.assert_not_called()
+                self.assertFalse(
+                    (self.directory / "backup" / "motion_motion.mov").exists()
+                )
 
 
 if __name__ == "__main__":

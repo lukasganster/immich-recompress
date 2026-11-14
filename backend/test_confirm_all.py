@@ -91,6 +91,24 @@ class ConfirmAllTest(unittest.TestCase):
         self.assertEqual(self.order, [FIRST, SECOND])
         self.assertEqual(_jobs[FIRST]["status"], "error")
 
+    def test_single_confirmation_failure_is_reported_and_persisted(self):
+        _jobs[FIRST] = reviewed(FIRST)
+        self.failing = FIRST
+
+        response = self.client.post(f"/api/confirm/{FIRST}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(_jobs[FIRST]["status"], "error")
+        self.assertEqual(_jobs[FIRST]["log"], "Replace failed: upload died")
+        routes.persist_if_terminal.assert_called_once_with(FIRST)
+        routes.emit_job_update.assert_called_with(FIRST)
+
+    def test_single_confirmation_cannot_run_twice(self):
+        _jobs[FIRST] = reviewed(FIRST)
+        self.assertEqual(self.client.post(f"/api/confirm/{FIRST}").status_code, 200)
+        self.assertEqual(self.client.post(f"/api/confirm/{FIRST}").status_code, 409)
+        self.assertEqual(self.order, [FIRST])
+
     def test_ids_must_be_a_list(self):
         self.assertEqual(self.confirm(FIRST).status_code, 400)
         self.assertEqual(self.client.post("/api/confirm-all").status_code, 400)
