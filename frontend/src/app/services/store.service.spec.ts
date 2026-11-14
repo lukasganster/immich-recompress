@@ -105,6 +105,20 @@ describe('StoreService', () => {
     expect(store.estimatedSavingsFraction()).toBeCloseTo(0.4, 5);
   });
 
+  it('estimates video savings on the selected encoder\'s own quality scale', () => {
+    const base = { label: '', hw: false, cores: false };
+    store.encoders.set([
+      { ...base, id: 'x265', qmin: 18, qmax: 32, qdefault: 24, qbetter: 'low', qterm: 'RF', qbands: [20, 23, 26, 29] },
+      { ...base, id: 'vaapi_av1', qmin: 60, qmax: 160, qdefault: 110, qbetter: 'low', qterm: 'QP', qbands: [80, 92, 104, 116] },
+    ]);
+    store.settings.update(s => ({ ...s, encoder: 'x265', quality: 26, preset: 'medium' }));
+    const rf26 = store.estimatedSavingsFraction()!;
+    store.settings.update(s => ({ ...s, encoder: 'vaapi_av1', quality: 104 }));
+    expect(store.estimatedSavingsFraction()).toBeCloseTo(rf26, 5);
+    store.settings.update(s => ({ ...s, quality: 70 }));
+    expect(store.estimatedSavingsFraction()!).toBeLessThan(rf26);
+  });
+
   it('does not promise target savings for lossless JPEG XL', () => {
     store.media.set('image');
     store.settings.update(s => ({ ...s, photo_format: 'jxl', photo_target_savings: 90 }));

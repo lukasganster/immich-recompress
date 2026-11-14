@@ -6,6 +6,7 @@ import { IconComponent } from '../icon/icon';
 import { StoreService } from '../../services/store.service';
 import { EncoderInfo, Settings } from '../../models/api.models';
 import { codecLabel } from '../../utils/codec-label';
+import { qualityBands, qualityLabel, qualityTerm } from '../../utils/quality-scale';
 
 @Component({
   selector: 'app-settings-panel',
@@ -52,28 +53,19 @@ export class SettingsPanelComponent {
   /** Effective CPU-core count (0/unset = all detected cores). */
   get cores(): number { return this.s.threads || this.store.cpuCount(); }
 
-  /** Plain-language quality band, honouring the encoder's direction (RF-style
-   *  lower-is-better vs VideoToolbox 0–100 higher-is-better). */
-  qualityLabel(q: number): string {
-    if (this.enc?.qbetter === 'high') {
-      if (q >= 75) return 'near-lossless, large files';
-      if (q >= 60) return 'high quality';
-      if (q >= 45) return 'balanced';
-      if (q >= 30) return 'smaller, some quality loss';
-      return 'small files, visibly softer';
-    }
-    if (q <= 20) return 'near-lossless, large files';
-    if (q <= 23) return 'high quality';
-    if (q <= 26) return 'balanced';
-    if (q <= 29) return 'smaller, some quality loss';
-    return 'small files, visibly softer';
-  }
+  /** Plain-language quality band on the selected encoder's own scale. */
+  qualityLabel(q: number): string { return qualityLabel(q, this.enc); }
+
+  /** HandBrake's name for the selected encoder's quality scale. */
+  get qualityTerm(): string { return qualityTerm(this.enc); }
+
+  /** Label cutoffs for the help text, best quality first. */
+  get qualityBands(): readonly number[] { return qualityBands(this.enc); }
 
   // --- brief summary shown in the sidebar card ---
   get videoSummary(): string {
     const label = this.enc?.label ?? this.s.encoder;
-    const term = this.enc?.qbetter === 'high' ? 'CQ' : 'RF';
-    return `${label} · ${term} ${this.s.quality}`;
+    return `${label} · ${this.qualityTerm} ${this.s.quality}`;
   }
 
   get outputSummary(): string {

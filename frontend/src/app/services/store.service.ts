@@ -3,6 +3,7 @@ import {
   Capabilities, CaptureDateFilter, MetadataFilter, emptyMetadataFilter, EncoderInfo, JobPublic, JobStatus, KeyOwner, MediaType, ProcessedEntry,
   Settings, SortField, SortOrder, SseJobUpdate, User, VideoSummary,
 } from '../models/api.models';
+import { rfEquivalent } from '../utils/quality-scale';
 
 const LS_BROWSE = 'immich_browse';
 const LS_PROCESSED = 'immich_processed';
@@ -185,7 +186,7 @@ export class StoreService {
       [18, 0.20], [20, 0.30], [22, 0.38], [24, 0.45],
       [26, 0.52], [28, 0.60], [30, 0.66], [32, 0.72],
     ];
-    let q = Math.max(18, Math.min(32, s.quality));
+    const q = Math.max(18, Math.min(32, rfEquivalent(s.quality, this.selectedEncoder())));
     let frac = anchors[0][1];
     for (let i = 0; i < anchors.length - 1; i++) {
       const [q1, f1] = anchors[i], [q2, f2] = anchors[i + 1];

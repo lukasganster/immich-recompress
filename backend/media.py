@@ -99,32 +99,51 @@ RESOLUTION_LONG_EDGE = {
 #   - "low"  : RF/CRF/QP style, lower number = better quality (x265/x264/NVENC…)
 #   - "high" : VideoToolbox constant quality 0–100, higher = better
 #
+# `qterm` is HandBrake's name for the scale. `qbands` are the four cutoffs the
+# UI uses for its plain-language labels, from best to worst quality: values up
+# to (or, for "high", down to) each cutoff read as near-lossless, high quality,
+# balanced and smaller; anything past the last is visibly softer. The savings
+# estimate also maps these cutoffs onto x265's 20/23/26/29.
+#
 # `threadopt` is the HandBrake `--encopts` key that sets the thread/worker count
 # for that software encoder (verified: x265 `pools`, SVT-AV1 `lp`). HandBrake
 # manages x264 threading itself and ignores `threads`, so x264 (and every HW
 # encoder, where the GPU does the work) leave this None — no core control shown.
+_RF_BANDS = (20, 23, 26, 29)
+
 ENCODER_CATALOG = [
     {"id": "x265",       "hb": "x265",       "label": "HEVC (x265, CPU)",
-     "hw": False, "qmin": 18, "qmax": 32, "qdefault": 24, "qbetter": "low",  "threadopt": "pools"},
+     "hw": False, "qmin": 18, "qmax": 32, "qdefault": 24, "qbetter": "low",  "threadopt": "pools",
+     "qterm": "RF", "qbands": _RF_BANDS},
     {"id": "svt_av1",    "hb": "svt_av1",    "label": "AV1 (SVT, CPU)",
-     "hw": False, "qmin": 18, "qmax": 45, "qdefault": 30, "qbetter": "low",  "threadopt": "lp"},
+     "hw": False, "qmin": 18, "qmax": 45, "qdefault": 30, "qbetter": "low",  "threadopt": "lp",
+     "qterm": "RF", "qbands": (24, 28, 32, 37)},
     {"id": "x264",       "hb": "x264",       "label": "H.264 (x264, CPU)",
-     "hw": False, "qmin": 18, "qmax": 32, "qdefault": 22, "qbetter": "low",  "threadopt": None},
+     "hw": False, "qmin": 18, "qmax": 32, "qdefault": 22, "qbetter": "low",  "threadopt": None,
+     "qterm": "RF", "qbands": _RF_BANDS},
     {"id": "vt_h265",    "hb": "vt_h265",    "label": "HEVC (Apple VideoToolbox)",
-     "hw": True,  "qmin": 1,  "qmax": 100, "qdefault": 60, "qbetter": "high", "threadopt": None},
+     "hw": True,  "qmin": 1,  "qmax": 100, "qdefault": 60, "qbetter": "high", "threadopt": None,
+     "qterm": "CQ", "qbands": (75, 60, 45, 30)},
     {"id": "nvenc_h265", "hb": "nvenc_h265", "label": "HEVC (NVIDIA NVENC)",
-     "hw": True,  "qmin": 18, "qmax": 40, "qdefault": 24, "qbetter": "low",  "threadopt": None},
+     "hw": True,  "qmin": 18, "qmax": 40, "qdefault": 24, "qbetter": "low",  "threadopt": None,
+     "qterm": "CQ", "qbands": _RF_BANDS},
     {"id": "qsv_h265",   "hb": "qsv_h265",   "label": "HEVC (Intel QSV)",
-     "hw": True,  "qmin": 18, "qmax": 40, "qdefault": 24, "qbetter": "low",  "threadopt": None},
+     "hw": True,  "qmin": 18, "qmax": 40, "qdefault": 24, "qbetter": "low",  "threadopt": None,
+     "qterm": "ICQ", "qbands": _RF_BANDS},
     {"id": "vaapi_hevc", "hb": "vaapi_hevc", "label": "HEVC (VAAPI)",
-     "hw": True,  "qmin": 18, "qmax": 40, "qdefault": 24, "qbetter": "low",  "threadopt": None},
+     "hw": True,  "qmin": 18, "qmax": 40, "qdefault": 24, "qbetter": "low",  "threadopt": None,
+     "qterm": "QP", "qbands": _RF_BANDS},
     {"id": "vaapi_h264", "hb": "vaapi_h264", "label": "H.264 (VAAPI)",
-     "hw": True,  "qmin": 18, "qmax": 40, "qdefault": 22, "qbetter": "low",  "threadopt": None},
+     "hw": True,  "qmin": 18, "qmax": 40, "qdefault": 22, "qbetter": "low",  "threadopt": None,
+     "qterm": "QP", "qbands": _RF_BANDS},
     # HandBrake passes `-q` directly as AV1's 0–255 q_idx for vaapi_av1 (not 0–63 like svt_av1).
+    # The AV1 quantizer maps to q_idx at about 4x, hence the bands.
     {"id": "vaapi_av1",  "hb": "vaapi_av1",  "label": "AV1 (VAAPI)",
-     "hw": True,  "qmin": 60, "qmax": 160, "qdefault": 110, "qbetter": "low", "threadopt": None},
+     "hw": True,  "qmin": 60, "qmax": 160, "qdefault": 110, "qbetter": "low", "threadopt": None,
+     "qterm": "QP", "qbands": (80, 92, 104, 116)},
     {"id": "vce_h265",   "hb": "vce_h265",   "label": "HEVC (AMD VCE)",
-     "hw": True,  "qmin": 18, "qmax": 40, "qdefault": 24, "qbetter": "low",  "threadopt": None},
+     "hw": True,  "qmin": 18, "qmax": 40, "qdefault": 24, "qbetter": "low",  "threadopt": None,
+     "qterm": "CQ", "qbands": _RF_BANDS},
 ]
 
 _CATALOG_BY_ID = {e["id"]: e for e in ENCODER_CATALOG}
@@ -172,7 +191,8 @@ def available_encoders():
     return [
         {"id": e["id"], "label": e["label"], "hw": e["hw"],
          "qmin": e["qmin"], "qmax": e["qmax"], "qdefault": e["qdefault"],
-         "qbetter": e["qbetter"], "cores": bool(e["threadopt"])}
+         "qbetter": e["qbetter"], "qterm": e["qterm"], "qbands": list(e["qbands"]),
+         "cores": bool(e["threadopt"])}
         for e in ENCODER_CATALOG if e["hb"] in names
     ]
 
