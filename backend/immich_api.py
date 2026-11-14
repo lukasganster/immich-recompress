@@ -185,21 +185,21 @@ def download_original(
     *,
     progress_callback: Optional[Callable[[int, Optional[int]], None]] = None,
     total_size: Optional[int] = None,
-    job_id: Optional[str] = None,
+    job_id: str,
 ) -> tuple[bool, str]:
     """Download an asset's original bytes to dest. Returns (ok, reason): (True, "")
     on success, else (False, <reason>). Transient failures (network errors, 5xx)
     are retried with backoff; a cancel or a permanent 4xx stops immediately.
     The optional callback receives written/total bytes at most once a second,
     plus a reset for each attempt and a final report after the file closes.
-    Cancellation uses the owning job_id when it differs from the asset_id.
+    Cancellation follows job_id, the owning job, which differs from asset_id
+    for a Live Photo's linked video.
     """
     url = f"{env['url']}/api/assets/{asset_id}/original"
     headers = {**immich_headers(env), "Accept-Encoding": "identity"}
-    cancel_id = job_id if job_id is not None else asset_id
     reason = "unknown error"
     for attempt in range(1, DOWNLOAD_RETRIES + 1):
-        if is_cancelled(cancel_id):
+        if is_cancelled(job_id):
             return False, "cancelled"
         try:
             with requests.get(url, headers=headers, stream=True, timeout=300) as resp:
@@ -222,7 +222,7 @@ def download_original(
                         if progress_callback:
                             progress_callback(0, total)
                         for chunk in resp.iter_content(chunk_size=1024 * 1024):
-                            if is_cancelled(cancel_id):
+                            if is_cancelled(job_id):
                                 return False, "cancelled"
                             if chunk:
                                 fh.write(chunk)
@@ -231,7 +231,7 @@ def download_original(
                                 if progress_callback and now - last_report >= 1.0:
                                     progress_callback(downloaded, total)
                                     last_report = now
-                    if is_cancelled(cancel_id):
+                    if is_cancelled(job_id):
                         return False, "cancelled"
                     if progress_callback:
                         progress_callback(downloaded, total)
