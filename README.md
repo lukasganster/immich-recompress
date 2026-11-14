@@ -12,9 +12,13 @@ Find the large videos and photos in your [Immich](https://immich.app/) library,
 ## Features
 
 - Browse videos, photos or Live Photos, filtered by size, capture date, album,
-  people and location.
+  people and location. Videos can be sorted by average bitrate, derived from
+  file size and duration.
 - Re-encode videos with HandBrake (x264 / x265 / AV1, optional resolution cap),
   on the GPU when available. See [Hardware acceleration](#hardware-acceleration).
+  The quality labels and savings estimate follow each encoder's own scale.
+- Skip videos whose codec is on the skip list (for example HEVC). The codec is
+  probed before the download, and every skipped job shows why it was skipped.
 - Recompress JPEGs to a target size, or convert them to JPEG XL with configurable
   distance (0 to 25). Distance 0 is the default and preserves exact JPEG
   reconstruction (`djxl photo.jxl restored.jpg`). Positive distances use lossy
@@ -23,7 +27,8 @@ Find the large videos and photos in your [Immich](https://immich.app/) library,
   the minimum savings.
 - Strip the hidden motion video from Live Photos.
 - **Review** every result (size, savings, preview) before it replaces the original.
-- Queue with live progress, configurable parallel jobs and persistent job history.
+- Queue with live download and encode progress, configurable parallel jobs and
+  persistent job history.
 
 Replacing uploads the compressed file as a new asset, copies the original's
 metadata, tags, albums, capture date and location, and moves the original to
@@ -32,7 +37,8 @@ the Immich trash. A local backup is kept until the replacement succeeds.
 ## Requirements
 
 - An Immich **3.x.x** server and an **admin** API key. Several keys
-  (comma-separated) let you browse several users' libraries.
+  (comma-separated) let you browse several users' libraries; the library
+  selector shows each owner's Immich profile picture.
 - [`HandBrakeCLI`](https://handbrake.fr/), [`ffmpeg` / `ffprobe`](https://ffmpeg.org/)
   and, for JPEG XL, [`cjxl` / `djxl`](https://github.com/libjxl/libjxl) on `PATH`.
   The Docker image includes all of them.
@@ -82,7 +88,7 @@ volumes:
 docker compose up -d
 ```
 
-Then open <http://localhost:5050>. Pin a version such as `:1.3.1` instead of
+Then open <http://localhost:5050>. Pin a version such as `:1.6.0` instead of
 `latest` for reproducible deploys.
 
 #### Building from source
