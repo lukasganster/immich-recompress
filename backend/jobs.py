@@ -149,7 +149,12 @@ def _download_for_job(
         emit_job_update(job_id)
 
     return download_original(
-        env, asset_id, dest, progress_callback=report, total_size=total_size
+        env,
+        asset_id,
+        dest,
+        progress_callback=report,
+        total_size=total_size,
+        job_id=job_id,
     )
 
 
@@ -968,10 +973,28 @@ def process_motionphoto_job(env, asset_id, params):
         ok, reason = _download_for_job(env, asset_id, video_id, dest, video_size,
                                        label="Downloading motion video")
         if not ok:
-            update_job(asset_id, status="error",
-                       log=f"Motion video download failed: {reason}")
+            cancelled = reason == "cancelled"
+            update_job(
+                asset_id,
+                status="cancelled" if cancelled else "error",
+                log="Cancelled"
+                if cancelled
+                else f"Motion video download failed: {reason}",
+            )
             emit_job_update(asset_id)
-            append_csv_log([utcnow_iso(), asset_id, name, "MOTION", video_size, None, None, "error"])
+            append_csv_log(
+                [
+                    utcnow_iso(),
+                    asset_id,
+                    name,
+                    "MOTION",
+                    video_size,
+                    None,
+                    None,
+                    "cancelled" if cancelled else "error",
+                ]
+            )
+            cleanup_temp(dest)
             broadcast_queue_update()
             return
         update_job(asset_id, status="downloaded", progress=100.0,
@@ -1075,8 +1098,31 @@ def process_motionphoto_job(env, asset_id, params):
     backup_path = None
     if replace:
         backup_path = os.path.join(backup_dir, f"{video_id}_{video_name}")
-        ok, _ = _download_for_job(env, asset_id, video_id, backup_path, video_size,
-                                  label="Downloading motion video backup")
+        ok, reason = _download_for_job(
+            env,
+            asset_id,
+            video_id,
+            backup_path,
+            video_size,
+            label="Downloading motion video backup",
+        )
+        if reason == "cancelled" or is_cancelled(asset_id):
+            update_job(asset_id, status="cancelled", log="Cancelled")
+            emit_job_update(asset_id)
+            append_csv_log(
+                [
+                    utcnow_iso(),
+                    asset_id,
+                    name,
+                    "MOTION",
+                    video_size,
+                    None,
+                    None,
+                    "cancelled",
+                ]
+            )
+            cleanup_temp(backup_path)
+            return
         if not ok:
             backup_path = None
 

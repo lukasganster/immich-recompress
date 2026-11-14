@@ -863,7 +863,12 @@ def api_confirm(asset_id):
     if error:
         return jsonify({"ok": False, "error": error}), status
     broadcast_queue_update()
-    threading.Thread(target=work, name=f"confirm-{asset_id}", daemon=True).start()
+    threading.Thread(
+        target=_replace_in_order,
+        args=([(asset_id, work)],),
+        name=f"confirm-{asset_id}",
+        daemon=True,
+    ).start()
     return jsonify({"ok": True})
 
 
