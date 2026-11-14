@@ -44,7 +44,7 @@ class PhotoOutputTest(unittest.TestCase):
         app.register_blueprint(bp)
         self.client = app.test_client()
 
-    def download_original(self, env, asset_id, path):
+    def download_original(self, env, asset_id, path, **kwargs):
         Path(path).write_bytes(b"original jpeg" * 100)
         return True, ""
 

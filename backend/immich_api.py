@@ -5,6 +5,7 @@ import re
 import threading
 import time
 from datetime import datetime, timedelta, timezone
+from typing import Callable, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
@@ -164,38 +165,79 @@ def owner_name_for(env, owner_id):
 
 
 
-DOWNLOAD_RETRIES = 3   # attempts for a single original download
+DOWNLOAD_RETRIES = 3  # attempts for a single original download
 
 
-def download_original(env, asset_id, dest):
+def _positive_size(value: object) -> Optional[int]:
+    try:
+        size = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return size if size > 0 else None
+
+
+def download_original(
+    env: dict,
+    asset_id: str,
+    dest: str,
+    *,
+    progress_callback: Optional[Callable[[int, Optional[int]], None]] = None,
+    total_size: Optional[int] = None,
+) -> tuple[bool, str]:
     """Download an asset's original bytes to dest. Returns (ok, reason): (True, "")
     on success, else (False, <reason>). Transient failures (network errors, 5xx)
-    are retried with backoff; a cancel or a permanent 4xx stops immediately."""
+    are retried with backoff; a cancel or a permanent 4xx stops immediately.
+    The optional callback receives written/total bytes at most once a second,
+    plus a reset for each attempt and a final report after the file closes.
+    """
     url = f"{env['url']}/api/assets/{asset_id}/original"
+    headers = {**immich_headers(env), "Accept-Encoding": "identity"}
     reason = "unknown error"
     for attempt in range(1, DOWNLOAD_RETRIES + 1):
         if is_cancelled(asset_id):
             return False, "cancelled"
         try:
-            with requests.get(url, headers=immich_headers(env), stream=True, timeout=300) as resp:
+            with requests.get(url, headers=headers, stream=True, timeout=300) as resp:
                 if resp.status_code != 200:
                     reason = f"Immich HTTP {resp.status_code}"
                     if 400 <= resp.status_code < 500:
-                        return False, reason          # permanent — don't retry
+                        return False, reason  # permanent; don't retry
                 else:
+                    # HTTP decoding makes the compressed Content-Length unsuitable.
+                    encoding = resp.headers.get("Content-Encoding", "").strip().lower()
+                    content_length = (
+                        resp.headers.get("Content-Length")
+                        if encoding in ("", "identity")
+                        else None
+                    )
+                    total = _positive_size(content_length) or _positive_size(total_size)
+                    downloaded = 0
                     with open(dest, "wb") as fh:
+                        last_report = time.monotonic()
+                        if progress_callback:
+                            progress_callback(0, total)
                         for chunk in resp.iter_content(chunk_size=1024 * 1024):
                             if is_cancelled(asset_id):
                                 return False, "cancelled"
                             if chunk:
                                 fh.write(chunk)
+                                downloaded += len(chunk)
+                                now = time.monotonic()
+                                if progress_callback and now - last_report >= 1.0:
+                                    progress_callback(downloaded, total)
+                                    last_report = now
+                    if is_cancelled(asset_id):
+                        return False, "cancelled"
+                    if progress_callback:
+                        progress_callback(downloaded, total)
                     return True, ""
-        except OSError as exc:
-            return False, f"Write error: {exc}"         # local disk issue — don't retry
         except requests.RequestException as exc:
-            reason = type(exc).__name__                # e.g. ConnectionError, ReadTimeout
+            # RequestException also inherits OSError; catch network errors first.
+            reason = type(exc).__name__  # e.g. ConnectionError, ReadTimeout
+        except OSError as exc:
+            return False, f"Write error: {exc}"  # local disk issue; don't retry
         if attempt < DOWNLOAD_RETRIES:
-            time.sleep(min(2 ** attempt, 8))           # 2s, 4s, …
+            time.sleep(min(2**attempt, 8))  # 2s, 4s, …
     return False, reason
 
 

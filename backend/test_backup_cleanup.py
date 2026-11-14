@@ -45,7 +45,7 @@ class BackupCleanupTest(unittest.TestCase):
     def fake(self, name, **kwargs):
         return self.stack.enter_context(patch(f"backend.jobs.{name}", **kwargs))
 
-    def download(self, env, asset_id, path):
+    def download(self, env, asset_id, path, **kwargs):
         Path(path).write_bytes(ORIGINAL)
         return True, ""
 
