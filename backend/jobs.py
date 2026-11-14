@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import threading
 import time
+from typing import Optional
 
 from werkzeug.utils import secure_filename
 
@@ -125,6 +126,31 @@ def emit_job_update(asset_id):
             "savings": job["savings"],
         }
     broadcast("job_update", data)
+
+
+def _download_for_job(
+    env: dict,
+    job_id: str,
+    asset_id: str,
+    dest: str,
+    total_size: Optional[int] = None,
+    label: str = "Downloading original",
+) -> tuple[bool, str]:
+    """Report progress to the owning job, including a Live Photo's still ID."""
+
+    def report(downloaded: int, total: Optional[int]) -> None:
+        progress = min(100.0, round(downloaded / total * 100, 1)) if total else 0.0
+        amount = (
+            f"{human_size(downloaded)} of {human_size(total)}"
+            if total
+            else f"{human_size(downloaded)} downloaded"
+        )
+        update_job(job_id, progress=progress, log=f"{label} · {amount}")
+        emit_job_update(job_id)
+
+    return download_original(
+        env, asset_id, dest, progress_callback=report, total_size=total_size
+    )
 
 
 def compute_stats():
@@ -793,7 +819,7 @@ def process_image_job(env, asset_id, params):
                codec=src_fmt, log="Downloading original")
     emit_job_update(asset_id)
 
-    ok, reason = download_original(env, asset_id, src_path)
+    ok, reason = _download_for_job(env, asset_id, asset_id, src_path, job_size)
     if not ok:
         cancelled = reason == "cancelled"
         update_job(asset_id, status="cancelled" if cancelled else "error",
@@ -939,7 +965,8 @@ def process_motionphoto_job(env, asset_id, params):
     if download_only:
         ext = os.path.splitext(video_name)[1] or ".mov"
         dest = os.path.join(WORK_DIR, f"{video_id}_motion{ext}")
-        ok, reason = download_original(env, video_id, dest)
+        ok, reason = _download_for_job(env, asset_id, video_id, dest, video_size,
+                                       label="Downloading motion video")
         if not ok:
             update_job(asset_id, status="error",
                        log=f"Motion video download failed: {reason}")
@@ -969,7 +996,8 @@ def process_motionphoto_job(env, asset_id, params):
         out_path = os.path.join(WORK_DIR, f"{asset_id}_out.mp4")
         update_job(asset_id, log="Downloading motion video…")
         emit_job_update(asset_id)
-        ok, reason = download_original(env, video_id, src_path)
+        ok, reason = _download_for_job(env, asset_id, video_id, src_path, video_size,
+                                       label="Downloading motion video")
         if not ok:
             cancelled = reason == "cancelled"
             update_job(asset_id, status="cancelled" if cancelled else "error",
@@ -1047,7 +1075,8 @@ def process_motionphoto_job(env, asset_id, params):
     backup_path = None
     if replace:
         backup_path = os.path.join(backup_dir, f"{video_id}_{video_name}")
-        ok, _ = download_original(env, video_id, backup_path)
+        ok, _ = _download_for_job(env, asset_id, video_id, backup_path, video_size,
+                                  label="Downloading motion video backup")
         if not ok:
             backup_path = None
 
@@ -1145,7 +1174,7 @@ def process_job(asset_id):
                log="Downloading original")
     emit_job_update(asset_id)
 
-    ok, reason = download_original(env, asset_id, src_path)
+    ok, reason = _download_for_job(env, asset_id, asset_id, src_path, job_size)
     if not ok:
         cancelled = reason == "cancelled"
         update_job(asset_id, status="cancelled" if cancelled else "error",

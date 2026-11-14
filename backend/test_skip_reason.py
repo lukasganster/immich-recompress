@@ -39,7 +39,7 @@ class VideoSkipTest(unittest.TestCase):
         self.local_probe = self.stack.enter_context(
             patch.object(jobs, "ffprobe_info", return_value=("hevc", 522.0)))
 
-    def fake_download(self, env, asset_id, dest):
+    def fake_download(self, env, asset_id, dest, **kwargs):
         Path(dest).write_bytes(b"original")
         return True, ""
 
