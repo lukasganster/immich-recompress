@@ -30,6 +30,9 @@
 .select-row:has(input:checked) {
   @apply bg-primary/10;
 }
+.owner-avatar {
+  @apply size-5 flex-none rounded-full object-cover;
+}
 
 /* People: Immich-style chips with a round avatar. */
 .person-chip {

@@ -214,7 +214,11 @@
               <label class="select-row">
                 <input type="checkbox"
                   [checked]="keyChecked(o.key_idx)" (change)="toggleKey(o.key_idx)" />
-                <app-icon [path]="mdiAccountCircleOutline" [size]="20" class="text-muted" />
+                @if (showAvatar(o)) {
+                  <img class="owner-avatar" [src]="avatarUrl(o)" alt="" (error)="avatarFailed(o)" />
+                } @else {
+                  <app-icon [path]="mdiAccountCircleOutline" [size]="20" class="text-muted" />
+                }
                 <span class="min-w-0 truncate">{{ o.name }}</span>
               </label>
             }

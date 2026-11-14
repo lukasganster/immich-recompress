@@ -175,6 +175,10 @@ export interface KeyOwner {
   id: string;
   name: string;
   email: string;
+  /** Whether the owner has an Immich profile picture. */
+  has_avatar?: boolean;
+  /** Owner's profileChangedAt, used to bust the cached picture. */
+  avatar_version?: string;
 }
 
 export interface Settings {

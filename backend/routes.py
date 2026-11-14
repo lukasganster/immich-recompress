@@ -562,6 +562,32 @@ def api_key_owners():
     return jsonify({"owners": fetch_key_owners(env)})
 
 
+@bp.route("/api/keys/<int:key_idx>/avatar")
+def api_key_owner_avatar(key_idx):
+    """Profile picture of an API key's owner, fetched with that same key."""
+    env = get_env()
+    api_keys = env.get("api_keys") or []
+    if not env["url"] or not 0 <= key_idx < len(api_keys):
+        return Response("Unknown key", status=404)
+    owner = next((o for o in fetch_key_owners(env) if o["key_idx"] == key_idx), None)
+    if not owner or not owner["id"] or not owner.get("has_avatar"):
+        return Response("No profile picture", status=404)
+    key_env = {**env, "api_key": api_keys[key_idx]}
+    try:
+        resp = requests.get(env["url"] + f"/api/users/{owner['id']}/profile-image",
+                            headers={**immich_headers(key_env), "Accept": "image/*"},
+                            timeout=HTTP_TIMEOUT)
+    except requests.RequestException:
+        return Response("Profile picture unavailable", status=502)
+    if resp.status_code != 200:
+        return Response("Profile picture unavailable", status=502)
+    result = Response(resp.content,
+                      content_type=resp.headers.get("Content-Type", "image/jpeg"))
+    # The UI adds the owner's profileChangedAt as ?v=, so a new picture gets a new URL.
+    result.headers["Cache-Control"] = "private, max-age=86400"
+    return result
+
+
 # --------------------------------------------------------------------------- #
 # Routes: thumbnail & download proxies
 # --------------------------------------------------------------------------- #

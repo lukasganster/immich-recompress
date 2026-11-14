@@ -19,7 +19,7 @@ import {
   mdiVideoOutline,
 } from '@mdi/js';
 import { IconComponent } from '../icon/icon';
-import { BrowseOption, MediaType, MetadataFilter, emptyMetadataFilter } from '../../models/api.models';
+import { BrowseOption, KeyOwner, MediaType, MetadataFilter, emptyMetadataFilter } from '../../models/api.models';
 
 @Component({
   selector: 'app-browse-dialog',
@@ -126,6 +126,21 @@ export class BrowseDialogComponent implements OnDestroy {
   togglePerson(id: string): void {
     this.localMetadata.update(m => ({ ...m, personIds: m.personIds.includes(id)
       ? m.personIds.filter(p => p !== id) : [...m.personIds, id] }));
+  }
+
+  /** Profile picture URLs that failed to load; those owners fall back to the icon. */
+  private readonly brokenAvatars = signal<ReadonlySet<string>>(new Set());
+
+  showAvatar(owner: KeyOwner): boolean {
+    return !!owner.has_avatar && !this.brokenAvatars().has(this.avatarUrl(owner));
+  }
+
+  avatarUrl(owner: KeyOwner): string {
+    return this.api.keyOwnerAvatarUrl(owner.key_idx, owner.avatar_version);
+  }
+
+  avatarFailed(owner: KeyOwner): void {
+    this.brokenAvatars.update(set => new Set(set).add(this.avatarUrl(owner)));
   }
 
   /** First letter of a name, for the round avatar on a person chip. */
