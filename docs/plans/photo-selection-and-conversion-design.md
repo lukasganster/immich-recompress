@@ -77,6 +77,28 @@ For RAW on Linux we picked `dcraw_emu` from Debian's `libraw-bin`. `sips` stays 
 - The original is probed, not the PNG intermediate, which is always RGB.
 - JPEG XL needs no option: lossless JPEG transcoding keeps the original's subsampling, and lossy cjxl doesn't subsample.
 
+### Live Photo stills
+
+Changed while building, after a Google motion photo (`MVIMG_*.jpg`, a JPEG with an MP4 appended) failed to convert with `Tail data too large`. Testing also showed an older bug: `do_replace` uploads a new asset and runs copyAsset, which doesn't carry `livePhotoVideoId`, so replacing any linked still turned it into a plain photo.
+
+- A Photos tab job on a still with `livePhotoVideoId` follows the `motion_action` setting. Remove: the new photo isn't linked, and the motion video is trashed after the old still. Recompress or Keep: the new photo is linked to the existing motion video before the old still is trashed. Re-encoding the video stays the Live Photos tab's job.
+- The old still's link is never cleared. Immich v3.4.2 refuses to unlink a clip it extracted from a motion photo (`onBeforeUnlink`, "Cannot unlink Android motion photos"), and unlinking any other clip puts it back on the timeline. Two stills may share one clip, and emptying the trash only deletes a clip no other asset links.
+- If linking fails, the job errors and the old still is not trashed. The link is read again at replace time; if that read fails, nothing is uploaded.
+- Before encoding, an embedded clip is cut off into a separate work file, so the backup keeps the full original. Only two layouts are trusted, the same ones Immich reads: `MicroVideoOffset`, or a Container directory holding exactly a Primary and a MotionPhoto item with no padding. Either way the cut must fall right after the JPEG end marker and right before an MP4 `ftyp` box. Anything else (a gain map item, a Samsung trailer) is skipped as "unknown motion layout".
+- The MicroVideo, MotionPhoto and Container tags are removed from the cut still before encoding, not from the output, so the lossless JPEG XL repack reproduces the cleaned still exactly. The output is checked for leftover motion tags: if Immich found them on the new asset, it would extract a "clip" from the wrong bytes and delete the linked video.
+- A still with an embedded clip but no linked video (Immich never extracted it) is only cut with Remove; Recompress and Keep skip it as "motion not extracted", since cutting would lose the only copy.
+- Savings and min-savings are measured against the cut still, not the downloaded file.
+- The review card and the job log say what happens to the motion: "Motion video kept (relinked)", "Motion video removed (setting: Remove)" or "Embedded motion clip removed (setting: Remove)".
+
+Immich v3.4.2 source behind these choices:
+
+- Setting a link only checks the clip is a video and hides it. Clearing a link throws for clips under the encoded-video folder, then gives the clip the still's visibility: [asset.service.ts update](https://github.com/immich-app/immich/blob/v3.4.2/server/src/services/asset.service.ts#L86-L125), [asset.util.ts](https://github.com/immich-app/immich/blob/v3.4.2/server/src/utils/asset.util.ts#L145-L187), [storage.core.ts](https://github.com/immich-app/immich/blob/v3.4.2/server/src/cores/storage.core.ts#L148-L150).
+- Trashing marks only the given ids, and emptying the trash deletes a linked clip only when no other asset links it: [deleteAll](https://github.com/immich-app/immich/blob/v3.4.2/server/src/services/asset.service.ts#L374-L385), [handleAssetDeletion](https://github.com/immich-app/immich/blob/v3.4.2/server/src/services/asset.service.ts#L344-L351). `livePhotoVideoId` has no unique index: [asset.table.ts](https://github.com/immich-app/immich/blob/v3.4.2/server/src/schema/tables/asset.table.ts#L102-L103).
+- copyAsset carries albums, favourite, shared links, stack and sidecar, but not the link: [copy](https://github.com/immich-app/immich/blob/v3.4.2/server/src/services/asset.service.ts#L189-L235).
+- Any MicroVideo or MotionPhoto tag makes metadata extraction pull a clip out of the file and replace the linked one: [metadata.service.ts](https://github.com/immich-app/immich/blob/v3.4.2/server/src/services/metadata.service.ts#L669-L678), [L790-806](https://github.com/immich-app/immich/blob/v3.4.2/server/src/services/metadata.service.ts#L790-L806).
+
+Not verified on a live server: Apple Live Photos (a JPEG still with a separate MOV) under Remove. `linkLivePhotos` matches on the ContentIdentifier the new still inherits ([L175-204](https://github.com/immich-app/immich/blob/v3.4.2/server/src/services/metadata.service.ts#L175-L204)), and its query doesn't appear to exclude trashed videos, so Immich may link the new still to the trashed clip.
+
 ### Review bench
 
 - 10 reviews per page with prev/next. "Replace all (N)" and the total saved bytes still cover every review. When the last review on a page is resolved, the page clamps back into range.

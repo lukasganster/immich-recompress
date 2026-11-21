@@ -125,6 +125,8 @@ export interface JobPublic {
   photo_jxl_distance: number;
   /** True when the photo was decoded and re-encoded from pixels, not repacked. */
   pixel_path?: boolean | null;
+  /** What replacing a still does to its motion video, when it has one. */
+  motion_note?: string | null;
   compress_raw: boolean;
   preset: string;
   resolution: string;

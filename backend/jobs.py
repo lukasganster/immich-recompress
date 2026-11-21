@@ -88,6 +88,7 @@ def new_job(asset_id, params):
         "photo_max_mp": params.get("photo_max_mp"),
         "photo_jpeg_chroma": params.get("photo_jpeg_chroma", "source"),
         "pixel_path": None,
+        "motion_note": None,
         "compress_raw": params.get("compress_raw", False),
         "preset": params.get("preset", "medium"),
         "threads": params.get("threads"),
@@ -412,7 +413,15 @@ def do_replace(env, asset_id, name, out_path, old_size, new_size, savings, codec
       2. copy metadata (albums / favorite / shared links / stack / sidecar) from
          the old asset to it via copyAsset,
       3. restore the original capture date and location on the new asset,
-      4. move the OLD asset to the trash (recoverable for the retention period).
+      4. for a photo with a linked motion video: link it to the new asset, unless
+         the motion setting is Remove,
+      5. move the OLD asset to the trash (recoverable for the retention period),
+      6. with Remove, trash the motion video too.
+
+    copyAsset does not carry the live photo link. The old still's link is never
+    cleared: Immich v3.4 refuses to unlink a clip it extracted from a motion
+    photo, and unlinking would show the clip on the timeline. Two stills may
+    share one clip, and emptying the trash keeps a clip another asset links.
 
     The original's capture date is set on the new asset so it keeps its place in
     the timeline. Returns True on success. Used by the worker and the confirm
@@ -423,6 +432,21 @@ def do_replace(env, asset_id, name, out_path, old_size, new_size, savings, codec
     if not out_path or not os.path.isfile(out_path):
         return _replace_error(asset_id, name, codec, old_size, new_size, savings,
                               "Encoded file missing", out_path)
+
+    with _state_lock:
+        job = dict(_jobs.get(asset_id) or {})
+    video_id, keep_motion, motion_note = None, False, ""
+    if job.get("media") == "image":
+        # Read the link now: it may have changed since the job was queued.
+        detail = fetch_asset(env, asset_id)
+        if not detail:
+            return _replace_error(asset_id, name, codec, old_size, new_size, savings,
+                                  "Could not read the original's motion link", out_path)
+        video_id = detail.get("livePhotoVideoId")
+        keep_motion = job.get("motion_action", "remove") != "remove"
+        if video_id:
+            motion_note = (". Motion video kept (relinked)" if keep_motion
+                           else ". Motion video removed (setting: Remove)")
 
     meta = get_asset_meta(env, asset_id)
     capture_fields = capture_metadata_fields(meta)
@@ -457,16 +481,31 @@ def do_replace(env, asset_id, name, out_path, old_size, new_size, savings, codec
                               "Capture metadata update failed – new asset created, original kept",
                               out_path)
 
+    if video_id and keep_motion:
+        update_job(asset_id, log="Linking the motion video to the new photo…")
+        emit_job_update(asset_id)
+        if not set_live_photo_link(env, new_id, video_id):
+            return _replace_error(asset_id, name, codec, old_size, new_size, savings,
+                                  "Could not link the motion video – new asset created, "
+                                  "original kept", out_path)
+
     update_job(asset_id, log="Moving original to trash…")
     emit_job_update(asset_id)
     if not trash_asset(env, asset_id):
         return _replace_error(asset_id, name, codec, old_size, new_size, savings,
                               "Could not move original to trash", out_path)
 
+    if video_id and not keep_motion:
+        update_job(asset_id, log="Moving motion video to trash…")
+        emit_job_update(asset_id)
+        if not trash_asset(env, video_id):
+            return _replace_error(asset_id, name, codec, old_size, new_size, savings,
+                                  "Replaced, but the motion video could not be deleted", out_path)
+
     # Before "done": a finished job can be cleared, which would lose the path.
     discard_backup(asset_id)
     update_job(asset_id, status="done",
-               log="Done – new asset created, original in trash")
+               log="Done – new asset created, original in trash" + motion_note)
     emit_job_update(asset_id)
     append_csv_log([utcnow_iso(), asset_id, name, codec or "",
                     old_size, new_size, savings, "done"])
@@ -886,15 +925,51 @@ def process_image_job(env, asset_id, params):
         pixel_path = photo_convert.needs_pixel_path(
             fmt, width * height / 1e6 if width and height else None, max_mp)
     update_job(asset_id, pixel_path=pixel_path)
+
+    def skip_downloaded(log, reason):
+        update_job(asset_id, status="skipped", log=log, skip_reason=reason)
+        emit_job_update(asset_id)
+        append_csv_log([utcnow_iso(), asset_id, name, src_fmt, old_size, None, None, "skipped"])
+        broadcast_queue_update()
+        cleanup_temp(src_path)
+
     if pixel_path:
         skip_msg, skip_reason = photo_convert.still_problem(src_path, fmt)
         if skip_msg:
-            update_job(asset_id, status="skipped", log=skip_msg, skip_reason=skip_reason)
+            return skip_downloaded(skip_msg, skip_reason)
+
+    # A motion photo carries its clip after the JPEG. Immich keeps its own copy
+    # as the linked video, so encode the still alone; the backup keeps the clip.
+    video_id = (params.get("_source_detail") or {}).get("livePhotoVideoId")
+    keep_motion = params.get("motion_action", "remove") != "remove"
+    clip = photo_convert.motion_trailer(src_path)
+    if clip is None:
+        return skip_downloaded("Could not confirm where the embedded motion clip starts",
+                               "unknown motion layout")
+    if clip and not video_id and keep_motion:
+        return skip_downloaded("Immich has not extracted the embedded motion clip, so "
+                               "replacing the photo would lose it", "motion not extracted")
+    still_path = src_path
+    if clip:
+        still_path = os.path.join(WORK_DIR, f"{asset_id}_still{ext}")
+        ok, err = photo_convert.strip_motion(src_path, still_path, clip, asset_id)
+        if not ok:
+            cleanup_temp(still_path)
+            update_job(asset_id, status="error", log=f"Motion clip: {err}")
             emit_job_update(asset_id)
-            append_csv_log([utcnow_iso(), asset_id, name, src_fmt, old_size, None, None, "skipped"])
-            broadcast_queue_update()
+            append_csv_log([utcnow_iso(), asset_id, name, src_fmt, old_size, None, None, "error"])
             cleanup_temp(src_path)
             return
+        # Savings count against the still: the clip already lives on as Immich's video.
+        old_size = os.path.getsize(still_path)
+        update_job(asset_id, old_size=old_size)
+    motion_note = None
+    if video_id:
+        motion_note = ("Motion video kept (relinked)" if keep_motion
+                       else "Motion video removed (setting: Remove)")
+    elif clip:
+        motion_note = "Embedded motion clip removed (setting: Remove)"
+    update_job(asset_id, motion_note=motion_note)
     jxl_setting = (f"lossy, distance {jxl_distance}" if jxl_distance > 0
                    else "lossless" if pixel_path else "lossless JPEG reconstruction")
     update_job(asset_id, status="encoding", progress=0.0,
@@ -902,11 +977,11 @@ def process_image_job(env, asset_id, params):
                     f"Compressing photo (target ~{float(target_savings):.0f}%)"))
     emit_job_update(asset_id)
 
-    ok, used_q, encode_src = True, jxl_setting, src_path
+    ok, used_q, encode_src = True, jxl_setting, still_path
     decoded_path = os.path.join(WORK_DIR, f"{asset_id}_decoded.png")
     if pixel_path:
         encode_src = decoded_path
-        ok, err = photo_convert.decode_to_png(src_path, fmt, decoded_path, max_mp, asset_id)
+        ok, err = photo_convert.decode_to_png(still_path, fmt, decoded_path, max_mp, asset_id)
         if ok and not is_jxl and photo_convert.has_transparency(decoded_path, asset_id):
             ok, err = False, "JPEG cannot keep the transparency of this photo"
         if not ok:
@@ -919,14 +994,19 @@ def process_image_job(env, asset_id, params):
             update_job(asset_id, log=f"JPEG XL: {err}")
     elif ok:
         # Probe the original: the decoded PNG is RGB and would always read as 4:4:4.
-        pix_fmt = jpeg_pix_fmt(src_path, params.get("photo_jpeg_chroma", "source"))
+        pix_fmt = jpeg_pix_fmt(still_path, params.get("photo_jpeg_chroma", "source"))
         ok, used_q, achieved = compress_image_to_target(
             encode_src, out_path, old_size, target_savings, asset_id, pix_fmt)
     if ok and pixel_path:
-        ok, err = photo_convert.copy_metadata(src_path, out_path, asset_id)
+        ok, err = photo_convert.copy_metadata(still_path, out_path, asset_id)
         if not ok:
             update_job(asset_id, log=f"Metadata: {err}")
+    if ok and clip and photo_convert.motion_trailer(out_path, quick=False) != 0:
+        ok = False
+        update_job(asset_id, log="Motion tags remain in the new file")
     cleanup_temp(decoded_path)
+    if still_path != src_path:
+        cleanup_temp(still_path)
     if not ok or not os.path.isfile(out_path) or is_cancelled(asset_id):
         cancelled = is_cancelled(asset_id)
         # Keep the encoder's error message unless the user cancelled.
@@ -961,7 +1041,8 @@ def process_image_job(env, asset_id, params):
                new_codec=output_codec, _output_mime=output_mime,
                _upload_name=upload_name,
                log=(f"Compressed: {savings_pct:.0f}% saved ({used_q})" if is_jxl else
-                    f"Compressed: {savings_pct:.0f}% saved (target ~{float(target_savings):.0f}%, {used_q})"))
+                    f"Compressed: {savings_pct:.0f}% saved (target ~{float(target_savings):.0f}%, {used_q})")
+               + (f". {motion_note}" if motion_note else ""))
     emit_job_update(asset_id)
 
     if not replace:
@@ -1439,6 +1520,9 @@ def _disk_needs(
         # JPEG quality search briefly keeps a probe as well as the final output.
         work_size += (size + _jxl_scratch_size(params, detail, size)
                       + _png_scratch_size(params, detail, size))
+        name_ext = os.path.splitext(params.get("name") or "")[1].lstrip(".").lower()
+        if name_ext in JPEG_PHOTO_EXTS:
+            work_size += size  # a motion photo's still, cut from its clip
     backup = (scheduler.DiskNeed(backup_dir, size, work_prefix),) if replace else ()
     return (scheduler.DiskNeed(WORK_DIR, work_size, work_prefix),) + backup
 

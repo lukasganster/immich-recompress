@@ -77,8 +77,9 @@ def palette_png(path, size=32):
                            + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
 
 
-@unittest.skipUnless(TOOLS, "needs ffmpeg, libjxl-tools and exiftool")
-class ConversionJobTest(unittest.TestCase):
+class ConversionHarness(unittest.TestCase):
+    """Runs process_image_job on a local file with Immich mocked out. No tests of its own."""
+
     def setUp(self):
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
@@ -122,6 +123,9 @@ class ConversionJobTest(unittest.TestCase):
             f"-ExifIFD:ExifImageHeight={height}")
         return path
 
+
+@unittest.skipUnless(TOOLS, "needs ffmpeg, libjxl-tools and exiftool")
+class ConversionJobTest(ConversionHarness):
     def test_tiff_to_lossy_jxl_keeps_exif_and_displays_upright(self):
         job = self.convert(self.tiff())
         out = self.converted(job)
@@ -444,13 +448,13 @@ class DiskNeedTest(unittest.TestCase):
         return need.amount
 
     def test_png_path_counts_sixteen_bit_pixels(self):
-        direct = self.work_need("a.jpg", 4000, 3000)
-        self.assertEqual(direct, 3_000_000)
-        self.assertEqual(self.work_need("a.tif", 4000, 3000), direct + 12_000_000 * 6)
-        self.assertEqual(self.work_need("a.cr2", 4000, 3000), direct + 12_000_000 * 12)
+        base, still = 3_000_000, 1_000_000  # JPEG gets room for a still cut from its clip
+        self.assertEqual(self.work_need("a.jpg", 4000, 3000), base + still)
+        self.assertEqual(self.work_need("a.tif", 4000, 3000), base + 12_000_000 * 6)
+        self.assertEqual(self.work_need("a.cr2", 4000, 3000), base + 12_000_000 * 12)
         self.assertEqual(self.work_need("a.jpg", 4000, 3000, photo_max_mp=3),
-                         direct + 12_000_000 * 6)
-        self.assertEqual(self.work_need("a.jpg", 4000, 3000, photo_max_mp=20), direct)
+                         base + still + 12_000_000 * 6)
+        self.assertEqual(self.work_need("a.jpg", 4000, 3000, photo_max_mp=20), base + still)
 
     def test_unknown_dimensions_fall_back_to_the_file_size(self):
         self.assertEqual(self.work_need("a.tif"), 3_000_000 + 30_000_000)

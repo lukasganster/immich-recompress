@@ -67,6 +67,9 @@
               </div>
               <div class="text-lg font-semibold tracking-tight text-success">{{ humanMB(j.new_size) }}</div>
               <div class="spec"><span>Format</span><b>{{ formatLabel(j) }}</b></div>
+              @if (j.motion_note) {
+                <div class="spec"><span>Motion</span><b>{{ j.motion_note }}</b></div>
+              }
             </div>
           </div>
         }

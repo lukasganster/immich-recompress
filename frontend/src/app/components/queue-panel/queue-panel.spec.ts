@@ -53,6 +53,13 @@ describe('replace all media', () => {
       .toBe('/api/preview/photo');
   });
 
+  it('says what happens to the motion video of a live photo', async () => {
+    store.jobs.set({ photo: { ...reviewed('photo'), motion_note: 'Motion video kept (relinked)' } });
+    await fixture.whenStable();
+    const review = element().querySelector('[aria-label="Awaiting review"]')!;
+    expect(review.textContent).toContain('Motion video kept (relinked)');
+  });
+
   it('counts the reviews and states what they reclaim together', async () => {
     await show('one', 'two', 'three');
     expect(button('Replace all media (3)')).toBeTruthy();

@@ -1,5 +1,6 @@
 """Decode photos to a PNG intermediate and carry their metadata to the encoded file."""
 
+import json
 import math
 import os
 import re
@@ -116,6 +117,92 @@ def still_problem(src, fmt):
     else:
         animated = _is_animated(src)
     return ("Animated images are not converted", "animated") if animated else ("", "")
+
+
+# Immich extracts a motion clip from a still carrying any of these tags
+# (metadata.service.ts isMotionPhoto and applyMotionPhotos, v3.4.2).
+_MOTION_MARKERS = (b"MicroVideo", b"MotionPhoto")
+
+
+def _contains_marker(path):
+    """Scan the whole file: a missed marker would upload motion tags beside a real link."""
+    overlap, previous = max(len(m) for m in _MOTION_MARKERS) - 1, b""
+    with open(path, "rb") as fh:
+        while chunk := fh.read(1 << 20):
+            window = previous + chunk
+            if any(m in window for m in _MOTION_MARKERS):
+                return True
+            previous = window[-overlap:]
+    return False
+
+
+def motion_trailer(path, quick=True):
+    """Length of the motion clip appended to a still: 0 when it has none, None
+    when one is declared but the layout can't be confirmed.
+
+    Only a MicroVideoOffset, or a Container directory holding exactly a Primary
+    and a MotionPhoto item, is trusted, and only with an MP4 `ftyp` box right
+    after the JPEG end marker at the cut. `quick` skips exiftool when no motion
+    marker appears anywhere in the file."""
+    try:
+        size = os.path.getsize(path)
+        if quick and not _contains_marker(path):
+            return 0
+    except OSError:
+        return None
+    try:
+        result = subprocess.run(
+            ["exiftool", "-j", "-n", "-struct", "-MicroVideo", "-MicroVideoOffset", "-MotionPhoto",
+             "-ContainerDirectory", "-MotionPhotoVideo", "-EmbeddedVideoType", path],
+            capture_output=True, text=True, timeout=60, check=False)
+        tags = json.loads(result.stdout)[0] if result.returncode == 0 else None
+    except (OSError, subprocess.SubprocessError, ValueError, IndexError):
+        tags = None
+    if not isinstance(tags, dict):
+        return None
+    if not (tags.get("MicroVideo") or tags.get("MotionPhoto") or tags.get("MotionPhotoVideo")
+            or tags.get("EmbeddedVideoType") == "MotionPhoto_Data"):
+        return 0
+    length = None
+    if tags.get("MicroVideo"):
+        length = tags.get("MicroVideoOffset")
+    elif tags.get("MotionPhoto") and isinstance(tags.get("ContainerDirectory"), list):
+        items = [(entry or {}).get("Item") or {} for entry in tags["ContainerDirectory"]]
+        if [item.get("Semantic") for item in items] == ["Primary", "MotionPhoto"] \
+                and not items[1].get("Padding"):
+            length = items[1].get("Length")
+    if isinstance(length, bool) or not isinstance(length, int) or not 2 < length < size - 2:
+        return None
+    try:
+        with open(path, "rb") as fh:
+            fh.seek(size - length - 2)
+            cut = fh.read(10)
+    except OSError:
+        return None
+    return length if cut[:2] == b"\xff\xd9" and cut[6:10] == b"ftyp" else None
+
+
+def strip_motion(src, dst, length, asset_id):
+    """Write src without its last `length` bytes and without the motion tags,
+    so Immich won't look for a clip that is gone. Returns (ok, error)."""
+    try:
+        with open(src, "rb") as fh, open(dst, "wb") as out:
+            remaining = os.path.getsize(src) - length
+            while remaining > 0:
+                chunk = fh.read(min(remaining, 1 << 20))
+                if not chunk:
+                    break
+                out.write(chunk)
+                remaining -= len(chunk)
+    except OSError as exc:
+        return False, str(exc)
+    rc, output = _run(["exiftool", "-overwrite_original", "-XMP-GCamera:MicroVideo*=",
+                       "-XMP-GCamera:MotionPhoto*=", "-XMP-GContainer:all=", dst], asset_id)
+    if rc != 0:
+        return False, _last_line(output, "exiftool")
+    if motion_trailer(dst, quick=False) != 0:
+        return False, "The motion tags could not be removed"
+    return True, ""
 
 
 def has_transparency(path, asset_id):

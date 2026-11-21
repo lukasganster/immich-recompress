@@ -68,6 +68,9 @@
                   ? 'Lossy JPEG XL · distance ' + j.photo_jxl_distance
                   : losslessLabel(j))
                 : 'Target savings ' + (j.photo_target_savings ?? '—') + '%' }}</dd>
+              @if (j.motion_note) {
+                <dt class="text-muted">Motion</dt><dd class="m-0">{{ j.motion_note }}</dd>
+              }
             } @else {
               <dt class="text-muted">Encoder</dt><dd class="m-0">{{ encoderDetail(j) }}</dd>
             }

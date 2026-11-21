@@ -145,6 +145,17 @@ describe('Photo output settings', () => {
     expect(store.settings().photo_format).toBe('jxl');
   });
 
+  it('says the motion setting also decides what replacing a Live Photo still does', () => {
+    TestBed.configureTestingModule({ imports: [SettingsPanelComponent] });
+    const fixture = TestBed.createComponent(SettingsPanelComponent);
+    fixture.componentInstance.show();
+    fixture.detectChanges();
+    const help = (fixture.nativeElement as HTMLElement).querySelector('#setMotion ~ small')!;
+    expect(help.textContent).toContain('Photos tab');
+    expect(help.textContent).toContain('trashes the motion video');
+    expect(help.textContent).not.toContain('never modified');
+  });
+
   it('starts every section closed and states its value in the summary line', () => {
     TestBed.configureTestingModule({ imports: [SettingsPanelComponent] });
     const fixture = TestBed.createComponent(SettingsPanelComponent);

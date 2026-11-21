@@ -215,7 +215,10 @@
                 <option value="recompress">Recompress (keep it live, smaller, uses the Video settings)</option>
                 <option value="keep">Keep (analyze only, change nothing)</option>
               </select>
-              <small>Applies to the "Live Photos" media type. The still photo is never modified; only the embedded motion video is acted on (backed up locally first).</small>
+              <small>On the "Live Photos" media type only the motion video is acted on (backed up
+                locally first) and the still is left alone. When the Photos tab replaces a Live
+                Photo's still, Remove also trashes the motion video, while Recompress and Keep
+                link it to the new photo so it stays live.</small>
             </div>
           </div>
         </details>
