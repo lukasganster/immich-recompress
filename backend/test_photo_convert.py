@@ -459,6 +459,13 @@ class DiskNeedTest(unittest.TestCase):
     def test_unknown_dimensions_fall_back_to_the_file_size(self):
         self.assertEqual(self.work_need("a.tif"), 3_000_000 + 30_000_000)
 
+    def test_recompressed_motion_video_is_counted(self):
+        with patch("backend.photo_convert.shutil.which", return_value="/usr/bin/tool"):
+            work, backup = jobs._disk_needs(ASSET, {"media": "image", "name": "a.tif"}, {},
+                                            1_000_000, "/b", motion_size=5_000_000)
+        self.assertEqual(work.amount, 3_000_000 + 30_000_000 + 10_000_000)
+        self.assertEqual(backup.amount, 6_000_000)
+
     def test_jxl_preview_counts_sixteen_bit_rgba(self):
         self.assertEqual(self.work_need("a.tif", 4000, 3000, photo_format="jxl"),
                          3_000_000 + 12_000_000 * 8 + 1024**2 + 12_000_000 * 6)

@@ -1014,13 +1014,16 @@ def api_discard(asset_id):
             return jsonify({"ok": False, "error": "Nothing to discard"}), 409
         out_path = job.get("_out_path")
         backup_path = job.get("_backup_path")
+        motion_files = (job.get("_motion_out_path"), job.get("_motion_backup_path"))
         job["status"] = "discarded"
         job["log"] = "Discarded – original unchanged"
         job["_out_path"] = None
         job["_backup_path"] = None
+        job["_motion_out_path"] = job["_motion_backup_path"] = None
     cleanup_encoded_file(out_path)
     if backup_path:
         cleanup_temp(backup_path)
+    cleanup_temp(*motion_files)
     scheduler.release_assets(asset_id)
     persist_if_terminal(asset_id)
     emit_job_update(asset_id)

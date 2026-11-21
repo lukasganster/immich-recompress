@@ -250,7 +250,8 @@ class MotionReplaceTest(unittest.TestCase):
         ok, _ = self.replace("keep")
         self.assertFalse(ok)
         self.assertEqual(_jobs["old"]["status"], "error")
-        self.assertNotIn("trash_asset", [c[0] for c in self.calls])
+        # Only the new upload goes to the trash; the old still stays.
+        self.assertEqual([c[1] for c in self.calls if c[0] == "trash_asset"], ["new"])
 
     def test_unreadable_link_stops_before_upload(self):
         self.detail = {}

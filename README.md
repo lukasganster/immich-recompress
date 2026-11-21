@@ -40,9 +40,11 @@ Find the large videos and photos in your [Immich](https://immich.app/) library,
   **Min. Savings** setting. At 0, any smaller result counts; a result that
   isn't smaller is always skipped.
 - Replacing a Live Photo's still (from the Photos tab) follows the **Motion
-  video** setting: Remove trashes the motion video with the old still, while
-  Recompress and Keep link the existing motion video to the new photo, so it
-  stays a Live Photo. A Google motion photo (`MVIMG`) has its clip cut off
+  video** setting: Remove trashes the motion video with the old still, and Keep
+  links the existing motion video to the new photo, so it stays a Live Photo.
+  Recompress also re-encodes the motion video with the Video settings. The
+  still and the video each have to pass Min. Savings on their own: only the
+  parts that pass are replaced, and the review card shows both. A Google motion photo (`MVIMG`) has its clip cut off
   before encoding, since Immich already keeps the clip as the linked video; the
   local backup keeps the full file. A clip Immich hasn't extracted is only
   dropped with Remove, and a layout that can't be confirmed is skipped.

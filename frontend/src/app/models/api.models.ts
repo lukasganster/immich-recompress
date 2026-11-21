@@ -127,6 +127,11 @@ export interface JobPublic {
   pixel_path?: boolean | null;
   /** What replacing a still does to its motion video, when it has one. */
   motion_note?: string | null;
+  /** The still didn't save enough; only its recompressed motion video is replaced. */
+  still_kept?: boolean;
+  /** Sizes of the recompressed motion video, when it will be replaced too. */
+  video_old_size?: number | null;
+  video_new_size?: number | null;
   compress_raw: boolean;
   preset: string;
   resolution: string;

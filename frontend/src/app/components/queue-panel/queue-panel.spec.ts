@@ -60,6 +60,22 @@ describe('replace all media', () => {
     expect(review.textContent).toContain('Motion video kept (relinked)');
   });
 
+  it('shows the still and its recompressed video as two parts', async () => {
+    const mb = 1024 * 1024;
+    store.jobs.set({
+      both: { ...reviewed('both'), old_size: 10 * mb, new_size: 6 * mb,
+              video_old_size: 8 * mb, video_new_size: 3 * mb },
+      video: { ...reviewed('video'), old_size: 10 * mb, new_size: 9.8 * mb, still_kept: true,
+               video_old_size: 8 * mb, video_new_size: 3 * mb },
+    });
+    await fixture.whenStable();
+    const text = element().querySelector('[aria-label="Awaiting review"]')!.textContent!;
+    expect(text).toContain('8.0 MB → 3.0 MB');
+    expect(text).toContain('Kept, not smaller');
+    expect(fixture.componentInstance.savedBytes(store.jobs()['both'])).toBe(9 * mb);
+    expect(fixture.componentInstance.savedBytes(store.jobs()['video'])).toBe(5 * mb);
+  });
+
   it('counts the reviews and states what they reclaim together', async () => {
     await show('one', 'two', 'three');
     expect(button('Replace all media (3)')).toBeTruthy();

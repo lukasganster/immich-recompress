@@ -81,7 +81,7 @@ For RAW on Linux we picked `dcraw_emu` from Debian's `libraw-bin`. `sips` stays 
 
 Changed while building, after a Google motion photo (`MVIMG_*.jpg`, a JPEG with an MP4 appended) failed to convert with `Tail data too large`. Testing also showed an older bug: `do_replace` uploads a new asset and runs copyAsset, which doesn't carry `livePhotoVideoId`, so replacing any linked still turned it into a plain photo.
 
-- A Photos tab job on a still with `livePhotoVideoId` follows the `motion_action` setting. Remove: the new photo isn't linked, and the motion video is trashed after the old still. Recompress or Keep: the new photo is linked to the existing motion video before the old still is trashed. Re-encoding the video stays the Live Photos tab's job.
+- A Photos tab job on a still with `livePhotoVideoId` follows the `motion_action` setting. Remove: the new photo isn't linked, and the motion video is trashed after the old still. Recompress or Keep: the new photo is linked to the existing motion video before the old still is trashed. (Recompress later also re-encodes the video; see below.)
 - The old still's link is never cleared. Immich v3.4.2 refuses to unlink a clip it extracted from a motion photo (`onBeforeUnlink`, "Cannot unlink Android motion photos"), and unlinking any other clip puts it back on the timeline. Two stills may share one clip, and emptying the trash only deletes a clip no other asset links.
 - If linking fails, the job errors and the old still is not trashed. The link is read again at replace time; if that read fails, nothing is uploaded.
 - Before encoding, an embedded clip is cut off into a separate work file, so the backup keeps the full original. Only two layouts are trusted, the same ones Immich reads: `MicroVideoOffset`, or a Container directory holding exactly a Primary and a MotionPhoto item with no padding. Either way the cut must fall right after the JPEG end marker and right before an MP4 `ftyp` box. Anything else (a Samsung trailer) is skipped as "unknown motion layout"; a gain map item makes it an Ultra HDR photo, skipped below.
@@ -98,6 +98,20 @@ Immich v3.4.2 source behind these choices:
 - Any MicroVideo or MotionPhoto tag makes metadata extraction pull a clip out of the file and replace the linked one: [metadata.service.ts](https://github.com/immich-app/immich/blob/v3.4.2/server/src/services/metadata.service.ts#L669-L678), [L790-806](https://github.com/immich-app/immich/blob/v3.4.2/server/src/services/metadata.service.ts#L790-L806).
 
 Not verified on a live server: Apple Live Photos (a JPEG still with a separate MOV) under Remove. `linkLivePhotos` matches on the ContentIdentifier the new still inherits ([L175-204](https://github.com/immich-app/immich/blob/v3.4.2/server/src/services/metadata.service.ts#L175-L204)), and its query doesn't appear to exclude trashed videos, so Immich may link the new still to the trashed clip.
+
+### Recompressing a Live Photo's video from the Photos tab
+
+Changed while building: with motion setting Recompress, a Photos tab job used to convert the still and relink the existing clip untouched, though the setting's label promises a smaller video.
+
+- The photo job now also downloads the linked video and encodes it with the Video settings, with the same code the Live Photos tab uses. Admission claims the video and reserves disk for its download, encode and backup. Cancelling during either encode replaces nothing.
+- Each part is checked against Min. Savings on its own, so a video that grows never rides along with a well-compressed still:
+  - both pass: upload the new still and the new clip (hidden), link the new still to the new clip, then trash the old still and the old clip;
+  - only the still passes: link the new still to the existing clip, as before;
+  - only the video passes: repoint the old still to the new clip and trash the old one, as the Live Photos tab does;
+  - neither passes: skipped, with both reasons in the log.
+- Repointing the old still is allowed by Immich v3.4.2: `PUT /api/assets/:id` with a new `livePhotoVideoId` runs only the link hook; the unlink guard ("Cannot unlink Android motion photos") runs only when the link is set to null ([asset.service.ts L93-L101](https://github.com/immich-app/immich/blob/v3.4.2/server/src/services/asset.service.ts#L93-L101), [asset.util.ts L145-L179](https://github.com/immich-app/immich/blob/v3.4.2/server/src/utils/asset.util.ts#L145-L179)).
+- Nothing is trashed before every upload and link has succeeded. If the link fails, the new uploads go to the trash and the old still and clip stay. The confirm step replaces exactly the parts the review card showed, and stops if the still's link changed since the review.
+- The review card shows the still and the video, or "Kept, not smaller" for the part that stays, and its saved bytes count only the parts that will be replaced.
 
 ### Ultra HDR photos
 

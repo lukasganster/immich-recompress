@@ -67,7 +67,13 @@
               </div>
               <div class="text-lg font-semibold tracking-tight text-success">{{ humanMB(j.new_size) }}</div>
               <div class="spec"><span>Format</span><b>{{ formatLabel(j) }}</b></div>
-              @if (j.motion_note) {
+              @if (j.still_kept) {
+                <div class="spec"><span>Photo</span><b>Kept, not smaller</b></div>
+              }
+              @if (j.video_new_size != null) {
+                <div class="spec"><span>Motion video</span>
+                  <b>{{ humanMB(j.video_old_size) }} → {{ humanMB(j.video_new_size) }}</b></div>
+              } @else if (j.motion_note) {
                 <div class="spec"><span>Motion</span><b>{{ j.motion_note }}</b></div>
               }
             </div>

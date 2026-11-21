@@ -189,8 +189,12 @@ export class QueuePanelComponent {
     return Math.round((1 - j.new_size / j.old_size) * 100);
   }
 
+  /** Bytes reclaimed by the parts that will actually be replaced. */
   savedBytes(j: JobPublic): number {
-    return Math.max(0, (j.old_size ?? 0) - (j.new_size ?? 0));
+    const still = j.still_kept ? 0 : Math.max(0, (j.old_size ?? 0) - (j.new_size ?? 0));
+    const video = j.video_new_size != null
+      ? Math.max(0, (j.video_old_size ?? 0) - j.video_new_size) : 0;
+    return still + video;
   }
 
   /** A Live Photo whose motion clip is stripped has no recompressed file to
