@@ -392,7 +392,9 @@ export class MediaGridComponent implements OnInit, OnDestroy {
   }
 
   /** Fetch the asset list. Pass `showOverlay` for user-initiated heavy loads
-   *  (Select Media apply) so a "Loading …" dialog covers the pending request. */
+   *  (Select Media apply, Rescan, Try again) so a "Loading …" dialog covers the
+   *  pending request. Those are also the only loads that rescan Immich; every
+   *  other change reuses the server's cached scan. */
   load(showOverlay = false): void {
     const s = this.store;
     if (showOverlay) s.loading.set(true);
@@ -412,11 +414,13 @@ export class MediaGridComponent implements OnInit, OnDestroy {
         min_mp: s.photoMinMp(), max_mp: s.photoMaxMp(),
         jxl_lossless: s.jxlLosslessOnly(), formats: s.formatFilter(),
       } : {}),
+      refresh: showOverlay,
     }).subscribe({
       next: data => {
         s.videos.set(data.assets ?? []);
         s.formats.set(data.formats ?? {});
         s.jxlUnchecked.set(data.jxl_unchecked ?? 0);
+        s.scannedAt.set(data.scanned_at ?? null);
         s.total.set(data.total ?? 0);
         s.totalSize.set(data.total_size ?? 0);
         s.totalPotential.set(data.total_potential ?? 0);

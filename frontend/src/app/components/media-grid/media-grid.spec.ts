@@ -55,4 +55,16 @@ describe('media grid format filter', () => {
     }
     request.flush({ assets: [], total: 0, formats: { HEIC: 1 } });
   });
+
+  it('rescans only when asked and keeps the scan time', () => {
+    fixture.componentInstance.load(true);
+    const rescan = http.expectOne(r => r.url === '/api/assets');
+    expect(rescan.request.params.get('refresh')).toBe('1');
+    rescan.flush({ assets: [], total: 0, scanned_at: '2026-11-21T10:00:00Z' });
+    expect(store.scannedAt()).toBe('2026-11-21T10:00:00Z');
+    fixture.componentInstance.load();
+    const reuse = http.expectOne(r => r.url === '/api/assets');
+    expect(reuse.request.params.has('refresh')).toBe(false);
+    reuse.flush({ assets: [], total: 0, scanned_at: '2026-11-21T10:00:00Z' });
+  });
 });

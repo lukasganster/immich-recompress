@@ -172,6 +172,8 @@ export interface VideosResponse {
   formats?: Record<string, number>;
   /** With the lossless filter on: JPEG XL files that couldn't be read or classified this time. */
   jxl_unchecked?: number;
+  /** When the scan behind this list finished. Filters reuse it until a rescan. */
+  scanned_at?: string;
   error?: string;
 }
 

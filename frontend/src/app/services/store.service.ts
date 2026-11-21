@@ -84,6 +84,7 @@ export class StoreService {
   readonly formatFilter = signal<string[]>([]);
   readonly formats = signal<Record<string, number>>({});
   readonly jxlUnchecked = signal(0);
+  readonly scannedAt = signal<string | null>(null);
   /** Dates entered in this IANA timezone describe whole calendar days. */
   readonly metadata = signal<MetadataFilter>(emptyMetadataFilter());
   readonly metadataDescription = computed(() => {

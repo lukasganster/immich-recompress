@@ -15,6 +15,7 @@ import { HeaderComponent } from './components/header/header';
 import { DashboardComponent } from './components/dashboard/dashboard';
 import { SettingsPanelComponent } from './components/settings-panel/settings-panel';
 import { FormatFilterComponent } from './components/format-filter/format-filter';
+import { RescanComponent } from './components/rescan/rescan';
 import { MediaGridComponent } from './components/media-grid/media-grid';
 import { BulkBarComponent } from './components/bulk-bar/bulk-bar';
 import { QueuePanelComponent } from './components/queue-panel/queue-panel';
@@ -30,7 +31,7 @@ import { formatDate } from './utils/format-date';
   imports: [
     FormsModule,
     HeaderComponent, DashboardComponent, SettingsPanelComponent,
-    MediaGridComponent, FormatFilterComponent, BulkBarComponent, QueuePanelComponent,
+    MediaGridComponent, FormatFilterComponent, RescanComponent, BulkBarComponent, QueuePanelComponent,
     DetailDrawerComponent, ReviewModalComponent, BrowseDialogComponent,
     IconComponent,
   ],

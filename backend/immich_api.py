@@ -649,6 +649,14 @@ def collect_motion_photos(env, key_indices, min_bytes, user_filter, search_filte
     return out
 
 
+def _with_live_status(summary):
+    """A cached scan can outlive its job states, so read the current one."""
+    with _state_lock:
+        job = _jobs.get(summary["id"])
+        status = job["status"] if job else "idle"
+    return {**summary, "status": status} if status != summary.get("status") else summary
+
+
 def paginate_summaries(summaries, sort, order, page, per_page, formats=None, **extra):
     """Sort, total and paginate a list of asset summaries into the list response."""
     reverse = order == "desc"
@@ -677,7 +685,7 @@ def paginate_summaries(summaries, sort, order, page, per_page, formats=None, **e
         "total_potential": sum(v["potential"] for v in summaries),
         "page": page,
         "per_page": per_page,
-        "assets": summaries[start:end],
+        "assets": [_with_live_status(v) for v in summaries[start:end]],
         "formats": formats or {},
         **extra,
     })

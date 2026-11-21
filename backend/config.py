@@ -57,7 +57,6 @@ IMMICH_PER_PAGE = 1000      # page size requested from Immich
 FRONTEND_PER_PAGE = 100     # default page size returned to the browser
 MAX_PER_PAGE = 100000       # ceiling for the "show everything" page size
 USER_CACHE_TTL = 300        # seconds (5 minutes)
-ASSET_CACHE_TTL = 60        # reuse a completed library scan across page changes
 HTTP_TIMEOUT = 30           # seconds for normal Immich calls
 MIN_FREE_BYTES = 200 * 1024 ** 2   # safety buffer for the work dir
 TERMINAL_STATES = {"done", "downloaded", "encoded", "skipped",

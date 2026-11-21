@@ -14,6 +14,7 @@
       (input)="onSearch($any($event.target).value)" />
   </label>
   <app-format-filter class="contents" (changed)="grid().load()" />
+  <app-rescan class="contents" (rescan)="grid().load(true)" />
 
   @if (store.media() === 'video') {
     <div class="seg" role="group" aria-label="Filter by codec">

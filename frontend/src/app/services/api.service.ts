@@ -24,7 +24,7 @@ export class ApiService {
     media: MediaType; min_mb: number; codec?: string; user?: string; search?: string;
     keys?: number[]; captureDates?: CaptureDateFilter; metadata?: MetadataFilter;
     max_mb?: number | null; min_mp?: number | null; max_mp?: number | null;
-    formats?: string[]; jxl_lossless?: boolean;
+    formats?: string[]; jxl_lossless?: boolean; refresh?: boolean;
   }): Observable<VideosResponse> {
     const p: Record<string, string> = {
       page: String(params.page), per_page: String(params.per_page),
@@ -44,6 +44,7 @@ export class ApiService {
       if (params[field] != null) p[field] = String(params[field]);
     }
     if (params.jxl_lossless) p['jxl_lossless'] = '1';
+    if (params.refresh) p['refresh'] = '1';
     if (params.metadata?.albumId) p['album_id'] = params.metadata.albumId;
     for (const field of ['city', 'state', 'country'] as const) {
       if (params.metadata?.[field]) p[field] = params.metadata[field];
