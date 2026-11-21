@@ -5,6 +5,7 @@ export type JobStatus =
 
 export type MediaType = 'video' | 'image' | 'motionphoto';
 export type PhotoFormat = 'jpeg' | 'jxl';
+export type JpegChroma = 'source' | '444' | '420';
 export type SortField = 'size' | 'savings' | 'date' | 'name' | 'duration' | 'bitrate';
 export type SortOrder = 'asc' | 'desc';
 
@@ -122,6 +123,8 @@ export interface JobPublic {
   photo_target_savings: number;
   photo_format: PhotoFormat;
   photo_jxl_distance: number;
+  /** True when the photo was decoded and re-encoded from pixels, not repacked. */
+  pixel_path?: boolean | null;
   compress_raw: boolean;
   preset: string;
   resolution: string;
@@ -207,6 +210,10 @@ export interface Settings {
   photo_target_savings: number;
   photo_format: PhotoFormat;
   photo_jxl_distance: number;
+  /** Downscale photos above this many megapixels; unset, null or 0 is off. */
+  photo_max_mp?: number | null;
+  /** Unset means 'source'. */
+  photo_jpeg_chroma?: JpegChroma;
   compress_raw: boolean;
   preset: string;
   resolution: string;
@@ -239,6 +246,8 @@ export interface Capabilities {
   encoders: EncoderInfo[];
   cpu_count: number;
   jpeg_xl?: boolean;
+  /** dcraw_emu or sips is installed, so RAW photos can be decoded. */
+  raw?: boolean;
 }
 
 export interface ProcessedEntry {

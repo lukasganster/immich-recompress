@@ -276,6 +276,7 @@ def api_capabilities():
         "encoders": available_encoders(),
         "cpu_count": cpu_count(),
         "jpeg_xl": bool(shutil.which("cjxl") and shutil.which("djxl")),
+        "raw": bool(shutil.which("dcraw_emu") or shutil.which("sips")),
     })
 
 
@@ -818,6 +819,14 @@ def api_enqueue():
             or not isinstance(photo_jxl_distance, (int, float))
             or not 0 <= photo_jxl_distance <= 25):
         return jsonify({"error": "JPEG XL distance must be a number from 0 to 25"}), 400
+    photo_max_mp = body.get("photo_max_mp")
+    if photo_max_mp is not None and (isinstance(photo_max_mp, bool)
+                                     or not isinstance(photo_max_mp, (int, float))
+                                     or not 0 <= photo_max_mp < float("inf")):
+        return jsonify({"error": "Max megapixels must be a number of 0 or more"}), 400
+    photo_jpeg_chroma = body.get("photo_jpeg_chroma", "source")
+    if photo_jpeg_chroma not in ("source", "444", "420"):
+        return jsonify({"error": "JPEG chroma must be source, 444 or 420"}), 400
 
     params = {
         "media": default_media,
@@ -826,6 +835,8 @@ def api_enqueue():
         "photo_target_savings": body.get("photo_target_savings", 40),
         "photo_format": photo_format,
         "photo_jxl_distance": photo_jxl_distance,
+        "photo_max_mp": photo_max_mp or None,
+        "photo_jpeg_chroma": photo_jpeg_chroma,
         "compress_raw": bool(body.get("compress_raw", False)),
         "preset": body.get("preset", "medium"),
         "threads": _clamp_threads(body.get("threads")),

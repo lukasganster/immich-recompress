@@ -28,9 +28,10 @@ RUN pnpm run build
 # --------------------------------------------------------------------------- #
 FROM python:3.12-slim AS runtime
 
-# ffmpeg/ffprobe (JPEG recompression + codec probing), libjxl-tools (JPEG XL), and HandBrakeCLI
-# (video re-encoding, software x265 works everywhere). `sips` is macOS-only and
-# intentionally absent here — the app degrades gracefully (RAW compression off).
+# ffmpeg/ffprobe (JPEG recompression + codec probing), libjxl-tools (JPEG XL),
+# exiftool (metadata copy on photo conversion; the Brotli module reads compressed
+# JPEG XL metadata), libraw-bin (dcraw_emu decodes RAW) and HandBrakeCLI (video
+# re-encoding, software x265 works everywhere).
 #
 # Debian's handbrake-cli is built WITHOUT the GPU encoders (NVENC/QSV), so only
 # the CPU encoders are detected at runtime here — software multi-core x265/AV1 is
@@ -41,7 +42,10 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ffmpeg \
         handbrake-cli \
+        libimage-exiftool-perl \
+        libio-compress-brotli-perl \
         libjxl-tools \
+        libraw-bin \
         tzdata \
     && rm -rf /var/lib/apt/lists/*
 

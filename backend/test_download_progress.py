@@ -288,7 +288,7 @@ class JobDownloadProgressTest(unittest.TestCase):
         (self.directory / f"{asset_id}_out.mp4").write_bytes(b"encoded")
         return True
 
-    def encode_image(self, src, out, old_size, target_pct, asset_id):
+    def encode_image(self, src, out, old_size, target_pct, asset_id, pix_fmt="yuvj420p"):
         Path(out).write_bytes(b"encoded")
         return True, 80, 99
 

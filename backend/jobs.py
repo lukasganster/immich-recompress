@@ -31,10 +31,10 @@ from backend.state import (
     unregister_proc,
 )
 from backend.db import db_load_jobs, db_save_job
-from backend import scheduler, statuses
+from backend import photo_convert, scheduler, statuses
 from backend.media import (
     append_csv_log, build_cjxl_cmd, build_ffmpeg_image_cmd, build_handbrake_cmd,
-    ffprobe_info, has_free_space, image_preview_path,
+    ffprobe_info, has_free_space, image_preview_path, jpeg_pix_fmt, probe_image,
 )
 from backend.immich_api import (
     asset_codec, capture_metadata_fields, copy_asset_metadata, copy_asset_tags, download_original,
@@ -85,6 +85,9 @@ def new_job(asset_id, params):
         "photo_target_savings": params.get("photo_target_savings", 40),
         "photo_format": params.get("photo_format", "jpeg"),
         "photo_jxl_distance": params.get("photo_jxl_distance", 0),
+        "photo_max_mp": params.get("photo_max_mp"),
+        "photo_jpeg_chroma": params.get("photo_jpeg_chroma", "source"),
+        "pixel_path": None,
         "compress_raw": params.get("compress_raw", False),
         "preset": params.get("preset", "medium"),
         "threads": params.get("threads"),
@@ -626,10 +629,10 @@ def _run_killable(cmd, asset_id, timeout=300):
     return proc.returncode, out or ""
 
 
-def _encode_ffmpeg_image(src, out, level, asset_id):
+def _encode_ffmpeg_image(src, out, level, asset_id, pix_fmt="yuvj420p"):
     """Encode JPEG with ffmpeg at -q:v `level` (2..31, higher = smaller).
     Returns (ok, err_text)."""
-    rc, output = _run_killable(build_ffmpeg_image_cmd(src, out, level), asset_id)
+    rc, output = _run_killable(build_ffmpeg_image_cmd(src, out, level, pix_fmt), asset_id)
     if rc != 0 or not os.path.isfile(out) or os.path.getsize(out) == 0:
         tail = [ln for ln in output.splitlines() if ln.strip()]
         return False, (tail[-1] if tail else "ffmpeg failed")
@@ -681,7 +684,7 @@ def _search_target_level(encode, levels, probe, target_size, asset_id, label, ma
     return (best if best is not None else len(levels) - 1), ""
 
 
-def compress_image_to_target(src, out, old_size, target_pct, asset_id):
+def compress_image_to_target(src, out, old_size, target_pct, asset_id, pix_fmt="yuvj420p"):
     """Compress a JPEG so its size shrinks by roughly `target_pct` percent.
 
     Tries ffmpeg first (cross-platform); if ffmpeg can't decode the file, falls
@@ -711,7 +714,8 @@ def compress_image_to_target(src, out, old_size, target_pct, asset_id):
     attempts = []
     if have_ffmpeg:
         attempts.append(("ffmpeg", _FFMPEG_LEVELS,
-                         lambda lvl, dst: _encode_ffmpeg_image(src, dst, lvl, asset_id), True))
+                         lambda lvl, dst: _encode_ffmpeg_image(src, dst, lvl, asset_id, pix_fmt),
+                         True))
     if have_sips:
         attempts.append(("sips", _SIPS_LEVELS,
                          lambda lvl, dst: _encode_sips_image(src, dst, lvl, asset_id), False))
@@ -746,17 +750,21 @@ def compress_image_to_target(src, out, old_size, target_pct, asset_id):
     return False, None, 0.0
 
 
-def _encode_jxl_image(src, out, asset_id, threads=None, preview=True, distance=0):
-    """Encode JPEG to JPEG XL, optionally rendering the result for review."""
+def _encode_jxl_image(src, out, asset_id, threads=None, preview=True, distance=0,
+                      pixels=False):
+    """Encode JPEG, or a decoded PNG when `pixels` is set, to JPEG XL,
+    optionally rendering the result for review."""
     # cjxl ignores --lossless_jpeg for non-JPEG input and defaults to a lossy
     # pixel encode. Check the actual file before promising JPEG reconstruction.
     try:
         with open(src, "rb") as source:
-            if source.read(2) != b"\xff\xd8":
+            if not pixels and source.read(2) != b"\xff\xd8":
                 return False, "JPEG XL requires JPEG file contents"
     except OSError as exc:
         return False, str(exc)
     commands = [build_cjxl_cmd(src, out, threads, distance=distance)]
+    if pixels:
+        commands[0].append("--container=1")  # exiftool only writes into a boxed file
     if preview:
         commands.append(["djxl", out, image_preview_path(out)])
     for cmd in commands:
@@ -775,20 +783,18 @@ def _image_skip_reason(src_fmt: str, params: dict) -> tuple[str, str]:
         return "", ""
     fmt = src_fmt.lower()
     photo_format = params.get("photo_format", "jpeg")
-    is_raw = fmt in RAW_PHOTO_EXTS
     if photo_format not in ("jpeg", "jxl"):
         return "Unsupported photo output format", "bad format"
-    if photo_format == "jxl":
-        if fmt not in JPEG_PHOTO_EXTS:
-            return f"{src_fmt}: JPEG XL requires a JPEG original", "not JPEG"
-        if not (shutil.which("cjxl") and shutil.which("djxl")):
-            return "JPEG XL requires cjxl and djxl (install libjxl-tools)", "no cjxl"
-    if is_raw and not params.get("compress_raw", False):
+    if photo_format == "jxl" and not (shutil.which("cjxl") and shutil.which("djxl")):
+        return "JPEG XL requires cjxl and djxl (install libjxl-tools)", "no cjxl"
+    if fmt in RAW_PHOTO_EXTS and not params.get("compress_raw", False):
         return f"{src_fmt}: RAW is not compressed (enable it in settings)", "RAW off"
-    if is_raw and not shutil.which("sips"):
-        return f"{src_fmt}: RAW compression requires 'sips' (macOS only)", "no sips"
-    if not is_raw and fmt not in JPEG_PHOTO_EXTS:
-        return f"{src_fmt}: only JPEG is compressed (no format conversion)", "not JPEG"
+    if photo_convert.needs_pixel_path(fmt, None, params.get("photo_max_mp")):
+        if not photo_convert.decoder_for(fmt):
+            return f"{src_fmt}: no decoder for this format", "no decoder"
+        if not shutil.which("exiftool"):
+            return ("Converting photos requires exiftool (install libimage-exiftool-perl)",
+                    "no exiftool")
     return "", ""
 
 
@@ -816,9 +822,10 @@ def process_image_job(env, asset_id, params):
     out_path = os.path.join(WORK_DIR, f"{asset_id}_out{output_ext}")
 
     fmt = src_fmt.lower()
-    is_raw = fmt in RAW_PHOTO_EXTS
+    max_mp = params.get("photo_max_mp") or None
     # Format conversions need the output extension in the uploaded filename.
-    upload_name = (os.path.splitext(name)[0] + output_ext) if is_raw or is_jxl else name
+    upload_name = (os.path.splitext(name)[0] + output_ext
+                   if is_jxl or fmt not in JPEG_PHOTO_EXTS else name)
 
     skip_msg, skip_reason = _image_skip_reason(src_fmt, params)
     if skip_msg:
@@ -873,23 +880,53 @@ def process_image_job(env, asset_id, params):
                         old_size, None, None, "downloaded"])
         return
 
+    pixel_path = photo_convert.needs_pixel_path(fmt, None, max_mp)
+    if pixel_path and fmt in JPEG_PHOTO_EXTS:
+        width, height, _ = probe_image(src_path)
+        pixel_path = photo_convert.needs_pixel_path(
+            fmt, width * height / 1e6 if width and height else None, max_mp)
+    update_job(asset_id, pixel_path=pixel_path)
+    if pixel_path:
+        skip_msg, skip_reason = photo_convert.still_problem(src_path, fmt)
+        if skip_msg:
+            update_job(asset_id, status="skipped", log=skip_msg, skip_reason=skip_reason)
+            emit_job_update(asset_id)
+            append_csv_log([utcnow_iso(), asset_id, name, src_fmt, old_size, None, None, "skipped"])
+            broadcast_queue_update()
+            cleanup_temp(src_path)
+            return
     jxl_setting = (f"lossy, distance {jxl_distance}" if jxl_distance > 0
-                   else "lossless JPEG reconstruction")
+                   else "lossless" if pixel_path else "lossless JPEG reconstruction")
     update_job(asset_id, status="encoding", progress=0.0,
                log=(f"Compressing photo to JPEG XL ({jxl_setting})" if is_jxl else
                     f"Compressing photo (target ~{float(target_savings):.0f}%)"))
     emit_job_update(asset_id)
 
-    if is_jxl:
+    ok, used_q, encode_src = True, jxl_setting, src_path
+    decoded_path = os.path.join(WORK_DIR, f"{asset_id}_decoded.png")
+    if pixel_path:
+        encode_src = decoded_path
+        ok, err = photo_convert.decode_to_png(src_path, fmt, decoded_path, max_mp, asset_id)
+        if ok and not is_jxl and photo_convert.has_transparency(decoded_path, asset_id):
+            ok, err = False, "JPEG cannot keep the transparency of this photo"
+        if not ok:
+            update_job(asset_id, log=f"Decode: {err}")
+    if ok and is_jxl:
         ok, err = _encode_jxl_image(
-            src_path, out_path, asset_id, params.get("threads"),
-            preview=confirm or not replace, distance=jxl_distance)
-        used_q = jxl_setting
+            encode_src, out_path, asset_id, params.get("threads"),
+            preview=confirm or not replace, distance=jxl_distance, pixels=pixel_path)
         if not ok:
             update_job(asset_id, log=f"JPEG XL: {err}")
-    else:
+    elif ok:
+        # Probe the original: the decoded PNG is RGB and would always read as 4:4:4.
+        pix_fmt = jpeg_pix_fmt(src_path, params.get("photo_jpeg_chroma", "source"))
         ok, used_q, achieved = compress_image_to_target(
-            src_path, out_path, old_size, target_savings, asset_id)
+            encode_src, out_path, old_size, target_savings, asset_id, pix_fmt)
+    if ok and pixel_path:
+        ok, err = photo_convert.copy_metadata(src_path, out_path, asset_id)
+        if not ok:
+            update_job(asset_id, log=f"Metadata: {err}")
+    cleanup_temp(decoded_path)
     if not ok or not os.path.isfile(out_path) or is_cancelled(asset_id):
         cancelled = is_cancelled(asset_id)
         # Keep the encoder's error message unless the user cancelled.
@@ -1348,17 +1385,33 @@ def _asset_size(detail: dict) -> int:
     )
 
 
+def _pixels(detail: dict) -> int:
+    exif = detail.get("exifInfo") or {}
+    return _non_negative_int(
+        exif.get("exifImageWidth") or exif.get("imageWidth")
+    ) * _non_negative_int(exif.get("exifImageHeight") or exif.get("imageHeight"))
+
+
 def _jxl_scratch_size(params: dict, detail: dict, size: int) -> int:
     """JPEG XL output kept for review or download is decoded for a preview."""
     if params.get("photo_format") != "jxl" or not (
         params.get("confirm", True) or not params.get("replace", True)
     ):
         return 0
-    exif = detail.get("exifInfo") or {}
-    pixels = _non_negative_int(
-        exif.get("exifImageWidth") or exif.get("imageWidth")
-    ) * _non_negative_int(exif.get("exifImageHeight") or exif.get("imageHeight"))
-    return max(size, pixels * 4 + 1024**2)
+    return max(size, _pixels(detail) * 8 + 1024**2)  # up to 16-bit RGBA
+
+
+def _png_scratch_size(params: dict, detail: dict, size: int) -> int:
+    """The decoded PNG of a conversion, at most 16-bit RGB. RAW and JPEG XL
+    decoders write their own copy first."""
+    fmt = os.path.splitext(params.get("name") or "")[1].lstrip(".")
+    pixels = _pixels(detail)
+    if not photo_convert.needs_pixel_path(
+            fmt, pixels / 1e6 if pixels else None, params.get("photo_max_mp")):
+        return 0
+    # shortcut: without dimensions, assume 30x the file; a flat PNG can decode larger.
+    decoded = pixels * 6 if pixels else size * 30
+    return decoded * (1 if photo_convert.decoder_for(fmt) == "ffmpeg" else 2)
 
 
 def _disk_needs(
@@ -1384,7 +1437,8 @@ def _disk_needs(
     work_size = size * 2
     if params.get("media") == "image":
         # JPEG quality search briefly keeps a probe as well as the final output.
-        work_size += size + _jxl_scratch_size(params, detail, size)
+        work_size += (size + _jxl_scratch_size(params, detail, size)
+                      + _png_scratch_size(params, detail, size))
     backup = (scheduler.DiskNeed(backup_dir, size, work_prefix),) if replace else ()
     return (scheduler.DiskNeed(WORK_DIR, work_size, work_prefix),) + backup
 

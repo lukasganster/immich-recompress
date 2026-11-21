@@ -12,7 +12,7 @@ describe('Photo output settings', () => {
     }
   });
 
-  it('switches to lossless JPEG XL without showing JPEG quality or RAW controls', async () => {
+  it('switches to lossless JPEG XL without showing JPEG quality controls', async () => {
     TestBed.configureTestingModule({ imports: [SettingsPanelComponent] });
     const fixture = TestBed.createComponent(SettingsPanelComponent);
     const store = TestBed.inject(StoreService);
@@ -31,7 +31,8 @@ describe('Photo output settings', () => {
     fixture.detectChanges();
 
     expect(store.settings().photo_format).toBe('jxl');
-    expect(element.querySelector('#compressRaw')).toBeNull();
+    expect(element.querySelector('#compressRaw')).not.toBeNull();
+    expect(element.querySelector('#setJpegChroma')).toBeNull();
     expect(element.textContent).not.toContain('Target Savings:');
     expect(element.textContent).toContain('Savings vary by photo');
     expect(fixture.componentInstance.photoSummary).toBe('JPEG XL · lossless');
@@ -54,7 +55,6 @@ describe('Photo output settings', () => {
     fixture.detectChanges();
     expect(store.settings().photo_jxl_distance).toBe(1.5);
     expect(fixture.componentInstance.photoSummary).toBe('JPEG XL · lossy · distance 1.5');
-    expect(element.querySelector('#compressRaw')).toBeNull();
     expect(element.querySelector('#setTargetSavings')).toBeNull();
     expect(element.textContent).toContain('Positive values use lossy compression');
 
@@ -64,6 +64,38 @@ describe('Photo output settings', () => {
     fixture.detectChanges();
     expect(store.settings().photo_jxl_distance).toBe(0);
     expect(fixture.componentInstance.photoSummary).toBe('JPEG XL · lossless');
+  });
+
+  it('caps megapixels and picks the JPEG chroma', async () => {
+    TestBed.configureTestingModule({ imports: [SettingsPanelComponent] });
+    const fixture = TestBed.createComponent(SettingsPanelComponent);
+    const store = TestBed.inject(StoreService);
+    fixture.componentInstance.open.set(true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const element: HTMLElement = fixture.nativeElement;
+    const set = async (control: HTMLInputElement | HTMLSelectElement, value: string) => {
+      control.value = value;
+      control.dispatchEvent(new Event(control instanceof HTMLSelectElement ? 'change' : 'input'));
+      await fixture.whenStable();
+      fixture.detectChanges();
+    };
+    const maxMp = element.querySelector<HTMLInputElement>('#setMaxMp')!;
+    const chroma = element.querySelector<HTMLSelectElement>('#setJpegChroma')!;
+    expect(chroma.value).toBe('source');
+    expect(Array.from(chroma.options, o => o.text))
+      .toEqual(['Match source', '4:4:4 (full colour)', '4:2:0 (smaller)']);
+
+    await set(maxMp, '12');
+    await set(chroma, '444');
+    expect(store.settings().photo_max_mp).toBe(12);
+    expect(store.settings().photo_jpeg_chroma).toBe('444');
+    expect(fixture.componentInstance.photoSummary).toBe('JPEG · −40% target · 4:4:4 · max 12 MP');
+
+    await set(maxMp, '0');
+    await set(chroma, 'source');
+    expect(store.settings().photo_max_mp).toBeNull();
+    expect(fixture.componentInstance.photoSummary).toBe('JPEG · −40% target');
   });
 
   it('restores the stored distance after clearing or entering out-of-range values', async () => {
@@ -147,6 +179,24 @@ describe('Photo output settings', () => {
     await fixture.whenStable();
     expect(photo.open).toBe(true);
     expect(photo.querySelector('.disclosure-value')!.classList.contains('warn')).toBe(false);
+  });
+});
+
+describe('RAW decoder hint', () => {
+  beforeEach(() => TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] }));
+
+  it('names the missing tools only when RAW decoding is unavailable', async () => {
+    const fixture = TestBed.createComponent(SettingsPanelComponent);
+    const store = TestBed.inject(StoreService);
+    fixture.componentInstance.open.set(true);
+    for (const raw of [true, false]) {
+      store.applyCapabilities({ encoders: [], cpu_count: 2, jpeg_xl: true, raw });
+      fixture.detectChanges();
+      await fixture.whenStable();
+      const text = (fixture.nativeElement as HTMLElement).textContent!;
+      expect(text).toContain('Converts RAW to the output format and replaces the original.');
+      expect(text.includes("RAW decoding isn't available here.")).toBe(!raw);
+    }
   });
 });
 

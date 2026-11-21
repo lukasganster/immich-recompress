@@ -121,11 +121,10 @@
               </select>
               <small id="photoFormatHelp">
                 @if (s.photo_format === 'jxl') {
-                  Converts JPEG originals to JPEG XL at the selected distance.
+                  Converts photos to JPEG XL at the selected distance.
                   Savings vary by photo; files below the minimum savings are skipped.
-                  Other formats, including RAW and existing JPEG XL files, are skipped.
                 } @else {
-                  Recompresses JPEG originals to a target size.
+                  Recompresses JPEG originals to a target size and converts other formats to JPEG.
                 }
               </small>
               @if (!store.jpegXlAvailable()) {
@@ -152,9 +151,19 @@
               </div>
               <small id="jxlDistanceHelp">0 preserves the original JPEG without additional quality loss
                 and allows exact JPEG reconstruction. Positive values use lossy compression;
-                1 aims to be visually lossless. Higher values trade quality for smaller files.</small>
+                1 aims to be visually lossless. Higher values trade quality for smaller files.
+                Other formats at 0 are stored losslessly.</small>
             </div>
             }
+
+            <div class="field full">
+              <label for="setMaxMp">Max megapixels</label>
+              <input id="setMaxMp" type="number" min="0" step="0.1" class="num-input"
+                [ngModel]="s.photo_max_mp ?? null" (ngModelChange)="onMaxMp($event)"
+                aria-describedby="maxMpHelp" />
+              <small id="maxMpHelp">Downscales larger photos to this size and keeps the aspect ratio.
+                Blank or 0 keeps every photo at full size.</small>
+            </div>
 
             @if (s.photo_format === 'jpeg') {
             <div class="field full">
@@ -169,14 +178,30 @@
             </div>
 
             <div class="field full">
+              <label for="setJpegChroma">JPEG chroma</label>
+              <select id="setJpegChroma" [ngModel]="s.photo_jpeg_chroma ?? 'source'"
+                (ngModelChange)="update({photo_jpeg_chroma: $event})" aria-describedby="jpegChromaHelp">
+                <option value="source">Match source</option>
+                <option value="444">4:4:4 (full colour)</option>
+                <option value="420">4:2:0 (smaller)</option>
+              </select>
+              <small id="jpegChromaHelp">Match source keeps a JPEG's colour sampling.
+                Other formats get 4:4:4, so no colour detail is lost.</small>
+            </div>
+            }
+
+            <div class="field full">
               <div class="toggle">
-                <label for="compressRaw">Convert RAW (DNG/CR2/NEF/…) to JPEG</label>
+                <label for="compressRaw">Convert RAW (DNG/CR2/NEF/…)</label>
                 <input type="checkbox" role="switch" class="switch" id="compressRaw"
                   [ngModel]="s.compress_raw" (ngModelChange)="update({compress_raw: $event})" />
               </div>
-              <small class="danger">Converts RAW → JPEG and replaces the original. Requires sips (macOS).</small>
+              <small class="danger">Converts RAW to the output format and replaces the original.
+                @if (!store.rawAvailable()) {
+                  RAW decoding isn't available here. Install libraw-bin (dcraw_emu), or run on macOS (sips).
+                }
+              </small>
             </div>
-            }
           </div>
         </details>
 

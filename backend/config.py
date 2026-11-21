@@ -64,7 +64,7 @@ TERMINAL_STATES = {"done", "downloaded", "encoded", "skipped",
                    "error", "cancelled", "discarded"}
 
 # JPEG inputs support JPEG recompression or reversible JPEG XL conversion.
-# RAW conversion to JPEG is separately opt-in; other inputs are skipped.
+# Other inputs are decoded and converted (see photo_convert); RAW is opt-in.
 JPEG_PHOTO_EXTS = {"jpg", "jpeg", "jpe", "jfif"}
 RAW_PHOTO_EXTS = {
     "dng", "cr2", "cr3", "crw", "nef", "nrw", "arw", "srf", "sr2", "raf",

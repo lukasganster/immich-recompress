@@ -76,6 +76,10 @@ export class SettingsPanelComponent {
     }
   }
 
+  onMaxMp(value: number | null): void {
+    this.update({ photo_max_mp: value !== null && Number.isFinite(value) && value > 0 ? value : null });
+  }
+
   /** Switching encoders changes the quality scale, so reset quality to the new
    *  encoder's default rather than carry an out-of-range value across scales. */
   onEncoder(id: string): void {
@@ -109,12 +113,15 @@ export class SettingsPanelComponent {
   }
 
   get photoSummary(): string {
+    const extras = `${this.s.compress_raw ? ' · RAW' : ''}`
+      + `${this.s.photo_max_mp ? ` · max ${this.s.photo_max_mp} MP` : ''}`;
     if (this.s.photo_format === 'jxl') {
-      return this.s.photo_jxl_distance > 0
+      return (this.s.photo_jxl_distance > 0
         ? `JPEG XL · lossy · distance ${this.s.photo_jxl_distance}`
-        : 'JPEG XL · lossless';
+        : 'JPEG XL · lossless') + extras;
     }
-    return `JPEG · −${this.s.photo_target_savings}% target${this.s.compress_raw ? ' · RAW→JPEG' : ''}`;
+    const chroma = { source: '', '444': ' · 4:4:4', '420': ' · 4:2:0' }[this.s.photo_jpeg_chroma ?? 'source'];
+    return `JPEG · −${this.s.photo_target_savings}% target${chroma}${extras}`;
   }
 
   /** The saved choice is JPEG XL, but this server cannot produce it. */

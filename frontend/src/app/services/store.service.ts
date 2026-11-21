@@ -120,6 +120,7 @@ export class StoreService {
   readonly encoders = signal<EncoderInfo[]>([]);
   readonly cpuCount = signal(1);
   readonly jpegXlAvailable = signal(false);
+  readonly rawAvailable = signal(false);
   /** The encoder spec for the current settings, or undefined until caps load. */
   readonly selectedEncoder = computed(() =>
     this.encoders().find(e => e.id === this.settings().encoder));
@@ -365,6 +366,7 @@ export class StoreService {
     this.encoders.set(encoders);
     this.cpuCount.set(cpu);
     this.jpegXlAvailable.set(caps.jpeg_xl === true);
+    this.rawAvailable.set(caps.raw === true);
     this.settings.update(s => {
       const next = { ...s };
       // Default/clamp the CPU-core count to the detected max (0 = unset → all).
