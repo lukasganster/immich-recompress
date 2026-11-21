@@ -23,4 +23,26 @@ describe('ApiService browse requests', () => {
     request.flush({ assets: [], total: 0 });
     http.verify();
   });
+
+  it('sends photo ranges, formats and the lossless flag only when set', () => {
+    TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
+    const api = TestBed.inject(ApiService);
+    const http = TestBed.inject(HttpTestingController);
+    const base = { page: 1, per_page: 25, sort: 'size', order: 'desc', media: 'image', min_mb: 2 } as const;
+    api.assets({ ...base, max_mb: 10, min_mp: 5, max_mp: null, formats: ['TIFF', 'DNG'], jxl_lossless: true }).subscribe();
+    const request = http.expectOne(r => r.url === '/api/assets');
+    expect(request.request.params.get('max_mb')).toBe('10');
+    expect(request.request.params.get('min_mp')).toBe('5');
+    expect(request.request.params.getAll('format')).toEqual(['TIFF', 'DNG']);
+    expect(request.request.params.get('jxl_lossless')).toBe('1');
+    expect(request.request.params.has('max_mp')).toBe(false);
+    request.flush({ assets: [], total: 0 });
+    api.assets({ ...base, max_mb: null, min_mp: null, formats: [], jxl_lossless: false }).subscribe();
+    const bare = http.expectOne(r => r.url === '/api/assets');
+    for (const key of ['max_mb', 'min_mp', 'max_mp', 'format', 'jxl_lossless']) {
+      expect(bare.request.params.has(key)).toBe(false);
+    }
+    bare.flush({ assets: [], total: 0 });
+    http.verify();
+  });
 });

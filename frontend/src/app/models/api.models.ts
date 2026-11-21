@@ -44,6 +44,10 @@ export interface VideoSummary {
   duration_human: string;
   codec: string;
   resolution: string;
+  /** Photo width times height in millions, or null when Immich has no dimensions. */
+  megapixels?: number | null;
+  /** Uppercased file extension, with JPEG spellings folded into JPG. */
+  format?: string;
   bitrate: number | null;
   date: string | null;
   owner_id: string;
@@ -161,6 +165,10 @@ export interface VideosResponse {
   page: number;
   per_page: number;
   assets: VideoSummary[];
+  /** Count per format over the result before the format filter. */
+  formats?: Record<string, number>;
+  /** With the lossless filter on: JPEG XL files that couldn't be read or classified this time. */
+  jxl_unchecked?: number;
   error?: string;
 }
 

@@ -13,6 +13,7 @@
       [value]="store.search()"
       (input)="onSearch($any($event.target).value)" />
   </label>
+  <app-format-filter class="contents" (changed)="grid().load()" />
 
   @if (store.media() === 'video') {
     <div class="seg" role="group" aria-label="Filter by codec">

@@ -19,12 +19,13 @@ import {
   mdiVideoOutline,
 } from '@mdi/js';
 import { IconComponent } from '../icon/icon';
+import { RangeSliderComponent } from '../range-slider/range-slider';
 import { BrowseOption, KeyOwner, MediaType, MetadataFilter, emptyMetadataFilter } from '../../models/api.models';
 
 @Component({
   selector: 'app-browse-dialog',
   standalone: true,
-  imports: [FormsModule, CdkTrapFocus, IconComponent],
+  imports: [FormsModule, CdkTrapFocus, IconComponent, RangeSliderComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './browse-dialog.html',
   styleUrl: './browse-dialog.css',
@@ -53,6 +54,31 @@ export class BrowseDialogComponent implements OnDestroy {
   localTab = signal<MediaType | 'link'>('video');
   localVideoGb = signal(0.5);
   localPhotoMb = signal(10);
+  localPhotoMaxMb = signal<number | null>(null);
+  localMinMp = signal<number | null>(null);
+  localMaxMp = signal<number | null>(null);
+  localJxlLossless = signal(false);
+  readonly sizeLabel = computed(() => {
+    const max = this.localPhotoMaxMb();
+    return max === null ? `≥ ${this.localPhotoMb()} MB` : `${this.localPhotoMb()}–${max} MB`;
+  });
+  readonly resolutionLabel = computed(() => {
+    const min = this.localMinMp(), max = this.localMaxMp();
+    if (max !== null) return `${min ?? 'any'}–${max} MP`;
+    return min ? `≥ ${min} MP` : 'any';
+  });
+  /** Megapixels and the lossless flag belong to the photo tab only. */
+  readonly rangeError = computed(() => {
+    const tab = this.localTab();
+    if (tab !== 'image' && tab !== 'motionphoto') return '';
+    const max = this.localPhotoMaxMb();
+    if (max !== null && max < this.localPhotoMb()) return 'The maximum size must not be lower than the minimum.';
+    const minMp = this.localMinMp(), maxMp = this.localMaxMp();
+    if (tab === 'image' && minMp !== null && maxMp !== null && maxMp < minMp) {
+      return 'The maximum megapixels must not be lower than the minimum.';
+    }
+    return '';
+  });
   localDateFrom = signal('');
   localDateTo = signal('');
   localTimezone = signal('UTC');
@@ -117,6 +143,11 @@ export class BrowseDialogComponent implements OnDestroy {
       this.supportsMetadata();
       untracked(() => this.loadDiscovery());
     });
+  }
+
+  /** A cleared number input means no bound. */
+  bound(value: unknown): number | null {
+    return value === null || value === '' || !Number.isFinite(+(value as number)) ? null : +(value as number);
   }
 
   setMetadata<K extends keyof MetadataFilter>(field: K, value: MetadataFilter[K]): void {
@@ -193,6 +224,10 @@ export class BrowseDialogComponent implements OnDestroy {
     this.localTab.set(this.store.media());
     this.localVideoGb.set(this.store.videoMinGb());
     this.localPhotoMb.set(this.store.photoMinMb());
+    this.localPhotoMaxMb.set(this.store.photoMaxMb());
+    this.localMinMp.set(this.store.photoMinMp());
+    this.localMaxMp.set(this.store.photoMaxMp());
+    this.localJxlLossless.set(this.store.jxlLosslessOnly());
     this.localDateFrom.set(this.store.captureDateFrom());
     this.localDateTo.set(this.store.captureDateTo());
     this.localTimezone.set(this.store.captureTimezone());
@@ -261,7 +296,7 @@ export class BrowseDialogComponent implements OnDestroy {
 
   onApply(): void {
     if (this.localTab() === 'link') { this.addByLink(); return; }
-    if (!this.localKeys().size || (this.hasMetadata() &&
+    if (this.rangeError() || !this.localKeys().size || (this.hasMetadata() &&
         (!this.supportsMetadata() || this.discoveryBlocked()))) return;
     if (this.localDateFrom() && this.localDateTo()
         && this.localDateFrom() > this.localDateTo()) {
@@ -274,6 +309,12 @@ export class BrowseDialogComponent implements OnDestroy {
     this.store.media.set(this.localTab() as MediaType);
     this.store.videoMinGb.set(this.localVideoGb());
     this.store.photoMinMb.set(this.localPhotoMb());
+    this.store.photoMaxMb.set(this.localPhotoMaxMb());
+    this.store.photoMinMp.set(this.localMinMp());
+    this.store.photoMaxMp.set(this.localMaxMp());
+    this.store.jxlLosslessOnly.set(this.localJxlLossless());
+    // Format counts come from the scan, so a choice from the last scan may not apply.
+    this.store.formatFilter.set([]);
     this.store.captureDateFrom.set(this.localDateFrom());
     this.store.captureDateTo.set(this.localDateTo());
     this.store.captureTimezone.set(this.localTimezone());

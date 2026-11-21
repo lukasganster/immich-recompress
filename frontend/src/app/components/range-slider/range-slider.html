@@ -1,0 +1,12 @@
+<div class="range">
+  <div class="track"></div>
+  <div class="fill" [style.left.%]="fillLeft()" [style.right.%]="fillRight()"></div>
+  <input type="range" [min]="min()" [max]="max()" [step]="step()" [value]="lowPos()"
+    [attr.aria-label]="lowLabel()" (input)="onLow($event)" />
+  <input type="range" [min]="min()" [max]="max()" [step]="step()" [value]="highPos()"
+    [attr.aria-label]="highLabel()" [attr.aria-valuetext]="highText()" (input)="onHigh($event)" />
+</div>
+<div class="ends" aria-hidden="true">
+  <span>{{ minText() || min() }}</span>
+  <span>No limit</span>
+</div>

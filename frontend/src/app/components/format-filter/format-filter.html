@@ -1,0 +1,17 @@
+@if (store.media() === 'image') {
+  @if (options().length) {
+    <div class="seg max-w-full flex-wrap" role="group" aria-label="Filter by format">
+      @for (f of options(); track f.name) {
+        <button type="button" [class.active]="store.formatFilter().includes(f.name)"
+          [attr.aria-pressed]="store.formatFilter().includes(f.name)" (click)="toggle(f.name)">
+          {{ f.name }} ({{ f.count }})
+        </button>
+      }
+    </div>
+  }
+  @if (store.jxlUnchecked()) {
+    <span class="hint" role="status">
+      {{ store.jxlUnchecked() }} JPEG XL {{ store.jxlUnchecked() === 1 ? 'file' : 'files' }} could not be checked
+    </span>
+  }
+}
