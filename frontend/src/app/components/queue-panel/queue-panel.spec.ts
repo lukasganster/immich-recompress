@@ -163,3 +163,60 @@ describe('Concurrent queue activity', () => {
     expect(store.activeIds()).toEqual(['two']);
   });
 });
+
+describe('review bench pages', () => {
+  let fixture: ComponentFixture<QueuePanelComponent>;
+  let store: StoreService;
+
+  const element = (): HTMLElement => fixture.nativeElement;
+  const cards = () => element().querySelectorAll('[aria-label="Awaiting review"] article').length;
+  const pager = () => element().querySelector('[aria-label="Review pages"]');
+  const next = () => element().querySelector('[aria-label="Next reviews"]') as HTMLButtonElement;
+  const show = async (count: number) => {
+    store.jobs.set(Object.fromEntries(Array.from({ length: count }, (_, i) => [`r${i}`, reviewed(`r${i}`)])));
+    await fixture.whenStable();
+  };
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      imports: [QueuePanelComponent],
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    });
+    fixture = TestBed.createComponent(QueuePanelComponent);
+    store = TestBed.inject(StoreService);
+  });
+
+  it('shows ten reviews a page while replace all covers every review', async () => {
+    await show(23);
+    expect(cards()).toBe(10);
+    expect(pager()!.textContent).toContain('1 of 3');
+    expect(next().disabled).toBe(false);
+    for (const page of [2, 3]) {
+      next().click();
+      await fixture.whenStable();
+      expect(pager()!.textContent).toContain(`${page} of 3`);
+      expect(element().textContent).toContain('Replace all media (23)');
+    }
+    expect(cards()).toBe(3);
+    expect(next().disabled).toBe(true);
+    expect(fixture.componentInstance.reviewJobs.length).toBe(23);
+  });
+
+  it('moves back a page when the last review on it is resolved', async () => {
+    await show(11);
+    next().click();
+    await fixture.whenStable();
+    expect(cards()).toBe(1);
+    const { r10, ...rest } = store.jobs();
+    store.jobs.set({ ...rest, r10: { ...r10, status: 'done' } });
+    await fixture.whenStable();
+    expect(cards()).toBe(10);
+    expect(pager()).toBeNull();
+  });
+
+  it('shows no pager for ten reviews or fewer', async () => {
+    await show(10);
+    expect(cards()).toBe(10);
+    expect(pager()).toBeNull();
+  });
+});

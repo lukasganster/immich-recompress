@@ -1,8 +1,10 @@
-import { ChangeDetectionStrategy, Component, effect, inject, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, output, signal } from '@angular/core';
 import { NgClass } from '@angular/common';
 import {
   mdiArrowRight,
   mdiCheck,
+  mdiChevronLeft,
+  mdiChevronRight,
   mdiClose,
   mdiDeleteOutline,
   mdiEyeOutline,
@@ -14,6 +16,8 @@ import { StoreService } from '../../services/store.service';
 import { ApiService } from '../../services/api.service';
 import { JobPublic, JobStatus } from '../../models/api.models';
 import { CANCELLABLE, statusLabel, WAITING } from '../../utils/job-status';
+
+export const REVIEW_PAGE_SIZE = 10;
 
 @Component({
   selector: 'app-queue-panel',
@@ -28,7 +32,10 @@ export class QueuePanelComponent {
   private readonly api = inject(ApiService);
 
   readonly mdiArrowRight = mdiArrowRight;
+  readonly REVIEW_PAGE_SIZE = REVIEW_PAGE_SIZE;
   readonly mdiCheck = mdiCheck;
+  readonly mdiChevronLeft = mdiChevronLeft;
+  readonly mdiChevronRight = mdiChevronRight;
   readonly mdiClose = mdiClose;
   readonly mdiDeleteOutline = mdiDeleteOutline;
   readonly mdiEyeOutline = mdiEyeOutline;
@@ -37,6 +44,12 @@ export class QueuePanelComponent {
 
   readonly reviewRequested = output<string>();
   readonly jobsRefresh = output<void>();
+
+  /** The page the user asked for. Read currentReviewPage, which stays in range. */
+  readonly reviewPage = signal(1);
+  readonly reviewPageCount = computed(() =>
+    Math.max(1, Math.ceil(this.reviewJobs.length / REVIEW_PAGE_SIZE)));
+  readonly currentReviewPage = computed(() => Math.min(this.reviewPage(), this.reviewPageCount()));
 
   /** The bulk replace is waiting for its second click. */
   readonly confirmingAll = signal(false);
@@ -134,6 +147,16 @@ export class QueuePanelComponent {
   /** Jobs waiting on a decision. These get the full side-by-side. */
   get reviewJobs(): [string, JobPublic][] {
     return this.entries().filter(([, j]) => j.status === 'review');
+  }
+
+  /** The reviews shown as cards. Replace all still covers every review. */
+  get pagedReviewJobs(): [string, JobPublic][] {
+    const start = (this.currentReviewPage() - 1) * REVIEW_PAGE_SIZE;
+    return this.reviewJobs.slice(start, start + REVIEW_PAGE_SIZE);
+  }
+
+  goToReviewPage(page: number): void {
+    this.reviewPage.set(Math.min(Math.max(1, page), this.reviewPageCount()));
   }
 
   /** Jobs currently holding a server processing slot. */

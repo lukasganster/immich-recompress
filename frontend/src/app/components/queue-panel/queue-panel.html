@@ -2,6 +2,7 @@
      rather than behind a modal. -->
 
 @let review = reviewJobs;
+@let reviewPageJobs = pagedReviewJobs;
 @let running = runningJobs;
 @let waiting = waitingJobs;
 @let finished = finishedJobs;
@@ -21,7 +22,7 @@
   }
 
   <div class="flex flex-col gap-3 px-3 pb-3 empty:hidden">
-    @for (entry of review; track entry[0]) {
+    @for (entry of reviewPageJobs; track entry[0]) {
       @let id = entry[0];
       @let j = entry[1];
       <article class="clamp rounded-2xl border border-warning/30 bg-warning/5 p-4">
@@ -99,6 +100,20 @@
       </article>
     }
   </div>
+
+  @if (review.length > REVIEW_PAGE_SIZE) {
+    <div class="flex items-center justify-center gap-1 px-3 pb-3 text-sm text-muted" role="group" aria-label="Review pages">
+      <button type="button" class="icon-btn sm" aria-label="Previous reviews" title="Previous reviews"
+        [disabled]="currentReviewPage() <= 1" (click)="goToReviewPage(currentReviewPage() - 1)">
+        <app-icon [path]="mdiChevronLeft" [size]="20" />
+      </button>
+      <span class="px-1">{{ currentReviewPage() }} of {{ reviewPageCount() }}</span>
+      <button type="button" class="icon-btn sm" aria-label="Next reviews" title="Next reviews"
+        [disabled]="currentReviewPage() >= reviewPageCount()" (click)="goToReviewPage(currentReviewPage() + 1)">
+        <app-icon [path]="mdiChevronRight" [size]="20" />
+      </button>
+    </div>
+  }
 
   @if (review.length > 1) {
     <!-- Two steps, per product principle 2. The second step's buttons sit
