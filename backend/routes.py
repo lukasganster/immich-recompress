@@ -2,6 +2,7 @@
 thumbnail/playback/download proxies, queue management and the SSE stream.
 """
 import json
+import math
 import os
 import queue
 import shutil
@@ -91,6 +92,41 @@ def _cache_asset_summaries(key, summaries):
         for cache_key in expired:
             _asset_cache.pop(cache_key, None)
         _asset_cache[key] = (now, list(summaries))
+
+
+def _optional_number(args, name):
+    """A blank parameter is unbounded; anything else must be a number of zero or more."""
+    raw = (args.get(name) or "").strip()
+    if not raw:
+        return None
+    try:
+        value = float(raw)
+    except ValueError:
+        value = -1.0
+    if not math.isfinite(value) or value < 0:
+        raise ValueError(f"{name} must be a number of zero or more.")
+    return value
+
+
+def _narrow_summaries(summaries, max_bytes, min_mp, max_mp, formats):
+    """Apply the filters that need no rescan, and count formats before the format filter."""
+    kept = []
+    for summary in summaries:
+        if max_bytes is not None and summary["size"] > max_bytes:
+            continue
+        mp = summary.get("megapixels")
+        if (min_mp is not None or max_mp is not None) and mp is None:
+            continue
+        if (min_mp is not None and mp < min_mp) or (max_mp is not None and mp > max_mp):
+            continue
+        kept.append(summary)
+    counts = {}
+    for summary in kept:
+        if summary.get("format"):
+            counts[summary["format"]] = counts.get(summary["format"], 0) + 1
+    if formats:
+        kept = [summary for summary in kept if summary.get("format") in formats]
+    return kept, counts
 
 
 def _normalise_capture_dates(args):
@@ -316,6 +352,22 @@ def api_assets():
         except (TypeError, ValueError):
             min_gb = 0.0
         min_bytes = int(min_gb * 1024 ** 3)
+    try:
+        max_mb = _optional_number(request.args, "max_mb")
+        min_mp = _optional_number(request.args, "min_mp")
+        max_mp = _optional_number(request.args, "max_mp")
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    max_bytes = None if max_mb is None else int(max_mb * 1024 ** 2)
+    if max_bytes is not None and max_bytes < min_bytes:
+        return jsonify({"error": "The maximum size must not be lower than the minimum size."}), 400
+    if min_mp is not None and max_mp is not None and max_mp < min_mp:
+        return jsonify({"error": "The maximum megapixels must not be lower than the minimum."}), 400
+    format_filter = {value.strip().upper() for value in request.args.getlist("format") if value.strip()}
+
+    def respond(summaries):
+        summaries, formats = _narrow_summaries(summaries, max_bytes, min_mp, max_mp, format_filter)
+        return paginate_summaries(summaries, sort, order, page, per_page, formats)
 
     api_keys = env.get("api_keys") or []
     if not env["url"] or not api_keys:
@@ -339,7 +391,7 @@ def api_assets():
     )
     summaries = _cached_asset_summaries(cache_key)
     if summaries is not None:
-        return paginate_summaries(summaries, sort, order, page, per_page)
+        return respond(summaries)
 
     fetch_users(env)
     if has_metadata:
@@ -354,7 +406,7 @@ def api_assets():
         with _asset_key_lock:
             _asset_key_map.update(assignments)
         _cache_asset_summaries(cache_key, summaries)
-        return paginate_summaries(summaries, sort, order, page, per_page)
+        return respond(summaries)
     use_structured_search = capture_dates and supports_structured_search(env)
 
     if media == "motionphoto":
@@ -366,7 +418,7 @@ def api_assets():
         except StructuredSearchError as exc:
             return jsonify({"error": str(exc)}), 502
         _cache_asset_summaries(cache_key, summaries)
-        return paginate_summaries(summaries, sort, order, page, per_page)
+        return respond(summaries)
 
     # collected is a list of (asset_dict, key_idx) tuples
     collected: list = []
@@ -418,7 +470,7 @@ def api_assets():
         summaries.append(summary)
 
     _cache_asset_summaries(cache_key, summaries)
-    return paginate_summaries(summaries, sort, order, page, per_page)
+    return respond(summaries)
 
 
 def resolve_asset_summary(env, api_keys, asset_id):

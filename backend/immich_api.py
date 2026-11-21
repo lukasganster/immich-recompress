@@ -649,7 +649,7 @@ def collect_motion_photos(env, key_indices, min_bytes, user_filter, search_filte
     return out
 
 
-def paginate_summaries(summaries, sort, order, page, per_page):
+def paginate_summaries(summaries, sort, order, page, per_page, formats=None):
     """Sort, total and paginate a list of asset summaries into the list response."""
     reverse = order == "desc"
     if sort == "size":
@@ -678,7 +678,15 @@ def paginate_summaries(summaries, sort, order, page, per_page):
         "page": page,
         "per_page": per_page,
         "assets": summaries[start:end],
+        "formats": formats or {},
     })
+
+
+def photo_format_of(name):
+    """Uppercased file extension, with the JPEG spellings folded into JPG."""
+    _, dot, ext = (name or "").rpartition(".")
+    ext = ext.upper() if dot else ""
+    return "JPG" if ext in ("JPEG", "JPE", "JFIF") else ext
 
 
 def video_summary(env, asset, media="video"):
@@ -692,6 +700,10 @@ def video_summary(env, asset, media="video"):
     width = info.get("exifImageWidth")
     height = info.get("exifImageHeight")
     resolution = f"{width}x{height}" if width and height else ""
+    try:
+        megapixels = round(int(width) * int(height) / 1e6, 1) if width and height else None
+    except (TypeError, ValueError):
+        megapixels = None
     if media == "image":
         mime = asset.get("originalMimeType") or info.get("mimeType") or ""
         codec = mime.split("/")[-1].upper() if mime else ""
@@ -711,10 +723,13 @@ def video_summary(env, asset, media="video"):
     else:
         frac = 0.50
     potential = int(size * frac)
+    name = asset.get("originalFileName") or asset.get("originalPath") or ""
     return {
         "id": asset_id,
         "media": media,
-        "name": asset.get("originalFileName") or asset.get("originalPath") or "",
+        "name": name,
+        "format": photo_format_of(name),
+        "megapixels": megapixels,
         "size": size,
         "size_human": human_size(size),
         "potential": potential,
