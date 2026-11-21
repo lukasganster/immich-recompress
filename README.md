@@ -14,6 +14,10 @@ Find the large videos and photos in your [Immich](https://immich.app/) library,
 - Browse videos, photos or Live Photos, filtered by size, capture date, album,
   people and location. Videos can be sorted by average bitrate, derived from
   file size and duration.
+- Narrow photos by a size range (min and max MB), a megapixel range, and file
+  format (one toggle per format found, for example TIFF or DNG plus CR2).
+  **JPEG XL: lossless only** finds lossless JPEG XL files by reading the first
+  part of each file, and caches the answer.
 - Re-encode videos with HandBrake (x264 / x265 / AV1, optional resolution cap),
   on the GPU when available. See [Hardware acceleration](#hardware-acceleration).
   The quality labels and savings estimate follow each encoder's own scale.
@@ -23,8 +27,18 @@ Find the large videos and photos in your [Immich](https://immich.app/) library,
   distance (0 to 25). Distance 0 is the default and preserves exact JPEG
   reconstruction (`djxl photo.jxl restored.jpg`). Positive distances use lossy
   compression; 1 aims to be visually lossless, and higher values trade quality
-  for smaller files. Both JPEG XL modes skip non-JPEG originals and files below
-  the minimum savings.
+  for smaller files.
+- Convert TIFF, PNG, WebP, BMP, JPEG XL and RAW photos to JPEG or JPEG XL. RAW
+  conversion is opt-in. Capture date, GPS and the rest of the metadata are
+  copied with `exiftool`, and a job fails rather than replace a photo whose
+  capture date or GPS didn't survive. HEIC, AVIF and GIF are skipped, and so
+  are animated images and multi-page TIFFs, so no frame or page is lost.
+- Cap photos at a **Max megapixels** size; larger photos are downscaled with
+  their aspect ratio kept. **JPEG chroma** matches the source by default, so a
+  4:4:4 photo stays 4:4:4; it can also force 4:4:4 or the smaller 4:2:0.
+- Only replace a photo or video when the result is smaller: that is the
+  **Min. Savings** setting. At 0, any smaller result counts; a result that
+  isn't smaller is always skipped.
 - Strip the hidden motion video from Live Photos.
 - **Review** every result (size, savings, preview) before it replaces the original.
 - Queue with live download and encode progress, configurable parallel jobs and
@@ -41,7 +55,11 @@ the Immich trash. A local backup is kept until the replacement succeeds.
   selector shows each owner's Immich profile picture.
 - [`HandBrakeCLI`](https://handbrake.fr/), [`ffmpeg` / `ffprobe`](https://ffmpeg.org/)
   and, for JPEG XL, [`cjxl` / `djxl`](https://github.com/libjxl/libjxl) on `PATH`.
-  The Docker image includes all of them.
+  Converting non-JPEG photos also needs [`exiftool`](https://exiftool.org/)
+  with the `IO::Uncompress::Brotli` Perl module (Debian:
+  `libimage-exiftool-perl libio-compress-brotli-perl`), and RAW needs
+  `dcraw_emu` from [LibRaw](https://www.libraw.org/) (`libraw-bin`), or `sips`
+  on macOS. The Docker image includes all of them.
 - Docker, or for local dev: Python 3.9+ and Node 22.23.4 + [pnpm](https://pnpm.io/)
 
 ## Quick start
