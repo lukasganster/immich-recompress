@@ -46,6 +46,8 @@ Find the large videos and photos in your [Immich](https://immich.app/) library,
   before encoding, since Immich already keeps the clip as the linked video; the
   local backup keeps the full file. A clip Immich hasn't extracted is only
   dropped with Remove, and a layout that can't be confirmed is skipped.
+- Ultra HDR photos (a JPEG with a gain map for HDR screens) are skipped, since
+  converting them would lose the HDR.
 - Strip the hidden motion video from Live Photos.
 - **Review** every result (size, savings, preview) before it replaces the original.
 - Queue with live download and encode progress, configurable parallel jobs and

@@ -105,12 +105,12 @@ class MotionStillJobTest(ConversionHarness):
         self.assertEqual([b.read_bytes() for b in backups], [source.read_bytes()])
 
     def test_unknown_layout_is_skipped(self):
-        for layout, shift in (("micro", 7), ("gainmap", 0)):
+        for layout, shift, reason in (("micro", 7, "unknown motion layout"),
+                                      ("gainmap", 0, "Ultra HDR")):
             with self.subTest(layout=layout):
                 _, source = self.motion_photo(layout, offset_shift=shift)
                 job = self.convert(source, motion_action="keep", _source_detail=LINKED)
-                self.assertEqual((job["status"], job["skip_reason"]),
-                                 ("skipped", "unknown motion layout"))
+                self.assertEqual((job["status"], job["skip_reason"]), ("skipped", reason))
 
     def test_clip_immich_has_not_extracted_is_only_dropped_on_remove(self):
         _, source = self.motion_photo()
@@ -128,6 +128,59 @@ class MotionStillJobTest(ConversionHarness):
         out = self.converted(job)
         self.assertLessEqual(job["old_size"], source.stat().st_size - clip)
         self.assertEqual(job["savings"], job["old_size"] - out.stat().st_size)
+
+
+@unittest.skipUnless(TOOLS, "needs ffmpeg, libjxl-tools and exiftool")
+class UltraHdrSkipTest(ConversionHarness):
+    """A primary JPEG followed by a gain map JPEG, and optionally a motion clip."""
+
+    def ultra_hdr(self, motion=False):
+        primary, gain_map = self.dir / "primary.jpg", self.dir / "gainmap.jpg"
+        source = self.dir / ("PXL.MP.jpg" if motion else "PXL.jpg")
+        make_image(primary, size="320x240", pix_fmt="yuvj420p", extra=("-q:v", "2"))
+        make_image(gain_map, size="160x120", pix_fmt="gray", extra=("-q:v", "2"))
+        tag(gain_map, "-XMP-hdrgm:Version=1.0", "-XMP-hdrgm:GainMapMax=2.0")
+        clip = make_clip(self.dir / "clip.mp4") if motion else b""
+        source.write_bytes(primary.read_bytes())
+        items = ("{Item={Semantic=Primary,Mime=image/jpeg}},{Item={Semantic=GainMap,"
+                 f"Mime=image/jpeg,Length={gain_map.stat().st_size}}}}}")
+        assignments = ["-XMP-hdrgm:Version=1.0"]
+        if motion:
+            items += f",{{Item={{Semantic=MotionPhoto,Mime=video/mp4,Length={len(clip)}}}}}"
+            assignments.append("-XMP-GCamera:MotionPhoto=1")
+        # Older exiftool can't write the directory; the hdrgm XMP alone still marks it.
+        try:
+            tag(source, *assignments, f"-XMP-GContainer:ContainerDirectory=[{items}]")
+        except subprocess.CalledProcessError:
+            tag(source, *assignments)
+        with source.open("ab") as fh:
+            fh.write(gain_map.read_bytes() + clip)
+        return source
+
+    def test_gain_map_photos_are_skipped_on_every_path(self):
+        settings = ({"photo_jxl_distance": 0}, {"photo_jxl_distance": 1},
+                    {"photo_format": "jpeg"}, {"photo_jxl_distance": 0, "photo_max_mp": 0.01})
+        with patch.object(jobs, "_encode_jxl_image") as encode_jxl, \
+                patch.object(jobs, "compress_image_to_target") as encode_jpeg, \
+                patch.object(photo_convert, "decode_to_png") as decode:
+            for motion in (False, True):
+                for setting in settings:
+                    with self.subTest(motion=motion, **setting):
+                        job = self.convert(self.ultra_hdr(motion), motion_action="keep",
+                                           _source_detail=LINKED, **setting)
+                        self.assertEqual((job["status"], job["skip_reason"]),
+                                         ("skipped", "Ultra HDR"))
+                        self.assertIn("gain map", job["log"])
+                        self.assertIsNone(job["_out_path"])
+        encode_jxl.assert_not_called()
+        encode_jpeg.assert_not_called()
+        decode.assert_not_called()
+        self.assertFalse(list(self.work.glob("*")))
+
+    def test_plain_jpeg_still_converts(self):
+        source = self.dir / "plain.jpg"
+        make_image(source, size="320x240", pix_fmt="yuvj420p", extra=("-q:v", "2"))
+        self.converted(self.convert(source, photo_jxl_distance=0))
 
 
 class MotionReplaceTest(unittest.TestCase):

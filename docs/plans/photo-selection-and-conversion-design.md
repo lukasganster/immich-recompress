@@ -84,7 +84,7 @@ Changed while building, after a Google motion photo (`MVIMG_*.jpg`, a JPEG with 
 - A Photos tab job on a still with `livePhotoVideoId` follows the `motion_action` setting. Remove: the new photo isn't linked, and the motion video is trashed after the old still. Recompress or Keep: the new photo is linked to the existing motion video before the old still is trashed. Re-encoding the video stays the Live Photos tab's job.
 - The old still's link is never cleared. Immich v3.4.2 refuses to unlink a clip it extracted from a motion photo (`onBeforeUnlink`, "Cannot unlink Android motion photos"), and unlinking any other clip puts it back on the timeline. Two stills may share one clip, and emptying the trash only deletes a clip no other asset links.
 - If linking fails, the job errors and the old still is not trashed. The link is read again at replace time; if that read fails, nothing is uploaded.
-- Before encoding, an embedded clip is cut off into a separate work file, so the backup keeps the full original. Only two layouts are trusted, the same ones Immich reads: `MicroVideoOffset`, or a Container directory holding exactly a Primary and a MotionPhoto item with no padding. Either way the cut must fall right after the JPEG end marker and right before an MP4 `ftyp` box. Anything else (a gain map item, a Samsung trailer) is skipped as "unknown motion layout".
+- Before encoding, an embedded clip is cut off into a separate work file, so the backup keeps the full original. Only two layouts are trusted, the same ones Immich reads: `MicroVideoOffset`, or a Container directory holding exactly a Primary and a MotionPhoto item with no padding. Either way the cut must fall right after the JPEG end marker and right before an MP4 `ftyp` box. Anything else (a Samsung trailer) is skipped as "unknown motion layout"; a gain map item makes it an Ultra HDR photo, skipped below.
 - The MicroVideo, MotionPhoto and Container tags are removed from the cut still before encoding, not from the output, so the lossless JPEG XL repack reproduces the cleaned still exactly. The output is checked for leftover motion tags: if Immich found them on the new asset, it would extract a "clip" from the wrong bytes and delete the linked video.
 - A still with an embedded clip but no linked video (Immich never extracted it) is only cut with Remove; Recompress and Keep skip it as "motion not extracted", since cutting would lose the only copy.
 - Savings and min-savings are measured against the cut still, not the downloaded file.
@@ -98,6 +98,14 @@ Immich v3.4.2 source behind these choices:
 - Any MicroVideo or MotionPhoto tag makes metadata extraction pull a clip out of the file and replace the linked one: [metadata.service.ts](https://github.com/immich-app/immich/blob/v3.4.2/server/src/services/metadata.service.ts#L669-L678), [L790-806](https://github.com/immich-app/immich/blob/v3.4.2/server/src/services/metadata.service.ts#L790-L806).
 
 Not verified on a live server: Apple Live Photos (a JPEG still with a separate MOV) under Remove. `linkLivePhotos` matches on the ContentIdentifier the new still inherits ([L175-204](https://github.com/immich-app/immich/blob/v3.4.2/server/src/services/metadata.service.ts#L175-L204)), and its query doesn't appear to exclude trashed videos, so Immich may link the new still to the trashed clip.
+
+### Ultra HDR photos
+
+Changed while building, after a sample of the owner's Pixel `*.MP.jpg` files showed Container directories of `[Primary, GainMap, MotionPhoto]` (16 of 30), `[Primary, GainMap]` (12) and `[Primary, MotionPhoto]` (2). Before this, a gain map with a clip skipped as an unknown motion layout, and a gain map alone converted: the lossless repack kept the gain map only as reconstruction data, so Immich showed the JXL in SDR, and the other paths dropped it for good.
+
+- Every photo with a gain map is skipped with reason "Ultra HDR", after download and before any encode, on every output path, motion variant included. There is no setting to convert them anyway.
+- Why: no tool in the image carries a gain map into JPEG XL, and dropping it would quietly turn an HDR photo into an SDR one. AVIF output through `avifgainmaputil convert` (libavif 1.2.1 in Debian 13) could keep the gain map, in a later PR.
+- Detection reads the bytes, so it needs no exiftool and doesn't rely on the file name: the `hdrgm` XMP namespace, a Container `GainMap` item, or the ISO 21496-1 signature of an MPF gain map image. Immich's asset data doesn't say whether a photo has a gain map, so there is no check before download.
 
 ### Review bench
 

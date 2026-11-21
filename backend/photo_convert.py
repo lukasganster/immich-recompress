@@ -122,18 +122,30 @@ def still_problem(src, fmt):
 # Immich extracts a motion clip from a still carrying any of these tags
 # (metadata.service.ts isMotionPhoto and applyMotionPhotos, v3.4.2).
 _MOTION_MARKERS = (b"MicroVideo", b"MotionPhoto")
+# Ultra HDR: the hdrgm XMP namespace, a Container GainMap item, or the ISO
+# 21496-1 signature an MPF gain map image carries.
+_GAIN_MAP_MARKERS = (b"hdrgm", b"GainMap", b"urn:iso:std:iso:ts:21496")
 
 
-def _contains_marker(path):
+def _contains_marker(path, markers=_MOTION_MARKERS):
     """Scan the whole file: a missed marker would upload motion tags beside a real link."""
-    overlap, previous = max(len(m) for m in _MOTION_MARKERS) - 1, b""
+    overlap, previous = max(len(m) for m in markers) - 1, b""
     with open(path, "rb") as fh:
         while chunk := fh.read(1 << 20):
             window = previous + chunk
-            if any(m in window for m in _MOTION_MARKERS):
+            if any(m in window for m in markers):
                 return True
             previous = window[-overlap:]
     return False
+
+
+def has_gain_map(path):
+    """True for an Ultra HDR photo, or one that can't be read. Judged from the
+    bytes, so it needs no exiftool and covers every layout."""
+    try:
+        return _contains_marker(path, _GAIN_MAP_MARKERS)
+    except OSError:
+        return True
 
 
 def motion_trailer(path, quick=True):

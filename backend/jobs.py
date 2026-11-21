@@ -933,6 +933,10 @@ def process_image_job(env, asset_id, params):
         broadcast_queue_update()
         cleanup_temp(src_path)
 
+    # No tool here carries a gain map into the output, so converting would lose the HDR.
+    if photo_convert.has_gain_map(src_path):
+        return skip_downloaded("Ultra HDR photo (gain map) skipped: converting would lose "
+                               "the HDR", "Ultra HDR")
     if pixel_path:
         skip_msg, skip_reason = photo_convert.still_problem(src_path, fmt)
         if skip_msg:
