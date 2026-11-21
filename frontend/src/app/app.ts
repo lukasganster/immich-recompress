@@ -14,6 +14,8 @@ import { QueueSyncService } from './services/queue-sync.service';
 import { HeaderComponent } from './components/header/header';
 import { DashboardComponent } from './components/dashboard/dashboard';
 import { SettingsPanelComponent } from './components/settings-panel/settings-panel';
+import { FormatFilterComponent } from './components/format-filter/format-filter';
+import { RescanComponent } from './components/rescan/rescan';
 import { MediaGridComponent } from './components/media-grid/media-grid';
 import { BulkBarComponent } from './components/bulk-bar/bulk-bar';
 import { QueuePanelComponent } from './components/queue-panel/queue-panel';
@@ -29,7 +31,7 @@ import { formatDate } from './utils/format-date';
   imports: [
     FormsModule,
     HeaderComponent, DashboardComponent, SettingsPanelComponent,
-    MediaGridComponent, BulkBarComponent, QueuePanelComponent,
+    MediaGridComponent, FormatFilterComponent, RescanComponent, BulkBarComponent, QueuePanelComponent,
     DetailDrawerComponent, ReviewModalComponent, BrowseDialogComponent,
     IconComponent,
   ],
@@ -66,9 +68,14 @@ export class App implements OnInit {
   get loadingSubtitle(): string {
     const m = this.store.media();
     const noun = m === 'image' ? 'Photos' : m === 'motionphoto' ? 'Live Photos' : 'Videos';
+    const range = (min: number | null, max: number | null, unit: string) =>
+      max === null ? (min === null ? '' : `≥ ${min} ${unit}`)
+        : min === null ? `≤ ${max} ${unit}` : `${min}–${max} ${unit}`;
     const threshold = m === 'video'
       ? `≥ ${this.store.videoMinGb()} GB`
-      : `≥ ${this.store.photoMinMb()} MB`;
+      : [range(this.store.photoMinMb(), this.store.photoMaxMb(), 'MB'),
+        ...(m === 'image' ? [range(this.store.photoMinMp(), this.store.photoMaxMp(), 'MP'),
+          this.store.jxlLosslessOnly() ? 'lossless JPEG XL' : ''] : [])].filter(Boolean).join(' · ');
     const dateFrom = this.store.captureDateFrom();
     const dateTo = this.store.captureDateTo();
     const dates = dateFrom || dateTo

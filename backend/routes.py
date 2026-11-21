@@ -2,10 +2,12 @@
 thumbnail/playback/download proxies, queue management and the SSE stream.
 """
 import json
+import math
 import os
 import queue
 import shutil
 import threading
+from collections import OrderedDict
 import sqlite3
 import time
 from datetime import date, datetime, time as datetime_time, timedelta, timezone
@@ -19,7 +21,7 @@ from flask import (
 )
 
 from backend.config import (
-    ASSET_CACHE_TTL, BACKUP_DIR, FRONTEND_PER_PAGE, HTTP_TIMEOUT,
+    BACKUP_DIR, FRONTEND_PER_PAGE, HTTP_TIMEOUT,
     MAX_PER_PAGE, STATIC_DIR,
     average_bitrate, get_env, human_duration, human_size, parse_duration, utcnow_iso,
 )
@@ -46,6 +48,7 @@ from backend.immich_api import (
     _key_env_for_asset,
 )
 from backend.browse import collect_filtered, discover, metadata_filters
+from backend.jxl_probe import lossless_jxl_only
 from backend.jobs import (
     broadcast,
     broadcast_queue_update,
@@ -67,30 +70,72 @@ from backend.media import available_encoders, cpu_count, image_preview_path
 
 bp = Blueprint("main", __name__)
 
-_asset_cache = {}
+# Completed scans, kept until the user rescans or the server restarts. Only the
+# most recently used few are kept, since each holds a whole library listing.
+_asset_cache = OrderedDict()
 _asset_cache_lock = threading.Lock()
+ASSET_CACHE_SCANS = 8
 
 
 def _cached_asset_summaries(key):
-    """Return a copy of a recent completed scan, if one exists."""
-    now = time.monotonic()
+    """Return (scanned_at, copy of the summaries) for a completed scan, if one exists."""
     with _asset_cache_lock:
         cached = _asset_cache.get(key)
-        if not cached or now - cached[0] >= ASSET_CACHE_TTL:
-            if cached:
-                _asset_cache.pop(key, None)
+        if not cached:
             return None
-        return list(cached[1])
+        _asset_cache.move_to_end(key)
+        return cached[0], list(cached[1])
 
 
 def _cache_asset_summaries(key, summaries):
-    now = time.monotonic()
+    scanned_at = utcnow_iso()
     with _asset_cache_lock:
-        expired = [cache_key for cache_key, value in _asset_cache.items()
-                   if now - value[0] >= ASSET_CACHE_TTL]
-        for cache_key in expired:
-            _asset_cache.pop(cache_key, None)
-        _asset_cache[key] = (now, list(summaries))
+        _asset_cache[key] = (scanned_at, list(summaries))
+        _asset_cache.move_to_end(key)
+        while len(_asset_cache) > ASSET_CACHE_SCANS:
+            _asset_cache.popitem(last=False)
+    return scanned_at
+
+
+def _optional_number(args, name):
+    """A blank parameter is unbounded; anything else must be a number of zero or more."""
+    raw = (args.get(name) or "").strip()
+    if not raw:
+        return None
+    try:
+        value = float(raw)
+    except ValueError:
+        value = -1.0
+    if not math.isfinite(value) or value < 0:
+        raise ValueError(f"{name} must be a number of zero or more.")
+    return value
+
+
+def _narrow_summaries(summaries, max_bytes, min_mp, max_mp, formats, lossless_only=None):
+    """Apply the filters that need no rescan, and count formats before the format filter.
+
+    `lossless_only` downloads part of each JXL, so it runs after every cheaper filter.
+    """
+    kept = []
+    for summary in summaries:
+        if max_bytes is not None and summary["size"] > max_bytes:
+            continue
+        mp = summary.get("megapixels")
+        if (min_mp is not None or max_mp is not None) and mp is None:
+            continue
+        if (min_mp is not None and mp < min_mp) or (max_mp is not None and mp > max_mp):
+            continue
+        kept.append(summary)
+    unchecked = None
+    if lossless_only:
+        kept, unchecked = ([], 0) if formats and "JXL" not in formats else lossless_only(kept)
+    counts = {}
+    for summary in kept:
+        if summary.get("format"):
+            counts[summary["format"]] = counts.get(summary["format"], 0) + 1
+    if formats:
+        kept = [summary for summary in kept if summary.get("format") in formats]
+    return kept, counts, unchecked
 
 
 def _normalise_capture_dates(args):
@@ -233,6 +278,7 @@ def api_capabilities():
         "encoders": available_encoders(),
         "cpu_count": cpu_count(),
         "jpeg_xl": bool(shutil.which("cjxl") and shutil.which("djxl")),
+        "raw": bool(shutil.which("dcraw_emu") or shutil.which("sips")),
     })
 
 
@@ -316,6 +362,33 @@ def api_assets():
         except (TypeError, ValueError):
             min_gb = 0.0
         min_bytes = int(min_gb * 1024 ** 3)
+    try:
+        max_mb = _optional_number(request.args, "max_mb")
+        min_mp = _optional_number(request.args, "min_mp")
+        max_mp = _optional_number(request.args, "max_mp")
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    max_bytes = None if max_mb is None else int(max_mb * 1024 ** 2)
+    if max_bytes is not None and max_bytes < min_bytes:
+        return jsonify({"error": "The maximum size must not be lower than the minimum size."}), 400
+    if min_mp is not None and max_mp is not None and max_mp < min_mp:
+        return jsonify({"error": "The maximum megapixels must not be lower than the minimum."}), 400
+    format_filter = {value.strip().upper() for value in request.args.getlist("format") if value.strip()}
+
+    jxl_lossless = media == "image" and request.args.get("jxl_lossless") == "1"
+
+    def respond(summaries, scanned_at):
+        if search_filter:
+            summaries = [v for v in summaries if search_filter in (v["name"] or "").lower()]
+        summaries, formats, unchecked = _narrow_summaries(
+            summaries, max_bytes, min_mp, max_mp, format_filter,
+            partial(lossless_jxl_only, env) if jxl_lossless else None)
+        extra = {} if unchecked is None else {"jxl_unchecked": unchecked}
+        return paginate_summaries(summaries, sort, order, page, per_page, formats,
+                                  scanned_at=scanned_at, **extra)
+
+    def publish(summaries):
+        return respond(summaries, _cache_asset_summaries(cache_key, summaries))
 
     api_keys = env.get("api_keys") or []
     if not env["url"] or not api_keys:
@@ -332,41 +405,40 @@ def api_assets():
 
     cache_key = (
         env["url"], tuple(api_keys), tuple(key_indices), media, min_bytes,
-        codec_filter, user_filter, search_filter,
+        codec_filter, user_filter,
         (capture_dates or {}).get("start"), (capture_dates or {}).get("end"),
         (capture_dates or {}).get("timezone"),
         metadata["album_id"], tuple(metadata["person_ids"]), metadata["city"], metadata["state"], metadata["country"],
     )
-    summaries = _cached_asset_summaries(cache_key)
-    if summaries is not None:
-        return paginate_summaries(summaries, sort, order, page, per_page)
+    # Only a rescan the user asks for bypasses the cache; filters, sorting and paging reuse it.
+    cached = None if request.args.get("refresh") == "1" else _cached_asset_summaries(cache_key)
+    if cached is not None:
+        return respond(cached[1], cached[0])
 
     fetch_users(env)
     if has_metadata:
         try:
             summaries, assignments = collect_filtered(
                 env, key_indices, media, metadata, capture_dates,
-                min_bytes, user_filter, search_filter, codec_filter)
+                min_bytes, user_filter, "", codec_filter)
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
         except StructuredSearchError as exc:
             return jsonify({"error": str(exc)}), 502
         with _asset_key_lock:
             _asset_key_map.update(assignments)
-        _cache_asset_summaries(cache_key, summaries)
-        return paginate_summaries(summaries, sort, order, page, per_page)
+        return publish(summaries)
     use_structured_search = capture_dates and supports_structured_search(env)
 
     if media == "motionphoto":
         try:
             summaries = collect_motion_photos(
-                env, key_indices, min_bytes, user_filter, search_filter,
+                env, key_indices, min_bytes, user_filter, "",
                 _structured_capture_filter("IMAGE", capture_dates) if use_structured_search else None,
                 _legacy_capture_filter(capture_dates) if capture_dates and not use_structured_search else None)
         except StructuredSearchError as exc:
             return jsonify({"error": str(exc)}), 502
-        _cache_asset_summaries(cache_key, summaries)
-        return paginate_summaries(summaries, sort, order, page, per_page)
+        return publish(summaries)
 
     # collected is a list of (asset_dict, key_idx) tuples
     collected: list = []
@@ -413,12 +485,9 @@ def api_assets():
                 continue
         if user_filter and summary["owner_id"] != user_filter:
             continue
-        if search_filter and search_filter not in (summary["name"] or "").lower():
-            continue
         summaries.append(summary)
 
-    _cache_asset_summaries(cache_key, summaries)
-    return paginate_summaries(summaries, sort, order, page, per_page)
+    return publish(summaries)
 
 
 def resolve_asset_summary(env, api_keys, asset_id):
@@ -753,6 +822,14 @@ def api_enqueue():
             or not isinstance(photo_jxl_distance, (int, float))
             or not 0 <= photo_jxl_distance <= 25):
         return jsonify({"error": "JPEG XL distance must be a number from 0 to 25"}), 400
+    photo_max_mp = body.get("photo_max_mp")
+    if photo_max_mp is not None and (isinstance(photo_max_mp, bool)
+                                     or not isinstance(photo_max_mp, (int, float))
+                                     or not 0 <= photo_max_mp < float("inf")):
+        return jsonify({"error": "Max megapixels must be a number of 0 or more"}), 400
+    photo_jpeg_chroma = body.get("photo_jpeg_chroma", "source")
+    if photo_jpeg_chroma not in ("source", "444", "420"):
+        return jsonify({"error": "JPEG chroma must be source, 444 or 420"}), 400
 
     params = {
         "media": default_media,
@@ -761,6 +838,8 @@ def api_enqueue():
         "photo_target_savings": body.get("photo_target_savings", 40),
         "photo_format": photo_format,
         "photo_jxl_distance": photo_jxl_distance,
+        "photo_max_mp": photo_max_mp or None,
+        "photo_jpeg_chroma": photo_jpeg_chroma,
         "compress_raw": bool(body.get("compress_raw", False)),
         "preset": body.get("preset", "medium"),
         "threads": _clamp_threads(body.get("threads")),
@@ -935,13 +1014,16 @@ def api_discard(asset_id):
             return jsonify({"ok": False, "error": "Nothing to discard"}), 409
         out_path = job.get("_out_path")
         backup_path = job.get("_backup_path")
+        motion_files = (job.get("_motion_out_path"), job.get("_motion_backup_path"))
         job["status"] = "discarded"
         job["log"] = "Discarded – original unchanged"
         job["_out_path"] = None
         job["_backup_path"] = None
+        job["_motion_out_path"] = job["_motion_backup_path"] = None
     cleanup_encoded_file(out_path)
     if backup_path:
         cleanup_temp(backup_path)
+    cleanup_temp(*motion_files)
     scheduler.release_assets(asset_id)
     persist_if_terminal(asset_id)
     emit_job_update(asset_id)

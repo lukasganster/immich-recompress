@@ -79,6 +79,32 @@ def ffprobe_info(path):
     return codec, duration
 
 
+def probe_image(path):
+    """Return (width, height, pix_fmt) of an image, or Nones when ffprobe can't read it."""
+    data = _run_ffprobe(["-select_streams", "v:0", "-show_streams", path]) or {}
+    stream = (data.get("streams") or [{}])[0]
+    return stream.get("width"), stream.get("height"), stream.get("pix_fmt")
+
+
+def jpeg_pix_fmt(src, chroma="source"):
+    """The mjpeg pixel format for a JPEG made from `src`.
+
+    "444" and "420" force that subsampling. "source" keeps a JPEG source's
+    4:2:0 or 4:2:2 and gives everything else (RGB, 16-bit, CMYK) full 4:4:4.
+    Grayscale has no colour to lose, so it takes the smaller 4:2:0.
+    """
+    if chroma == "444":
+        return "yuvj444p"
+    if chroma == "420":
+        return "yuvj420p"
+    source = (probe_image(src)[2] or "").replace("yuvj", "yuv")
+    if source.startswith("gray") or source == "yuv420p":
+        return "yuvj420p"
+    if source == "yuv422p":
+        return "yuvj422p"
+    return "yuvj444p"
+
+
 # Maps a resolution choice to a bounding-box edge (px). HandBrake's
 # --maxWidth/--maxHeight only ever downscale (never upscale) and preserve aspect
 # ratio, so setting both to the same value caps the *long* edge regardless of
@@ -243,18 +269,18 @@ def image_preview_path(out):
     return out + ".preview.png"
 
 
-def build_ffmpeg_image_cmd(src, out, quality):
+def build_ffmpeg_image_cmd(src, out, quality, pix_fmt="yuvj420p"):
     """Re-encode an image to JPEG via ffmpeg.
 
     `quality` maps to ffmpeg's -q:v (2 = best/largest, 31 = worst/smallest).
-    EXIF/orientation metadata is preserved with -map_metadata. `-pix_fmt
-    yuvj420p` forces a JPEG-compatible pixel format, which is required for
-    sources that decode to 16-bit / RGB / CMYK (large JPEGs, RAW/DNG previews)
-    — the mjpeg encoder rejects those otherwise.
+    EXIF/orientation metadata is preserved with -map_metadata. An explicit
+    JPEG-compatible `pix_fmt` (see jpeg_pix_fmt) is required for sources that
+    decode to 16-bit / RGB / CMYK (large JPEGs, RAW/DNG previews), because
+    the mjpeg encoder rejects those otherwise.
     """
     return ["ffmpeg", "-y", "-noautorotate", "-i", src,
             "-map_metadata", "0", "-q:v", str(quality),
-            "-pix_fmt", "yuvj420p", out]
+            "-pix_fmt", pix_fmt, out]
 
 
 def append_csv_log(row):

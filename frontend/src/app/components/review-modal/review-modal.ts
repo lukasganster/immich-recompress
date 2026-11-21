@@ -84,6 +84,14 @@ export class ReviewModalComponent {
     return `${from} → ${this.store.encoderLabel(j.encoder)} · .mp4`;
   }
 
+  /** Only a JPEG repacked without decoding keeps exact JPEG reconstruction.
+   *  Jobs from before `pixel_path` was recorded fall back to the source format. */
+  losslessLabel(j: JobPublic): string {
+    const repacked = j.pixel_path === false
+      || (j.pixel_path == null && ['JPG', 'JPEG', 'JPE', 'JFIF'].includes(j.codec ?? ''));
+    return repacked ? 'Lossless JPEG reconstruction' : 'Lossless JPEG XL';
+  }
+
   /** Encoder summary line: friendly label, quality on its own scale, and preset for
    *  software encoders only (hardware encoders don't use HandBrake presets). */
   encoderDetail(j: JobPublic): string {

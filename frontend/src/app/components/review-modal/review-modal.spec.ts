@@ -24,6 +24,55 @@ describe('JPEG XL review', () => {
     expect(element.querySelector('img[data-role="result"]')!.getAttribute('src')).toBe('/api/preview/photo');
   });
 
+  it('does not promise JPEG reconstruction for a converted TIFF', () => {
+    TestBed.configureTestingModule({
+      imports: [ReviewModalComponent], providers: [provideHttpClient()],
+    });
+    const fixture = TestBed.createComponent(ReviewModalComponent);
+    TestBed.inject(StoreService).jobs.set({ photo: {
+      id: 'photo', name: 'scan.tif', media: 'image', status: 'review', codec: 'TIF',
+      new_codec: 'JPEG XL', photo_format: 'jxl', old_size: 1000, new_size: 750,
+    } as JobPublic });
+    fixture.componentInstance.show('photo');
+    fixture.detectChanges();
+    const element: HTMLElement = fixture.nativeElement;
+    expect(element.textContent).toContain('TIF → JPEG XL · .jxl');
+    expect(element.textContent).toContain('Lossless JPEG XL');
+    expect(element.textContent).not.toContain('Lossless JPEG reconstruction');
+  });
+
+  it('labels a JPEG the megapixel cap re-encoded from pixels as lossless JPEG XL', () => {
+    TestBed.configureTestingModule({
+      imports: [ReviewModalComponent], providers: [provideHttpClient()],
+    });
+    const fixture = TestBed.createComponent(ReviewModalComponent);
+    TestBed.inject(StoreService).jobs.set({ photo: {
+      id: 'photo', name: 'big.jpg', media: 'image', status: 'review', codec: 'JPG',
+      new_codec: 'JPEG XL', photo_format: 'jxl', pixel_path: true, old_size: 1000, new_size: 750,
+    } as JobPublic });
+    fixture.componentInstance.show('photo');
+    fixture.detectChanges();
+    const element: HTMLElement = fixture.nativeElement;
+    expect(element.textContent).toContain('Lossless JPEG XL');
+    expect(element.textContent).not.toContain('Lossless JPEG reconstruction');
+  });
+
+  it('says what happens to the motion video of a live photo', () => {
+    TestBed.configureTestingModule({
+      imports: [ReviewModalComponent], providers: [provideHttpClient()],
+    });
+    const fixture = TestBed.createComponent(ReviewModalComponent);
+    TestBed.inject(StoreService).jobs.set({ photo: {
+      id: 'photo', name: 'MVIMG.jpg', media: 'image', status: 'review', codec: 'JPG',
+      new_codec: 'JPEG XL', photo_format: 'jxl', old_size: 1000, new_size: 750,
+      motion_note: 'Motion video removed (setting: Remove)',
+    } as JobPublic });
+    fixture.componentInstance.show('photo');
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).textContent)
+      .toContain('Motion video removed (setting: Remove)');
+  });
+
   it('shows the encoded distance even when the current settings have changed', () => {
     TestBed.configureTestingModule({
       imports: [ReviewModalComponent], providers: [provideHttpClient()],

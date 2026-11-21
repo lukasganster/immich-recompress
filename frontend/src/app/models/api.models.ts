@@ -5,6 +5,7 @@ export type JobStatus =
 
 export type MediaType = 'video' | 'image' | 'motionphoto';
 export type PhotoFormat = 'jpeg' | 'jxl';
+export type JpegChroma = 'source' | '444' | '420';
 export type SortField = 'size' | 'savings' | 'date' | 'name' | 'duration' | 'bitrate';
 export type SortOrder = 'asc' | 'desc';
 
@@ -44,6 +45,10 @@ export interface VideoSummary {
   duration_human: string;
   codec: string;
   resolution: string;
+  /** Photo width times height in millions, or null when Immich has no dimensions. */
+  megapixels?: number | null;
+  /** Uppercased file extension, with JPEG spellings folded into JPG. */
+  format?: string;
   bitrate: number | null;
   date: string | null;
   owner_id: string;
@@ -118,6 +123,15 @@ export interface JobPublic {
   photo_target_savings: number;
   photo_format: PhotoFormat;
   photo_jxl_distance: number;
+  /** True when the photo was decoded and re-encoded from pixels, not repacked. */
+  pixel_path?: boolean | null;
+  /** What replacing a still does to its motion video, when it has one. */
+  motion_note?: string | null;
+  /** The still didn't save enough; only its recompressed motion video is replaced. */
+  still_kept?: boolean;
+  /** Sizes of the recompressed motion video, when it will be replaced too. */
+  video_old_size?: number | null;
+  video_new_size?: number | null;
   compress_raw: boolean;
   preset: string;
   resolution: string;
@@ -161,6 +175,12 @@ export interface VideosResponse {
   page: number;
   per_page: number;
   assets: VideoSummary[];
+  /** Count per format over the result before the format filter. */
+  formats?: Record<string, number>;
+  /** With the lossless filter on: JPEG XL files that couldn't be read or classified this time. */
+  jxl_unchecked?: number;
+  /** When the scan behind this list finished. Filters reuse it until a rescan. */
+  scanned_at?: string;
   error?: string;
 }
 
@@ -199,6 +219,10 @@ export interface Settings {
   photo_target_savings: number;
   photo_format: PhotoFormat;
   photo_jxl_distance: number;
+  /** Downscale photos above this many megapixels; unset, null or 0 is off. */
+  photo_max_mp?: number | null;
+  /** Unset means 'source'. */
+  photo_jpeg_chroma?: JpegChroma;
   compress_raw: boolean;
   preset: string;
   resolution: string;
@@ -231,6 +255,8 @@ export interface Capabilities {
   encoders: EncoderInfo[];
   cpu_count: number;
   jpeg_xl?: boolean;
+  /** dcraw_emu or sips is installed, so RAW photos can be decoded. */
+  raw?: boolean;
 }
 
 export interface ProcessedEntry {

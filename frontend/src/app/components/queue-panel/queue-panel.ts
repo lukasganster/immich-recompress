@@ -1,8 +1,10 @@
-import { ChangeDetectionStrategy, Component, effect, inject, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, output, signal } from '@angular/core';
 import { NgClass } from '@angular/common';
 import {
   mdiArrowRight,
   mdiCheck,
+  mdiChevronLeft,
+  mdiChevronRight,
   mdiClose,
   mdiDeleteOutline,
   mdiEyeOutline,
@@ -14,6 +16,8 @@ import { StoreService } from '../../services/store.service';
 import { ApiService } from '../../services/api.service';
 import { JobPublic, JobStatus } from '../../models/api.models';
 import { CANCELLABLE, statusLabel, WAITING } from '../../utils/job-status';
+
+export const REVIEW_PAGE_SIZE = 10;
 
 @Component({
   selector: 'app-queue-panel',
@@ -28,7 +32,10 @@ export class QueuePanelComponent {
   private readonly api = inject(ApiService);
 
   readonly mdiArrowRight = mdiArrowRight;
+  readonly REVIEW_PAGE_SIZE = REVIEW_PAGE_SIZE;
   readonly mdiCheck = mdiCheck;
+  readonly mdiChevronLeft = mdiChevronLeft;
+  readonly mdiChevronRight = mdiChevronRight;
   readonly mdiClose = mdiClose;
   readonly mdiDeleteOutline = mdiDeleteOutline;
   readonly mdiEyeOutline = mdiEyeOutline;
@@ -37,6 +44,12 @@ export class QueuePanelComponent {
 
   readonly reviewRequested = output<string>();
   readonly jobsRefresh = output<void>();
+
+  /** The page the user asked for. Read currentReviewPage, which stays in range. */
+  readonly reviewPage = signal(1);
+  readonly reviewPageCount = computed(() =>
+    Math.max(1, Math.ceil(this.reviewJobs.length / REVIEW_PAGE_SIZE)));
+  readonly currentReviewPage = computed(() => Math.min(this.reviewPage(), this.reviewPageCount()));
 
   /** The bulk replace is waiting for its second click. */
   readonly confirmingAll = signal(false);
@@ -136,6 +149,16 @@ export class QueuePanelComponent {
     return this.entries().filter(([, j]) => j.status === 'review');
   }
 
+  /** The reviews shown as cards. Replace all still covers every review. */
+  get pagedReviewJobs(): [string, JobPublic][] {
+    const start = (this.currentReviewPage() - 1) * REVIEW_PAGE_SIZE;
+    return this.reviewJobs.slice(start, start + REVIEW_PAGE_SIZE);
+  }
+
+  goToReviewPage(page: number): void {
+    this.reviewPage.set(Math.min(Math.max(1, page), this.reviewPageCount()));
+  }
+
   /** Jobs currently holding a server processing slot. */
   get runningJobs(): [string, JobPublic][] {
     return this.entries().filter(([id]) => this.isActive(id));
@@ -166,8 +189,12 @@ export class QueuePanelComponent {
     return Math.round((1 - j.new_size / j.old_size) * 100);
   }
 
+  /** Bytes reclaimed by the parts that will actually be replaced. */
   savedBytes(j: JobPublic): number {
-    return Math.max(0, (j.old_size ?? 0) - (j.new_size ?? 0));
+    const still = j.still_kept ? 0 : Math.max(0, (j.old_size ?? 0) - (j.new_size ?? 0));
+    const video = j.video_new_size != null
+      ? Math.max(0, (j.video_old_size ?? 0) - j.video_new_size) : 0;
+    return still + video;
   }
 
   /** A Live Photo whose motion clip is stripped has no recompressed file to

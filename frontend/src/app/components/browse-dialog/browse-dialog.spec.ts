@@ -233,4 +233,116 @@ describe('BrowseDialogComponent', () => {
     fixture.detectChanges();
     expect(options).toHaveBeenCalledTimes(2);
   });
+
+  it('applies photo size and megapixel ranges and the lossless flag', () => {
+    show();
+    component.localTab.set('image');
+    component.localPhotoMb.set(2);
+    component.localPhotoMaxMb.set(10);
+    component.localMinMp.set(5);
+    component.localJxlLossless.set(true);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#browse-photo-max')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('#browse-min-mp')).not.toBeNull();
+    component.onApply();
+    expect(store.photoMaxMb()).toBe(10);
+    expect(store.photoMinMp()).toBe(5);
+    expect(store.photoMaxMp()).toBeNull();
+    expect(store.jxlLosslessOnly()).toBe(true);
+    const saved = JSON.parse(localStorage.getItem('immich_browse')!);
+    expect([saved.photoMaxMb, saved.photoMinMp, saved.jxlLosslessOnly]).toEqual([10, 5, true]);
+  });
+
+  it('blocks a maximum below the minimum', () => {
+    show();
+    component.localTab.set('image');
+    const apply = () => [...fixture.nativeElement.querySelectorAll('.modal-actions button')]
+      .find((b: HTMLButtonElement) => b.textContent!.trim() === 'Apply') as HTMLButtonElement;
+    for (const [min, max] of [['localPhotoMb', 'localPhotoMaxMb'], ['localMinMp', 'localMaxMp']] as const) {
+      component[min].set(8);
+      component[max].set(4);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('[role="alert"]')!.textContent).toContain('lower than the minimum');
+      expect(apply().disabled).toBe(true);
+      component.onApply();
+      expect(component.open()).toBe(true);
+      component[max].set(null);
+      fixture.detectChanges();
+      expect(apply().disabled).toBe(false);
+    }
+  });
+
+  it('clears the format choice when a new scan is applied', () => {
+    store.formatFilter.set(['TIFF']);
+    show();
+    component.onApply();
+    expect(store.formatFilter()).toEqual([]);
+  });
+
+  it('keeps photo-only controls off the Live Photo tab', () => {
+    show();
+    component.localTab.set('motionphoto');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#browse-photo-max')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('#browse-min-mp')).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('JPEG XL: lossless only');
+  });
+
+  describe('range sliders', () => {
+    const label = (text: string) => [...fixture.nativeElement.querySelectorAll('.section-label')]
+      .map((l: HTMLElement) => l.textContent!.replace(/\s+/g, ' ').trim()).find((t: string) => t.startsWith(text));
+    const slider = (name: string) => fixture.nativeElement.querySelector(`app-range-slider[data-range="${name}"]`);
+
+    it('reads an open maximum as at least the minimum', () => {
+      show();
+      component.localTab.set('image');
+      component.localPhotoMb.set(2);
+      component.localPhotoMaxMb.set(58);
+      fixture.detectChanges();
+      expect(label('Photo size')).toBe('Photo size: 2–58 MB');
+      const high = slider('size').querySelectorAll('input[type="range"]')[1] as HTMLInputElement;
+      high.value = '100';
+      high.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      expect(component.localPhotoMaxMb()).toBeNull();
+      expect(label('Photo size')).toBe('Photo size: ≥ 2 MB');
+    });
+
+    it('keeps a typed maximum above the track', () => {
+      show();
+      component.localTab.set('image');
+      fixture.detectChanges();
+      const to = fixture.nativeElement.querySelector('#browse-photo-max') as HTMLInputElement;
+      to.value = '200';
+      to.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      expect(component.localPhotoMaxMb()).toBe(200);
+      expect(label('Photo size')).toContain('–200 MB');
+      component.onApply();
+      expect(store.photoMaxMb()).toBe(200);
+    });
+
+    it('describes the resolution range', () => {
+      show();
+      component.localTab.set('image');
+      fixture.detectChanges();
+      expect(label('Resolution')).toBe('Resolution: any');
+      component.localMaxMp.set(12);
+      fixture.detectChanges();
+      expect(label('Resolution')).toBe('Resolution: any–12 MP');
+      component.localMaxMp.set(null);
+      component.localMinMp.set(5);
+      fixture.detectChanges();
+      expect(label('Resolution')).toBe('Resolution: ≥ 5 MP');
+    });
+
+    it('shows only the size slider on the Live Photo tab', () => {
+      show();
+      component.localTab.set('motionphoto');
+      fixture.detectChanges();
+      expect(slider('size')).not.toBeNull();
+      expect(slider('resolution')).toBeNull();
+      expect(label('Motion video size')).toBeTruthy();
+    });
+  });
 });

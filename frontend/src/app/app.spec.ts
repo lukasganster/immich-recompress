@@ -30,3 +30,25 @@ describe('JPEG XL preflight', () => {
       'Choose JPEG or install libjxl-tools');
   });
 });
+
+describe('fetch subtitle', () => {
+  it('shows photo ranges with en dashes and open bounds', () => {
+    TestBed.configureTestingModule({
+      imports: [App], providers: [provideHttpClient(), provideHttpClientTesting()],
+    });
+    const app = TestBed.createComponent(App).componentInstance;
+    const store = TestBed.inject(StoreService);
+    store.media.set('image');
+    store.photoMinMb.set(1);
+    store.photoMaxMb.set(10);
+    store.photoMinMp.set(5);
+    expect(app.loadingSubtitle).toBe('Photos · 1–10 MB · ≥ 5 MP');
+    store.photoMaxMb.set(null);
+    store.photoMinMp.set(null);
+    store.photoMaxMp.set(20);
+    store.jxlLosslessOnly.set(true);
+    expect(app.loadingSubtitle).toBe('Photos · ≥ 1 MB · ≤ 20 MP · lossless JPEG XL');
+    store.media.set('motionphoto');
+    expect(app.loadingSubtitle).toBe('Live Photos · ≥ 1 MB');
+  });
+});

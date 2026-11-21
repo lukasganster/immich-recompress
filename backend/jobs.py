@@ -31,10 +31,10 @@ from backend.state import (
     unregister_proc,
 )
 from backend.db import db_load_jobs, db_save_job
-from backend import scheduler, statuses
+from backend import photo_convert, scheduler, statuses
 from backend.media import (
     append_csv_log, build_cjxl_cmd, build_ffmpeg_image_cmd, build_handbrake_cmd,
-    ffprobe_info, has_free_space, image_preview_path,
+    ffprobe_info, has_free_space, image_preview_path, jpeg_pix_fmt, probe_image,
 )
 from backend.immich_api import (
     asset_codec, capture_metadata_fields, copy_asset_metadata, copy_asset_tags, download_original,
@@ -85,6 +85,16 @@ def new_job(asset_id, params):
         "photo_target_savings": params.get("photo_target_savings", 40),
         "photo_format": params.get("photo_format", "jpeg"),
         "photo_jxl_distance": params.get("photo_jxl_distance", 0),
+        "photo_max_mp": params.get("photo_max_mp"),
+        "photo_jpeg_chroma": params.get("photo_jpeg_chroma", "source"),
+        "pixel_path": None,
+        "motion_note": None,
+        "still_kept": False,
+        "video_old_size": None,
+        "video_new_size": None,
+        "video_note": None,
+        "_motion_out_path": None,
+        "_motion_backup_path": None,
         "compress_raw": params.get("compress_raw", False),
         "preset": params.get("preset", "medium"),
         "threads": params.get("threads"),
@@ -409,12 +419,46 @@ def do_replace(env, asset_id, name, out_path, old_size, new_size, savings, codec
       2. copy metadata (albums / favorite / shared links / stack / sidecar) from
          the old asset to it via copyAsset,
       3. restore the original capture date and location on the new asset,
-      4. move the OLD asset to the trash (recoverable for the retention period).
+      4. for a photo with a linked motion video: link it to the new asset, unless
+         the motion setting is Remove,
+      5. move the OLD asset to the trash (recoverable for the retention period),
+      6. with Remove, trash the motion video too.
+
+    copyAsset does not carry the live photo link. The old still's link is never
+    cleared: Immich v3.4 refuses to unlink a clip it extracted from a motion
+    photo, and unlinking would show the clip on the timeline. Two stills may
+    share one clip, and emptying the trash keeps a clip another asset links.
 
     The original's capture date is set on the new asset so it keeps its place in
     the timeline. Returns True on success. Used by the worker and the confirm
     endpoint.
     """
+    with _state_lock:
+        job = dict(_jobs.get(asset_id) or {})
+    motion_out = job.get("_motion_out_path") if job.get("media") == "image" else None
+    video_id, keep_motion, motion_note = None, False, ""
+    if job.get("media") == "image":
+        # Read the link now: it may have changed since the job was queued.
+        detail = fetch_asset(env, asset_id)
+        if not detail:
+            return _replace_error(asset_id, name, codec, old_size, new_size, savings,
+                                  "Could not read the original's motion link", out_path)
+        video_id = detail.get("livePhotoVideoId")
+        keep_motion = job.get("motion_action", "remove") != "remove"
+        if motion_out and video_id != job.get("_video_id"):
+            return _replace_error(asset_id, name, codec, old_size, new_size, savings,
+                                  "The motion video changed since the review", out_path)
+        if video_id:
+            motion_note = (". Motion video kept (relinked)" if keep_motion
+                           else ". Motion video removed (setting: Remove)")
+    video_old, video_new = job.get("video_old_size") or 0, job.get("video_new_size") or 0
+    if motion_out and job.get("still_kept"):
+        # The still didn't save enough: repoint it to the new clip, as the Live
+        # Photos tab does. Immich runs no unlink guard when a link moves to another clip.
+        return do_recompress_motion(env, asset_id, video_id, motion_out,
+                                    job.get("_video_name") or f"{video_id}.mp4",
+                                    video_old, video_new, video_old - video_new)
+
     update_job(asset_id, status="replacing", log="Uploading compressed file…")
     emit_job_update(asset_id)
     if not out_path or not os.path.isfile(out_path):
@@ -454,16 +498,52 @@ def do_replace(env, asset_id, name, out_path, old_size, new_size, savings, codec
                               "Capture metadata update failed – new asset created, original kept",
                               out_path)
 
+    link_to, uploaded = video_id, [new_id]
+    if motion_out:
+        update_job(asset_id, log="Uploading compressed motion video…")
+        emit_job_update(asset_id)
+        link_to, error = _upload_hidden_video(env, asset_id, motion_out,
+                                              job.get("_video_name") or f"{video_id}.mp4",
+                                              video_id)
+        update_job(asset_id, new_id=new_id)
+        if not link_to:
+            trash_asset(env, new_id)
+            return _replace_error(asset_id, name, codec, old_size, new_size, savings,
+                                  f"Motion video: {error}; original kept", out_path)
+        uploaded.append(link_to)
+        motion_note = ". Motion video recompressed and relinked"
+
+    if video_id and keep_motion:
+        update_job(asset_id, log="Linking the motion video to the new photo…")
+        emit_job_update(asset_id)
+        if not set_live_photo_link(env, new_id, link_to):
+            # Nothing is trashed yet; take the new uploads back out of the timeline.
+            for uploaded_id in uploaded:
+                trash_asset(env, uploaded_id)
+            return _replace_error(asset_id, name, codec, old_size, new_size, savings,
+                                  "Could not link the motion video – new upload moved to "
+                                  "trash, original kept", out_path)
+
     update_job(asset_id, log="Moving original to trash…")
     emit_job_update(asset_id)
     if not trash_asset(env, asset_id):
         return _replace_error(asset_id, name, codec, old_size, new_size, savings,
                               "Could not move original to trash", out_path)
 
+    if video_id and (not keep_motion or motion_out):
+        update_job(asset_id, log="Moving the old motion video to trash…")
+        emit_job_update(asset_id)
+        if not trash_asset(env, video_id):
+            return _replace_error(asset_id, name, codec, old_size, new_size, savings,
+                                  "Replaced, but the old motion video could not be deleted",
+                                  out_path)
+
     # Before "done": a finished job can be cleared, which would lose the path.
     discard_backup(asset_id)
+    if motion_out:
+        cleanup_temp(motion_out, job.get("_motion_backup_path"))
     update_job(asset_id, status="done",
-               log="Done – new asset created, original in trash")
+               log="Done – new asset created, original in trash" + motion_note)
     emit_job_update(asset_id)
     append_csv_log([utcnow_iso(), asset_id, name, codec or "",
                     old_size, new_size, savings, "done"])
@@ -503,6 +583,25 @@ def do_strip_motion(env, image_id, video_id, name, video_size):
     return True
 
 
+def _upload_hidden_video(env, job_id, out_path, video_name, old_video_id):
+    """Upload a recompressed motion clip as a hidden asset dated like the old one.
+    Returns (new_id, "") or (None, error)."""
+    meta = get_asset_meta(env, old_video_id)
+    new_id, status = upload_new_asset(env, out_path, video_name,
+                                      meta.get("fileCreatedAt"),
+                                      meta.get("fileModifiedAt"), "video/mp4")
+    if not new_id:
+        return None, f"Upload failed: {status}"
+    if status not in ("created", None):
+        return None, f"Upload detected as '{status}' – nothing changed"
+    update_job(job_id, new_id=new_id)
+    # Keep the motion video off the main timeline before changing the original.
+    if not update_asset(env, new_id, visibility="hidden"):
+        return None, (f"Could not hide uploaded video {new_id}; original kept. "
+                      "Uploaded clip needs manual cleanup")
+    return new_id, ""
+
+
 def do_recompress_motion(env, image_id, old_video_id, out_path, video_name,
                          old_size, new_size, savings):
     """Replace a Live/motion photo's video with a recompressed one: upload the
@@ -514,24 +613,10 @@ def do_recompress_motion(env, image_id, old_video_id, out_path, video_name,
         return _replace_error(image_id, video_name, "MOTION", old_size, new_size, savings,
                               "Compressed video missing", out_path)
 
-    meta = get_asset_meta(env, old_video_id)
-    new_id, status = upload_new_asset(env, out_path, video_name,
-                                      meta.get("fileCreatedAt"),
-                                      meta.get("fileModifiedAt"), "video/mp4")
+    new_id, error = _upload_hidden_video(env, image_id, out_path, video_name, old_video_id)
     if not new_id:
         return _replace_error(image_id, video_name, "MOTION", old_size, new_size, savings,
-                              f"Upload failed: {status}", out_path)
-    if status not in ("created", None):
-        return _replace_error(image_id, video_name, "MOTION", old_size, new_size, savings,
-                              f"Upload detected as '{status}' – nothing changed", out_path)
-
-    update_job(image_id, new_id=new_id)
-
-    # Keep the motion video off the main timeline before changing the original.
-    if not update_asset(env, new_id, visibility="hidden"):
-        return _replace_error(image_id, video_name, "MOTION", old_size, new_size, savings,
-                              f"Could not hide uploaded video {new_id}; original kept. "
-                              "Uploaded clip needs manual cleanup", out_path)
+                              error, out_path)
 
     update_job(image_id, log="Linking new motion video…")
     emit_job_update(image_id)
@@ -626,10 +711,10 @@ def _run_killable(cmd, asset_id, timeout=300):
     return proc.returncode, out or ""
 
 
-def _encode_ffmpeg_image(src, out, level, asset_id):
+def _encode_ffmpeg_image(src, out, level, asset_id, pix_fmt="yuvj420p"):
     """Encode JPEG with ffmpeg at -q:v `level` (2..31, higher = smaller).
     Returns (ok, err_text)."""
-    rc, output = _run_killable(build_ffmpeg_image_cmd(src, out, level), asset_id)
+    rc, output = _run_killable(build_ffmpeg_image_cmd(src, out, level, pix_fmt), asset_id)
     if rc != 0 or not os.path.isfile(out) or os.path.getsize(out) == 0:
         tail = [ln for ln in output.splitlines() if ln.strip()]
         return False, (tail[-1] if tail else "ffmpeg failed")
@@ -681,7 +766,7 @@ def _search_target_level(encode, levels, probe, target_size, asset_id, label, ma
     return (best if best is not None else len(levels) - 1), ""
 
 
-def compress_image_to_target(src, out, old_size, target_pct, asset_id):
+def compress_image_to_target(src, out, old_size, target_pct, asset_id, pix_fmt="yuvj420p"):
     """Compress a JPEG so its size shrinks by roughly `target_pct` percent.
 
     Tries ffmpeg first (cross-platform); if ffmpeg can't decode the file, falls
@@ -711,7 +796,8 @@ def compress_image_to_target(src, out, old_size, target_pct, asset_id):
     attempts = []
     if have_ffmpeg:
         attempts.append(("ffmpeg", _FFMPEG_LEVELS,
-                         lambda lvl, dst: _encode_ffmpeg_image(src, dst, lvl, asset_id), True))
+                         lambda lvl, dst: _encode_ffmpeg_image(src, dst, lvl, asset_id, pix_fmt),
+                         True))
     if have_sips:
         attempts.append(("sips", _SIPS_LEVELS,
                          lambda lvl, dst: _encode_sips_image(src, dst, lvl, asset_id), False))
@@ -746,17 +832,21 @@ def compress_image_to_target(src, out, old_size, target_pct, asset_id):
     return False, None, 0.0
 
 
-def _encode_jxl_image(src, out, asset_id, threads=None, preview=True, distance=0):
-    """Encode JPEG to JPEG XL, optionally rendering the result for review."""
+def _encode_jxl_image(src, out, asset_id, threads=None, preview=True, distance=0,
+                      pixels=False):
+    """Encode JPEG, or a decoded PNG when `pixels` is set, to JPEG XL,
+    optionally rendering the result for review."""
     # cjxl ignores --lossless_jpeg for non-JPEG input and defaults to a lossy
     # pixel encode. Check the actual file before promising JPEG reconstruction.
     try:
         with open(src, "rb") as source:
-            if source.read(2) != b"\xff\xd8":
+            if not pixels and source.read(2) != b"\xff\xd8":
                 return False, "JPEG XL requires JPEG file contents"
     except OSError as exc:
         return False, str(exc)
     commands = [build_cjxl_cmd(src, out, threads, distance=distance)]
+    if pixels:
+        commands[0].append("--container=1")  # exiftool only writes into a boxed file
     if preview:
         commands.append(["djxl", out, image_preview_path(out)])
     for cmd in commands:
@@ -775,20 +865,18 @@ def _image_skip_reason(src_fmt: str, params: dict) -> tuple[str, str]:
         return "", ""
     fmt = src_fmt.lower()
     photo_format = params.get("photo_format", "jpeg")
-    is_raw = fmt in RAW_PHOTO_EXTS
     if photo_format not in ("jpeg", "jxl"):
         return "Unsupported photo output format", "bad format"
-    if photo_format == "jxl":
-        if fmt not in JPEG_PHOTO_EXTS:
-            return f"{src_fmt}: JPEG XL requires a JPEG original", "not JPEG"
-        if not (shutil.which("cjxl") and shutil.which("djxl")):
-            return "JPEG XL requires cjxl and djxl (install libjxl-tools)", "no cjxl"
-    if is_raw and not params.get("compress_raw", False):
+    if photo_format == "jxl" and not (shutil.which("cjxl") and shutil.which("djxl")):
+        return "JPEG XL requires cjxl and djxl (install libjxl-tools)", "no cjxl"
+    if fmt in RAW_PHOTO_EXTS and not params.get("compress_raw", False):
         return f"{src_fmt}: RAW is not compressed (enable it in settings)", "RAW off"
-    if is_raw and not shutil.which("sips"):
-        return f"{src_fmt}: RAW compression requires 'sips' (macOS only)", "no sips"
-    if not is_raw and fmt not in JPEG_PHOTO_EXTS:
-        return f"{src_fmt}: only JPEG is compressed (no format conversion)", "not JPEG"
+    if photo_convert.needs_pixel_path(fmt, None, params.get("photo_max_mp")):
+        if not photo_convert.decoder_for(fmt):
+            return f"{src_fmt}: no decoder for this format", "no decoder"
+        if not shutil.which("exiftool"):
+            return ("Converting photos requires exiftool (install libimage-exiftool-perl)",
+                    "no exiftool")
     return "", ""
 
 
@@ -816,9 +904,10 @@ def process_image_job(env, asset_id, params):
     out_path = os.path.join(WORK_DIR, f"{asset_id}_out{output_ext}")
 
     fmt = src_fmt.lower()
-    is_raw = fmt in RAW_PHOTO_EXTS
+    max_mp = params.get("photo_max_mp") or None
     # Format conversions need the output extension in the uploaded filename.
-    upload_name = (os.path.splitext(name)[0] + output_ext) if is_raw or is_jxl else name
+    upload_name = (os.path.splitext(name)[0] + output_ext
+                   if is_jxl or fmt not in JPEG_PHOTO_EXTS else name)
 
     skip_msg, skip_reason = _image_skip_reason(src_fmt, params)
     if skip_msg:
@@ -873,23 +962,98 @@ def process_image_job(env, asset_id, params):
                         old_size, None, None, "downloaded"])
         return
 
+    pixel_path = photo_convert.needs_pixel_path(fmt, None, max_mp)
+    if pixel_path and fmt in JPEG_PHOTO_EXTS:
+        width, height, _ = probe_image(src_path)
+        pixel_path = photo_convert.needs_pixel_path(
+            fmt, width * height / 1e6 if width and height else None, max_mp)
+    update_job(asset_id, pixel_path=pixel_path)
+
+    def skip_downloaded(log, reason):
+        update_job(asset_id, status="skipped", log=log, skip_reason=reason)
+        emit_job_update(asset_id)
+        append_csv_log([utcnow_iso(), asset_id, name, src_fmt, old_size, None, None, "skipped"])
+        broadcast_queue_update()
+        cleanup_temp(src_path)
+
+    # No tool here carries a gain map into the output, so converting would lose the HDR.
+    if photo_convert.has_gain_map(src_path):
+        return skip_downloaded("Ultra HDR photo (gain map) skipped: converting would lose "
+                               "the HDR", "Ultra HDR")
+    if pixel_path:
+        skip_msg, skip_reason = photo_convert.still_problem(src_path, fmt)
+        if skip_msg:
+            return skip_downloaded(skip_msg, skip_reason)
+
+    # A motion photo carries its clip after the JPEG. Immich keeps its own copy
+    # as the linked video, so encode the still alone; the backup keeps the clip.
+    video_id = (params.get("_source_detail") or {}).get("livePhotoVideoId")
+    keep_motion = params.get("motion_action", "remove") != "remove"
+    clip = photo_convert.motion_trailer(src_path)
+    if clip is None:
+        return skip_downloaded("Could not confirm where the embedded motion clip starts",
+                               "unknown motion layout")
+    if clip and not video_id and keep_motion:
+        return skip_downloaded("Immich has not extracted the embedded motion clip, so "
+                               "replacing the photo would lose it", "motion not extracted")
+    still_path = src_path
+    if clip:
+        still_path = os.path.join(WORK_DIR, f"{asset_id}_still{ext}")
+        ok, err = photo_convert.strip_motion(src_path, still_path, clip, asset_id)
+        if not ok:
+            cleanup_temp(still_path)
+            update_job(asset_id, status="error", log=f"Motion clip: {err}")
+            emit_job_update(asset_id)
+            append_csv_log([utcnow_iso(), asset_id, name, src_fmt, old_size, None, None, "error"])
+            cleanup_temp(src_path)
+            return
+        # Savings count against the still: the clip already lives on as Immich's video.
+        old_size = os.path.getsize(still_path)
+        update_job(asset_id, old_size=old_size)
+    motion_note = None
+    if video_id:
+        motion_note = ("Motion video kept (relinked)" if keep_motion
+                       else "Motion video removed (setting: Remove)")
+    elif clip:
+        motion_note = "Embedded motion clip removed (setting: Remove)"
+    update_job(asset_id, motion_note=motion_note)
     jxl_setting = (f"lossy, distance {jxl_distance}" if jxl_distance > 0
-                   else "lossless JPEG reconstruction")
+                   else "lossless" if pixel_path else "lossless JPEG reconstruction")
     update_job(asset_id, status="encoding", progress=0.0,
                log=(f"Compressing photo to JPEG XL ({jxl_setting})" if is_jxl else
                     f"Compressing photo (target ~{float(target_savings):.0f}%)"))
     emit_job_update(asset_id)
 
-    if is_jxl:
+    ok, used_q, encode_src = True, jxl_setting, still_path
+    decoded_path = os.path.join(WORK_DIR, f"{asset_id}_decoded.png")
+    if pixel_path:
+        encode_src = decoded_path
+        ok, err = photo_convert.decode_to_png(still_path, fmt, decoded_path, max_mp, asset_id)
+        if ok and not is_jxl and photo_convert.has_transparency(decoded_path, asset_id):
+            ok, err = False, "JPEG cannot keep the transparency of this photo"
+        if not ok:
+            update_job(asset_id, log=f"Decode: {err}")
+    if ok and is_jxl:
         ok, err = _encode_jxl_image(
-            src_path, out_path, asset_id, params.get("threads"),
-            preview=confirm or not replace, distance=jxl_distance)
-        used_q = jxl_setting
+            encode_src, out_path, asset_id, params.get("threads"),
+            preview=confirm or not replace, distance=jxl_distance, pixels=pixel_path)
         if not ok:
             update_job(asset_id, log=f"JPEG XL: {err}")
-    else:
+    elif ok:
+        # Probe the original: the decoded PNG is RGB and would always read as 4:4:4.
+        pix_fmt = jpeg_pix_fmt(still_path, params.get("photo_jpeg_chroma", "source"))
         ok, used_q, achieved = compress_image_to_target(
-            src_path, out_path, old_size, target_savings, asset_id)
+            encode_src, out_path, old_size, target_savings, asset_id, pix_fmt)
+    if ok and pixel_path:
+        ok, err = photo_convert.copy_metadata(still_path, out_path, asset_id)
+        if not ok:
+            update_job(asset_id, log=f"Metadata: {err}")
+    if ok and clip and photo_convert.motion_trailer(out_path, quick=False) != 0:
+        ok = False
+        update_job(asset_id, log="Motion tags remain in the new file")
+    cleanup_temp(decoded_path)
+    if still_path != src_path:
+        cleanup_temp(still_path)
     if not ok or not os.path.isfile(out_path) or is_cancelled(asset_id):
         cancelled = is_cancelled(asset_id)
         # Keep the encoder's error message unless the user cancelled.
@@ -906,9 +1070,50 @@ def process_image_job(env, asset_id, params):
     savings = old_size - new_size
     savings_pct = (savings / old_size * 100.0) if old_size else 0.0
     min_savings = params.get("min_savings", 10)
+    still_ok = savings > 0 and savings_pct >= float(min_savings)
 
-    if savings <= 0 or savings_pct < float(min_savings):
+    # With Recompress, the linked motion video is re-encoded too. Each part is
+    # checked on its own, so a video that grows never rides along with the still.
+    motion_out, video_backup, video_new, video_note = None, None, None, None
+    motion_detail = params.get("_motion_detail") or {}
+    if video_id and params.get("motion_action") == "recompress" and motion_detail:
+        video_name = motion_detail.get("originalFileName") or f"{video_id}.mov"
+        video_old = _asset_size(motion_detail)
+        motion_out = os.path.join(WORK_DIR, f"{asset_id}_motion_out.mp4")
+        ok, log, video_backup = _encode_motion_video(
+            env, asset_id, video_id, video_name, video_old, params, motion_out,
+            os.path.join(backup_dir, secure_filename(f"{asset_id}_motion_{video_name}"))
+            if replace else None)
+        if is_cancelled(asset_id):
+            update_job(asset_id, status="cancelled", log="Cancelled")
+            emit_job_update(asset_id)
+            append_csv_log([utcnow_iso(), asset_id, name, src_fmt, old_size, None, None,
+                            "cancelled"])
+            cleanup_temp(src_path, motion_out, video_backup)
+            cleanup_encoded_file(out_path)
+            return
+        if ok:
+            video_new = os.path.getsize(motion_out)
+            video_saved = video_old - video_new
+            video_pct = (video_saved / video_old * 100.0) if video_old else 0.0
+            if video_saved <= 0 or video_pct < float(min_savings):
+                log = savings_shortfall(video_saved, video_pct, min_savings)[0]
+                video_note = f"Motion video kept, not smaller: {log}"
+                ok = False
+        else:
+            video_note = f"Motion video kept: {log}"
+        if not ok:
+            cleanup_temp(motion_out, video_backup)
+            motion_out, video_backup, video_new = None, None, None
+        update_job(asset_id, video_old_size=video_old, video_new_size=video_new,
+                   video_note=video_note, _video_id=video_id, _video_name=video_name)
+        if video_note:
+            motion_note = video_note
+
+    if not still_ok and not motion_out:
         log, skip_reason = savings_shortfall(savings, savings_pct, min_savings)
+        if video_note:
+            log = f"Photo: {log}. {video_note}"
         update_job(asset_id, status="skipped", new_size=new_size,
                    savings=max(savings, 0), savings_human=human_size(max(savings, 0)),
                    log=log, skip_reason=skip_reason)
@@ -919,33 +1124,47 @@ def process_image_job(env, asset_id, params):
         cleanup_encoded_file(out_path)
         return
 
+    still_kept = not still_ok
+    if still_kept:
+        # Only the video is replaced, the way the Live Photos tab does it.
+        cleanup_encoded_file(out_path)
+        out_path = None
+        motion_note = "Photo kept, not smaller; motion video recompressed"
+    total = (0 if still_kept else savings) + ((video_old - video_new) if motion_out else 0)
     update_job(asset_id, status="encoded", progress=100.0, new_size=new_size,
-               savings=savings, savings_human=human_size(savings),
+               savings=total, savings_human=human_size(total),
                new_codec=output_codec, _output_mime=output_mime,
-               _upload_name=upload_name,
+               _upload_name=upload_name, still_kept=still_kept, motion_note=motion_note,
+               _motion_out_path=motion_out,
                log=(f"Compressed: {savings_pct:.0f}% saved ({used_q})" if is_jxl else
-                    f"Compressed: {savings_pct:.0f}% saved (target ~{float(target_savings):.0f}%, {used_q})"))
+                    f"Compressed: {savings_pct:.0f}% saved (target ~{float(target_savings):.0f}%, {used_q})")
+               + (f". {motion_note}" if motion_note else ""))
     emit_job_update(asset_id)
 
     if not replace:
         update_job(asset_id, status="encoded", _out_path=out_path,
-                   log=f"Compressed, saved to {out_path}")
+                   log=f"Compressed, saved to {out_path or motion_out}")
         emit_job_update(asset_id)
         append_csv_log([utcnow_iso(), asset_id, name, src_fmt,
-                        old_size, new_size, savings, "encoded"])
+                        old_size, new_size, total, "encoded"])
         cleanup_temp(src_path)
         return
 
-    # secure_filename keeps the original name readable while stripping path
-    # separators and ".." so a crafted asset name cannot escape backup_dir.
-    backup_path = os.path.join(backup_dir, secure_filename(f"{asset_id}_{name}"))
-    try:
-        shutil.copy2(src_path, backup_path)
-    except OSError:
-        cleanup_temp(backup_path)
-        backup_path = None
-    cleanup_temp(src_path)
-    record_backup(asset_id, backup_path)
+    if still_kept:
+        cleanup_temp(src_path)
+        record_backup(asset_id, video_backup)
+    else:
+        # secure_filename keeps the original name readable while stripping path
+        # separators and ".." so a crafted asset name cannot escape backup_dir.
+        backup_path = os.path.join(backup_dir, secure_filename(f"{asset_id}_{name}"))
+        try:
+            shutil.copy2(src_path, backup_path)
+        except OSError:
+            cleanup_temp(backup_path)
+            backup_path = None
+        cleanup_temp(src_path)
+        record_backup(asset_id, backup_path)
+        update_job(asset_id, _motion_backup_path=video_backup)
 
     if confirm:
         update_job(asset_id, status="review", _out_path=out_path,
@@ -956,6 +1175,46 @@ def process_image_job(env, asset_id, params):
 
     do_replace(env, asset_id, upload_name, out_path, old_size, new_size,
                savings, src_fmt, mime=output_mime)
+
+
+def _encode_motion_video(env, asset_id, video_id, video_name, video_size, params, out_path,
+                        backup_path):
+    """Download a Live Photo's video, copy it to `backup_path` (None skips the
+    backup) and re-encode it with the Video settings. On failure every file it
+    wrote is removed. Returns (ok, error_log, backup_path)."""
+    vext = os.path.splitext(video_name)[1] or ".mov"
+    src_path = os.path.join(WORK_DIR, f"{asset_id}_motion_src{vext}")
+    update_job(asset_id, log="Downloading motion video…")
+    emit_job_update(asset_id)
+    ok, reason = _download_for_job(env, asset_id, video_id, src_path, video_size,
+                                   label="Downloading motion video")
+    if not ok:
+        cleanup_temp(src_path)
+        return False, ("Cancelled" if reason == "cancelled"
+                       else f"Motion video download failed: {reason}"), None
+    if backup_path:
+        try:
+            shutil.copy2(src_path, backup_path)
+        except OSError:
+            cleanup_temp(backup_path)
+            backup_path = None
+    _, src_duration = ffprobe_info(src_path)
+    # Nothing to kill yet: a cancel during the backup or probe is only seen here.
+    if is_cancelled(asset_id):
+        cleanup_temp(src_path, backup_path)
+        return False, "Cancelled", None
+    update_job(asset_id, status="encoding", progress=0.0, log="Compressing motion video")
+    emit_job_update(asset_id)
+    cmd = build_handbrake_cmd(src_path, out_path, params.get("encoder", "x265"),
+                              params.get("quality", 24), params.get("preset", "medium"),
+                              params.get("resolution", "original"), params.get("threads"))
+    ok = run_handbrake(cmd, asset_id, src_duration)
+    cancelled = is_cancelled(asset_id)
+    cleanup_temp(src_path)
+    if cancelled or not ok or not os.path.isfile(out_path):
+        cleanup_temp(out_path, backup_path)
+        return False, "Cancelled" if cancelled else "HandBrake error", None
+    return True, "", backup_path
 
 
 def _end_motion_job(asset_id, name, video_size, status, log, *temp_paths):
@@ -1035,49 +1294,19 @@ def process_motionphoto_job(env, asset_id, params):
         return
 
     if motion_action == "recompress":
-        vext = os.path.splitext(video_name)[1] or ".mov"
-        src_path = os.path.join(WORK_DIR, f"{asset_id}_motion_src{vext}")
         out_path = os.path.join(WORK_DIR, f"{asset_id}_out.mp4")
-        update_job(asset_id, log="Downloading motion video…")
-        emit_job_update(asset_id)
-        ok, reason = _download_for_job(env, asset_id, video_id, src_path, video_size,
-                                       label="Downloading motion video")
+        ok, log, backup_path = _encode_motion_video(
+            env, asset_id, video_id, video_name, video_size, params, out_path,
+            os.path.join(backup_dir, f"{video_id}_{video_name}"))
         if not ok:
-            _stop_motion_download(asset_id, name, video_size, reason, src_path)
-            return
-
-        backup_path = os.path.join(backup_dir, f"{video_id}_{video_name}")
-        try:
-            shutil.copy2(src_path, backup_path)
-        except OSError:
-            cleanup_temp(backup_path)
-            backup_path = None
-
-        _, src_duration = ffprobe_info(src_path)
-        # Nothing to kill yet: a cancel during the backup or probe is only seen here.
-        if is_cancelled(asset_id):
-            _end_motion_job(asset_id, name, video_size, "cancelled", "Cancelled",
-                            src_path, backup_path)
-            return
-        update_job(asset_id, status="encoding", progress=0.0, log="Compressing motion video")
-        emit_job_update(asset_id)
-        cmd = build_handbrake_cmd(src_path, out_path, params.get("encoder", "x265"),
-                                  params.get("quality", 24), params.get("preset", "medium"),
-                                  params.get("resolution", "original"), params.get("threads"))
-        ok = run_handbrake(cmd, asset_id, src_duration)
-        cancelled = is_cancelled(asset_id)
-        if cancelled or not ok or not os.path.isfile(out_path):
             _end_motion_job(asset_id, name, video_size,
-                            "cancelled" if cancelled else "error",
-                            "Cancelled" if cancelled else "HandBrake error",
-                            src_path, out_path, backup_path)
+                            "cancelled" if is_cancelled(asset_id) else "error", log)
             return
 
         new_size = os.path.getsize(out_path)
         savings = video_size - new_size
         savings_pct = (savings / video_size * 100.0) if video_size else 0.0
         min_savings = params.get("min_savings", 10)
-        cleanup_temp(src_path)
         if savings_pct < float(min_savings):
             log, skip_reason = savings_shortfall(savings, savings_pct, min_savings)
             update_job(asset_id, status="skipped", new_size=new_size,
@@ -1348,21 +1577,38 @@ def _asset_size(detail: dict) -> int:
     )
 
 
+def _pixels(detail: dict) -> int:
+    exif = detail.get("exifInfo") or {}
+    return _non_negative_int(
+        exif.get("exifImageWidth") or exif.get("imageWidth")
+    ) * _non_negative_int(exif.get("exifImageHeight") or exif.get("imageHeight"))
+
+
 def _jxl_scratch_size(params: dict, detail: dict, size: int) -> int:
     """JPEG XL output kept for review or download is decoded for a preview."""
     if params.get("photo_format") != "jxl" or not (
         params.get("confirm", True) or not params.get("replace", True)
     ):
         return 0
-    exif = detail.get("exifInfo") or {}
-    pixels = _non_negative_int(
-        exif.get("exifImageWidth") or exif.get("imageWidth")
-    ) * _non_negative_int(exif.get("exifImageHeight") or exif.get("imageHeight"))
-    return max(size, pixels * 4 + 1024**2)
+    return max(size, _pixels(detail) * 8 + 1024**2)  # up to 16-bit RGBA
+
+
+def _png_scratch_size(params: dict, detail: dict, size: int) -> int:
+    """The decoded PNG of a conversion, at most 16-bit RGB. RAW and JPEG XL
+    decoders write their own copy first."""
+    fmt = os.path.splitext(params.get("name") or "")[1].lstrip(".")
+    pixels = _pixels(detail)
+    if not photo_convert.needs_pixel_path(
+            fmt, pixels / 1e6 if pixels else None, params.get("photo_max_mp")):
+        return 0
+    # shortcut: without dimensions, assume 30x the file; a flat PNG can decode larger.
+    decoded = pixels * 6 if pixels else size * 30
+    return decoded * (1 if photo_convert.decoder_for(fmt) == "ffmpeg" else 2)
 
 
 def _disk_needs(
-    asset_id: str, params: dict, detail: dict, size: int, backup_dir: str
+    asset_id: str, params: dict, detail: dict, size: int, backup_dir: str,
+    motion_size: int = 0,
 ) -> tuple[scheduler.DiskNeed, ...]:
     """What a job may still write. Work files are named after the job id; a
     Live Photo's motion backup is named after its linked video id."""
@@ -1384,8 +1630,15 @@ def _disk_needs(
     work_size = size * 2
     if params.get("media") == "image":
         # JPEG quality search briefly keeps a probe as well as the final output.
-        work_size += size + _jxl_scratch_size(params, detail, size)
-    backup = (scheduler.DiskNeed(backup_dir, size, work_prefix),) if replace else ()
+        work_size += (size + _jxl_scratch_size(params, detail, size)
+                      + _png_scratch_size(params, detail, size))
+        name_ext = os.path.splitext(params.get("name") or "")[1].lstrip(".").lower()
+        if name_ext in JPEG_PHOTO_EXTS:
+            work_size += size  # a motion photo's still, cut from its clip
+        # With Recompress, the linked video is downloaded, encoded and backed up too.
+        work_size += motion_size * 2
+    backup_size = size + (motion_size if params.get("media") == "image" else 0)
+    backup = (scheduler.DiskNeed(backup_dir, backup_size, work_prefix),) if replace else ()
     return (scheduler.DiskNeed(WORK_DIR, work_size, work_prefix),) + backup
 
 
@@ -1425,6 +1678,14 @@ def _prepare_job(asset_id: str) -> scheduler.PreparedWork:
                 return False
 
             return scheduler.PreparedWork(run=skip_image, assets=frozenset(assets))
+        video_id = detail.get("livePhotoVideoId")
+        if (video_id and params.get("motion_action") == "recompress"
+                and not params.get("download_only")):
+            # The photo job also re-encodes its motion video, so claim it too.
+            assets.add(video_id)
+            motion = fetch_asset(env, video_id)
+            if motion.get("isTrashed"):
+                raise RuntimeError("Motion video is in the Immich trash. Refresh the selection.")
     elif params.get("media") != "motionphoto" and not params.get("download_only"):
         skip_codecs = [
             codec.strip().lower()
@@ -1441,7 +1702,8 @@ def _prepare_job(asset_id: str) -> scheduler.PreparedWork:
     os.makedirs(WORK_DIR, exist_ok=True)
     backup_dir = params.get("backup_dir") or BACKUP_DIR
     os.makedirs(backup_dir, exist_ok=True)
-    disk = _disk_needs(asset_id, params, detail, size, backup_dir)
+    disk = _disk_needs(asset_id, params, detail, size, backup_dir,
+                       _asset_size(motion) if params.get("media") == "image" else 0)
     update_job(
         asset_id,
         _key_idx=resolved_idx,

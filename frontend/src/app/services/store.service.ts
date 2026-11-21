@@ -75,6 +75,16 @@ export class StoreService {
   readonly media = signal<MediaType>('video');
   readonly videoMinGb = signal(0.5);
   readonly photoMinMb = signal(10);
+  /** Blank bounds are open. The size range also applies to Live Photo motion clips. */
+  readonly photoMaxMb = signal<number | null>(null);
+  readonly photoMinMp = signal<number | null>(null);
+  readonly photoMaxMp = signal<number | null>(null);
+  readonly jxlLosslessOnly = signal(false);
+  /** Formats chosen in the grid filter bar, and the counts the last scan returned. */
+  readonly formatFilter = signal<string[]>([]);
+  readonly formats = signal<Record<string, number>>({});
+  readonly jxlUnchecked = signal(0);
+  readonly scannedAt = signal<string | null>(null);
   /** Dates entered in this IANA timezone describe whole calendar days. */
   readonly metadata = signal<MetadataFilter>(emptyMetadataFilter());
   readonly metadataDescription = computed(() => {
@@ -111,6 +121,7 @@ export class StoreService {
   readonly encoders = signal<EncoderInfo[]>([]);
   readonly cpuCount = signal(1);
   readonly jpegXlAvailable = signal(false);
+  readonly rawAvailable = signal(false);
   /** The encoder spec for the current settings, or undefined until caps load. */
   readonly selectedEncoder = computed(() =>
     this.encoders().find(e => e.id === this.settings().encoder));
@@ -262,6 +273,11 @@ export class StoreService {
       if (b.media === 'image' || b.media === 'video' || b.media === 'motionphoto') this.media.set(b.media);
       if (Number.isFinite(+b.videoMinGb)) this.videoMinGb.set(+b.videoMinGb);
       if (Number.isFinite(+b.photoMinMb)) this.photoMinMb.set(+b.photoMinMb);
+      for (const [key, target] of [['photoMaxMb', this.photoMaxMb], ['photoMinMp', this.photoMinMp],
+        ['photoMaxMp', this.photoMaxMp]] as const) {
+        if (typeof b[key] === 'number' && Number.isFinite(b[key])) target.set(b[key]);
+      }
+      if (typeof b.jxlLosslessOnly === 'boolean') this.jxlLosslessOnly.set(b.jxlLosslessOnly);
       if (typeof b.captureDateFrom === 'string') this.captureDateFrom.set(b.captureDateFrom);
       if (typeof b.captureDateTo === 'string') this.captureDateTo.set(b.captureDateTo);
       if (typeof b.captureTimezone === 'string' && b.captureTimezone) {
@@ -322,6 +338,8 @@ export class StoreService {
       localStorage.setItem(LS_BROWSE, JSON.stringify({
         media: this.media(), videoMinGb: this.videoMinGb(),
         photoMinMb: this.photoMinMb(), perPage: this.perPage(),
+        photoMaxMb: this.photoMaxMb(), photoMinMp: this.photoMinMp(), photoMaxMp: this.photoMaxMp(),
+        jxlLosslessOnly: this.jxlLosslessOnly(),
         selectedKeys: this.selectedKeys(), metadata: this.metadata(),
         captureDateFrom: this.captureDateFrom(), captureDateTo: this.captureDateTo(),
         captureTimezone: this.captureTimezone(),
@@ -349,6 +367,7 @@ export class StoreService {
     this.encoders.set(encoders);
     this.cpuCount.set(cpu);
     this.jpegXlAvailable.set(caps.jpeg_xl === true);
+    this.rawAvailable.set(caps.raw === true);
     this.settings.update(s => {
       const next = { ...s };
       // Default/clamp the CPU-core count to the detected max (0 = unset → all).

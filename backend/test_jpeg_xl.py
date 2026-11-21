@@ -48,7 +48,7 @@ class PhotoOutputTest(unittest.TestCase):
         Path(path).write_bytes(b"original jpeg" * 100)
         return True, ""
 
-    def encode(self, src, out, asset_id, threads, preview=True, distance=0):
+    def encode(self, src, out, asset_id, threads, preview=True, distance=0, pixels=False):
         Path(out).write_bytes(b"encoded jxl" * 50)
         if preview:
             Path(image_preview_path(out)).write_bytes(b"png-preview")
@@ -93,14 +93,14 @@ class PhotoOutputTest(unittest.TestCase):
         job = self.process(photo_jxl_distance=1.5, photo_target_savings="not applicable")
         self.assertEqual(job["status"], "review")
         self.assertEqual(job["photo_jxl_distance"], 1.5)
-        self.assertEqual(self.encoder.call_args.kwargs, {"preview": True, "distance": 1.5})
+        self.assertEqual(self.encoder.call_args.kwargs, {"preview": True, "distance": 1.5, "pixels": False})
         self.assertEqual(job["_output_mime"], "image/jxl")
         self.assertEqual(job["_upload_name"], "holiday.jxl")
         self.assertTrue(self.preview.exists())
 
     def test_lossy_automatic_replacement_skips_preview_and_uses_jxl_mime(self):
         self.process(photo_jxl_distance=2, confirm=False)
-        self.assertEqual(self.encoder.call_args.kwargs, {"preview": False, "distance": 2})
+        self.assertEqual(self.encoder.call_args.kwargs, {"preview": False, "distance": 2, "pixels": False})
         self.assertEqual(self.replace.call_args.kwargs["mime"], "image/jxl")
 
     def test_keep_original_retains_jxl_and_preview_until_discarded(self):
@@ -133,10 +133,11 @@ class PhotoOutputTest(unittest.TestCase):
                 self.assertIn("libjxl-tools", job["log"])
         self.download.assert_not_called()
 
-    def test_non_jpeg_inputs_are_not_converted_even_with_raw_enabled(self):
-        for name in ("photo.dng", "photo.png", "photo.heic", "photo.jxl"):
+    def test_formats_without_a_safe_decoder_are_skipped(self):
+        for name in ("photo.heic", "photo.avif", "photo.gif"):
             with self.subTest(name=name):
-                self.assertEqual(self.process(name=name, compress_raw=True)["status"], "skipped")
+                job = self.process(name=name, compress_raw=True)
+                self.assertEqual((job["status"], job["skip_reason"]), ("skipped", "no decoder"))
         self.download.assert_not_called()
         self.encoder.assert_not_called()
 
@@ -213,6 +214,33 @@ class PhotoOutputTest(unittest.TestCase):
                 self.assertIn("distance", response.json["error"])
         self.assertNotIn(self.asset_id, _queue_order)
         self.assertNotIn(self.asset_id, _jobs)
+
+    def test_invalid_max_megapixels_and_chroma_are_rejected(self):
+        for setting in ({"photo_max_mp": -1}, {"photo_max_mp": "5"}, {"photo_max_mp": True},
+                        {"photo_max_mp": float("nan")}, {"photo_max_mp": float("inf")},
+                        {"photo_jpeg_chroma": "422"}, {"photo_jpeg_chroma": None}):
+            with self.subTest(setting=setting):
+                response = self.client.post("/api/enqueue", json={
+                    "ids": [self.asset_id], "media": "image", **setting})
+                self.assertEqual(response.status_code, 400)
+        self.assertNotIn(self.asset_id, _jobs)
+
+    def test_enqueue_keeps_max_megapixels_and_chroma(self):
+        for setting, expected in (({}, (None, "source")),
+                                  ({"photo_max_mp": 0}, (None, "source")),
+                                  ({"photo_max_mp": 12.5, "photo_jpeg_chroma": "444"},
+                                   (12.5, "444"))):
+            with (
+                self.subTest(setting=setting),
+                patch("backend.routes.schedule_job"),
+                patch("backend.routes.broadcast_queue_update"),
+            ):
+                _jobs.pop(self.asset_id, None)
+                response = self.client.post("/api/enqueue", json={
+                    "ids": [self.asset_id], "media": "image", **setting})
+                self.assertEqual(response.status_code, 200)
+                job = _jobs[self.asset_id]
+                self.assertEqual((job["photo_max_mp"], job["photo_jpeg_chroma"]), expected)
 
     def test_enqueue_preserves_distance_and_defaults_to_lossless(self):
         for setting in ({}, {"photo_jxl_distance": 0}, {"photo_jxl_distance": 0.5},

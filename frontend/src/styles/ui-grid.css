@@ -5,6 +5,15 @@
    the shadow root by media-grid.ts. Row and header heights are set there
    too, so the paddings below only position content inside a fixed box. */
 
+/* The grid sizes its scrolling body from its own element's height and falls
+   back to ten rows when that height is zero, which left the rest of the card
+   empty. Filling the shell gives the rows all the space down to the pager. */
+app-ui-grid,
+app-ui-grid ui-grid-element {
+  display: block;
+  height: 100%;
+}
+
 app-ui-grid {
   font-size: 13px;
 

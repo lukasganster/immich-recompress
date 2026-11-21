@@ -392,7 +392,9 @@ export class MediaGridComponent implements OnInit, OnDestroy {
   }
 
   /** Fetch the asset list. Pass `showOverlay` for user-initiated heavy loads
-   *  (Select Media apply) so a "Loading …" dialog covers the pending request. */
+   *  (Select Media apply, Rescan, Try again) so a "Loading …" dialog covers the
+   *  pending request. Those are also the only loads that rescan Immich; every
+   *  other change reuses the server's cached scan. */
   load(showOverlay = false): void {
     const s = this.store;
     if (showOverlay) s.loading.set(true);
@@ -407,9 +409,18 @@ export class MediaGridComponent implements OnInit, OnDestroy {
       codec: s.codec() || undefined, user: s.userFilter() || undefined,
       search: s.search() || undefined, keys: s.selectedKeys(),
       captureDates: s.captureDates(), metadata: s.metadata(),
+      ...(s.media() === 'video' ? {} : { max_mb: s.photoMaxMb() }),
+      ...(s.media() === 'image' ? {
+        min_mp: s.photoMinMp(), max_mp: s.photoMaxMp(),
+        jxl_lossless: s.jxlLosslessOnly(), formats: s.formatFilter(),
+      } : {}),
+      refresh: showOverlay,
     }).subscribe({
       next: data => {
         s.videos.set(data.assets ?? []);
+        s.formats.set(data.formats ?? {});
+        s.jxlUnchecked.set(data.jxl_unchecked ?? 0);
+        s.scannedAt.set(data.scanned_at ?? null);
         s.total.set(data.total ?? 0);
         s.totalSize.set(data.total_size ?? 0);
         s.totalPotential.set(data.total_potential ?? 0);
@@ -426,6 +437,7 @@ export class MediaGridComponent implements OnInit, OnDestroy {
         s.loadError.set(response.error?.error
           ?? 'Could not reach the backend to list assets. Check that Immich is up and the API key is still valid, then try again.');
         s.videos.set([]);
+        s.jxlUnchecked.set(0);
         s.clearSelection();
         s.total.set(0);
         s.totalSize.set(0);

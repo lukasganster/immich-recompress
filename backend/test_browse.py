@@ -261,5 +261,105 @@ class BrowseRoutesTest(unittest.TestCase):
                 self.assertFalse(routes._asset_cache)
 
 
+def photo(n, name="p.jpg", mb=1, width=None, height=None):
+    exif = {"fileSizeInByte": int(mb * 1024 ** 2)}
+    if width:
+        exif.update(exifImageWidth=width, exifImageHeight=height)
+    return {"id": f"40000000-0000-4000-8000-{n:012d}", "ownerId": "user-a", "type": "IMAGE",
+            "originalFileName": name, "exifInfo": exif}
+
+
+class PhotoRangeFilterTest(unittest.TestCase):
+    def setUp(self):
+        app = Flask(__name__)
+        app.register_blueprint(routes.bp)
+        self.client = app.test_client()
+        routes._asset_cache.clear()
+        one_key = {"url": "https://immich.test", "api_keys": ["owner"], "api_key": "owner"}
+        for target, name, value in ((routes, "get_env", one_key), (routes, "fetch_users", []),
+                                    (immich_api, "owner_name_for", "Owner")):
+            mock = patch.object(target, name, return_value=value)
+            mock.start()
+            self.addCleanup(mock.stop)
+
+    def names(self, query, assets):
+        with patch.object(routes, "search_metadata_all", return_value=assets):
+            body = self.client.get("/api/assets?media=image&" + query).get_json()
+        return sorted(a["name"] for a in body["assets"]), body
+
+    def test_max_mb_excludes_larger(self):
+        assets = [photo(1, "one.jpg", 1), photo(2, "five.jpg", 5), photo(3, "twenty.jpg", 20)]
+        self.assertEqual(self.names("min_mb=2&max_mb=10", assets)[0], ["five.jpg"])
+
+    def test_megapixel_range(self):
+        assets = [photo(1, "big.jpg", width=4000, height=3000),
+                  photo(2, "small.jpg", width=2000, height=1500), photo(3, "none.jpg")]
+        self.assertEqual(self.names("min_mp=5", assets)[0], ["big.jpg"])
+        self.assertEqual(self.names("max_mp=5", assets)[0], ["small.jpg"])
+        summary = self.names("", assets)[1]["assets"]
+        self.assertEqual({a["name"]: a["megapixels"] for a in summary},
+                         {"big.jpg": 12.0, "small.jpg": 3.0, "none.jpg": None})
+
+    def test_format_filter_and_facets(self):
+        assets = [photo(1, "a.tif"), photo(2, "b.TIFF"), photo(3, "c.dng"), photo(4, "d.jpeg"), photo(5, "e.jpg")]
+        names, body = self.names("", assets)
+        self.assertEqual(body["formats"], {"TIF": 1, "TIFF": 1, "DNG": 1, "JPG": 2})
+        names, body = self.names("format=DNG&format=TIF", assets)
+        self.assertEqual(names, ["a.tif", "c.dng"])
+        self.assertEqual(body["formats"], {"TIF": 1, "TIFF": 1, "DNG": 1, "JPG": 2})
+        self.assertEqual(body["total"], 2)
+
+    def test_range_validation(self):
+        for query in ("min_mb=10&max_mb=5", "max_mp=abc", "min_mp=6&max_mp=5", "max_mb=-1"):
+            with self.subTest(query=query), patch.object(routes, "search_metadata_all", return_value=[]):
+                result = self.client.get("/api/assets?media=image&" + query)
+                self.assertEqual(result.status_code, 400)
+                self.assertIn("error", result.get_json())
+
+    def test_filter_changes_reuse_the_scan_until_refresh(self):
+        assets = [photo(1, "a.tif"), photo(2, "b.jpg")]
+        clock = [1000.0]
+        with patch.object(routes.time, "monotonic", side_effect=lambda: clock[0]), \
+                patch.object(routes, "search_metadata_all", return_value=assets) as search:
+            first = self.client.get("/api/assets?media=image&format=TIF").get_json()
+            self.assertTrue(first["scanned_at"])
+            for query in ("format=JPG", "sort=name&page=2", "search=a", "per_page=25"):
+                clock[0] += 5 * 3600
+                self.assertEqual(self.client.get("/api/assets?media=image&" + query).get_json()["scanned_at"],
+                                 first["scanned_at"])
+            self.assertEqual(search.call_count, 1)
+            self.client.get("/api/assets?media=image&format=JPG&refresh=1")
+            self.assertEqual(search.call_count, 2)
+            self.client.get("/api/assets?media=image")
+            self.assertEqual(search.call_count, 2, "the refreshed scan is stored")
+
+    def test_ninth_scan_evicts_the_least_recently_used(self):
+        with patch.object(routes, "search_metadata_all", return_value=[photo(1)]) as search:
+            for mb in range(8):
+                self.client.get(f"/api/assets?media=image&min_mb={mb}")
+            self.client.get("/api/assets?media=image&min_mb=0")  # most recently used now
+            self.client.get("/api/assets?media=image&min_mb=8")  # ninth scan evicts min_mb=1
+            self.assertEqual(search.call_count, 9)
+            self.client.get("/api/assets?media=image&min_mb=0")
+            self.assertEqual(search.call_count, 9)
+            self.client.get("/api/assets?media=image&min_mb=1")
+            self.assertEqual(search.call_count, 10)
+
+    def test_cached_rows_show_live_job_status(self):
+        asset = photo(1)
+        with patch.object(routes, "search_metadata_all", return_value=[asset]):
+            self.assertEqual(self.names("", [asset])[1]["assets"][0]["status"], "idle")
+            immich_api._jobs[asset["id"]] = {"status": "queued"}
+            self.addCleanup(immich_api._jobs.pop, asset["id"], None)
+            self.assertEqual(self.names("", [asset])[1]["assets"][0]["status"], "queued")
+            immich_api._jobs.pop(asset["id"])
+            self.assertEqual(self.names("", [asset])[1]["assets"][0]["status"], "idle")
+
+    def test_photo_format_of_folds_jpeg_names(self):
+        for name, expected in (("x.JPEG", "JPG"), ("x.jpe", "JPG"), ("x.jfif", "JPG"),
+                               ("x.heic", "HEIC"), ("noext", "")):
+            self.assertEqual(immich_api.photo_format_of(name), expected)
+
+
 if __name__ == "__main__":
     unittest.main()

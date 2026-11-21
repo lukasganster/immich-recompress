@@ -53,6 +53,29 @@ describe('replace all media', () => {
       .toBe('/api/preview/photo');
   });
 
+  it('says what happens to the motion video of a live photo', async () => {
+    store.jobs.set({ photo: { ...reviewed('photo'), motion_note: 'Motion video kept (relinked)' } });
+    await fixture.whenStable();
+    const review = element().querySelector('[aria-label="Awaiting review"]')!;
+    expect(review.textContent).toContain('Motion video kept (relinked)');
+  });
+
+  it('shows the still and its recompressed video as two parts', async () => {
+    const mb = 1024 * 1024;
+    store.jobs.set({
+      both: { ...reviewed('both'), old_size: 10 * mb, new_size: 6 * mb,
+              video_old_size: 8 * mb, video_new_size: 3 * mb },
+      video: { ...reviewed('video'), old_size: 10 * mb, new_size: 9.8 * mb, still_kept: true,
+               video_old_size: 8 * mb, video_new_size: 3 * mb },
+    });
+    await fixture.whenStable();
+    const text = element().querySelector('[aria-label="Awaiting review"]')!.textContent!;
+    expect(text).toContain('8.0 MB → 3.0 MB');
+    expect(text).toContain('Kept, not smaller');
+    expect(fixture.componentInstance.savedBytes(store.jobs()['both'])).toBe(9 * mb);
+    expect(fixture.componentInstance.savedBytes(store.jobs()['video'])).toBe(5 * mb);
+  });
+
   it('counts the reviews and states what they reclaim together', async () => {
     await show('one', 'two', 'three');
     expect(button('Replace all media (3)')).toBeTruthy();
@@ -161,5 +184,62 @@ describe('Concurrent queue activity', () => {
     await fixture.whenStable();
     expect(running.textContent).toContain('Running 1 / 3');
     expect(store.activeIds()).toEqual(['two']);
+  });
+});
+
+describe('review bench pages', () => {
+  let fixture: ComponentFixture<QueuePanelComponent>;
+  let store: StoreService;
+
+  const element = (): HTMLElement => fixture.nativeElement;
+  const cards = () => element().querySelectorAll('[aria-label="Awaiting review"] article').length;
+  const pager = () => element().querySelector('[aria-label="Review pages"]');
+  const next = () => element().querySelector('[aria-label="Next reviews"]') as HTMLButtonElement;
+  const show = async (count: number) => {
+    store.jobs.set(Object.fromEntries(Array.from({ length: count }, (_, i) => [`r${i}`, reviewed(`r${i}`)])));
+    await fixture.whenStable();
+  };
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      imports: [QueuePanelComponent],
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    });
+    fixture = TestBed.createComponent(QueuePanelComponent);
+    store = TestBed.inject(StoreService);
+  });
+
+  it('shows ten reviews a page while replace all covers every review', async () => {
+    await show(23);
+    expect(cards()).toBe(10);
+    expect(pager()!.textContent).toContain('1 of 3');
+    expect(next().disabled).toBe(false);
+    for (const page of [2, 3]) {
+      next().click();
+      await fixture.whenStable();
+      expect(pager()!.textContent).toContain(`${page} of 3`);
+      expect(element().textContent).toContain('Replace all media (23)');
+    }
+    expect(cards()).toBe(3);
+    expect(next().disabled).toBe(true);
+    expect(fixture.componentInstance.reviewJobs.length).toBe(23);
+  });
+
+  it('moves back a page when the last review on it is resolved', async () => {
+    await show(11);
+    next().click();
+    await fixture.whenStable();
+    expect(cards()).toBe(1);
+    const { r10, ...rest } = store.jobs();
+    store.jobs.set({ ...rest, r10: { ...r10, status: 'done' } });
+    await fixture.whenStable();
+    expect(cards()).toBe(10);
+    expect(pager()).toBeNull();
+  });
+
+  it('shows no pager for ten reviews or fewer', async () => {
+    await show(10);
+    expect(cards()).toBe(10);
+    expect(pager()).toBeNull();
   });
 });

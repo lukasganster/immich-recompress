@@ -216,7 +216,7 @@ class ConcurrencyTest(unittest.TestCase):
             "/api/enqueue",
             json={
                 "ids": [VIDEO, PHOTO],
-                "names": {VIDEO: "video.mov", PHOTO: "photo.png"},
+                "names": {VIDEO: "video.mov", PHOTO: "photo.heic"},
                 "medias": {VIDEO: "video", PHOTO: "image"},
             },
         )

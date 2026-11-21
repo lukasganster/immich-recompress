@@ -57,14 +57,13 @@ IMMICH_PER_PAGE = 1000      # page size requested from Immich
 FRONTEND_PER_PAGE = 100     # default page size returned to the browser
 MAX_PER_PAGE = 100000       # ceiling for the "show everything" page size
 USER_CACHE_TTL = 300        # seconds (5 minutes)
-ASSET_CACHE_TTL = 60        # reuse a completed library scan across page changes
 HTTP_TIMEOUT = 30           # seconds for normal Immich calls
 MIN_FREE_BYTES = 200 * 1024 ** 2   # safety buffer for the work dir
 TERMINAL_STATES = {"done", "downloaded", "encoded", "skipped",
                    "error", "cancelled", "discarded"}
 
 # JPEG inputs support JPEG recompression or reversible JPEG XL conversion.
-# RAW conversion to JPEG is separately opt-in; other inputs are skipped.
+# Other inputs are decoded and converted (see photo_convert); RAW is opt-in.
 JPEG_PHOTO_EXTS = {"jpg", "jpeg", "jpe", "jfif"}
 RAW_PHOTO_EXTS = {
     "dng", "cr2", "cr3", "crw", "nef", "nrw", "arw", "srf", "sr2", "raf",

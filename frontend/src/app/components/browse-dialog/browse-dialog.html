@@ -47,13 +47,40 @@
         </div>
       } @else if (localTab() === 'image' || localTab() === 'motionphoto') {
         <div class="flex flex-col gap-2">
-          <label class="section-label" for="browse-photo-threshold">{{ localTab() === 'motionphoto' ? 'Motion video threshold' : 'Photo threshold' }}: <span class="text-fg">{{ localPhotoMb() }} MB</span></label>
-          <div class="flex max-w-[420px] items-center gap-3">
-            <input id="browse-photo-threshold" type="range" min="1" max="100" step="1" class="min-w-0 flex-1"
-              [ngModel]="localPhotoMb()" (ngModelChange)="localPhotoMb.set(+$event)" />
-            <input type="number" min="0" max="500" step="1" class="w-24 text-right" aria-label="Threshold in MB"
-              [ngModel]="localPhotoMb()" (ngModelChange)="localPhotoMb.set(+$event)" />
+          <span class="section-label">{{ localTab() === 'motionphoto' ? 'Motion video size' : 'Photo size' }}: <span class="text-fg">{{ sizeLabel() }}</span></span>
+          <div class="flex max-w-[480px] items-center gap-3">
+            <app-range-slider data-range="size" class="flex-1" [min]="0" [max]="100" [step]="1" minText="0 MB"
+              [low]="localPhotoMb()" [high]="localPhotoMaxMb()"
+              lowLabel="Minimum size in MB" highLabel="Maximum size in MB"
+              (lowChange)="localPhotoMb.set($event)" (highChange)="localPhotoMaxMb.set($event)" />
+            <input id="browse-photo-min" type="number" min="0" step="1" class="w-20 text-right" aria-label="Size from, in MB"
+              [ngModel]="localPhotoMb()" (ngModelChange)="localPhotoMb.set(bound($event) ?? 0)" />
+            <input id="browse-photo-max" type="number" min="0" step="1" class="w-20 text-right" aria-label="Size to, in MB" placeholder="No limit"
+              [ngModel]="localPhotoMaxMb()" (ngModelChange)="localPhotoMaxMb.set(bound($event))" />
           </div>
+          @if (localTab() === 'image') {
+            <span class="section-label mt-2">Resolution: <span class="text-fg">{{ resolutionLabel() }}</span></span>
+            <div class="flex max-w-[480px] items-center gap-3">
+              <app-range-slider data-range="resolution" class="flex-1" [min]="0" [max]="100" [step]="1" minText="Any"
+                [low]="localMinMp() ?? 0" [high]="localMaxMp()"
+                lowLabel="Minimum resolution in megapixels" highLabel="Maximum resolution in megapixels"
+                (lowChange)="localMinMp.set($event || null)" (highChange)="localMaxMp.set($event)" />
+              <input id="browse-min-mp" type="number" min="0" step="1" class="w-20 text-right" aria-label="Resolution from, in megapixels" placeholder="Any"
+                [ngModel]="localMinMp()" (ngModelChange)="localMinMp.set(bound($event) || null)" />
+              <input id="browse-max-mp" type="number" min="0" step="1" class="w-20 text-right" aria-label="Resolution to, in megapixels" placeholder="No limit"
+                [ngModel]="localMaxMp()" (ngModelChange)="localMaxMp.set(bound($event))" />
+            </div>
+          }
+          @if (localTab() === 'image') {
+            <label class="flex items-center gap-2">
+              <input type="checkbox" [ngModel]="localJxlLossless()" (ngModelChange)="localJxlLossless.set($event)" />
+              JPEG XL: lossless only
+            </label>
+            <p class="hint">Reads the start of each JPEG XL file, so the first scan takes longer.</p>
+          }
+          @if (rangeError()) {
+            <p class="error" role="alert">{{ rangeError() }}</p>
+          }
           <p class="hint">
             @if (localTab() === 'motionphoto') {
               Live Photos: the still image is kept, only the embedded motion video is removed (backed up locally, recoverable from Immich trash).
@@ -235,7 +262,7 @@
         <app-icon [path]="mdiHistory" [size]="18" />Clear history
       </button>
       <button type="button" class="btn" (click)="hide()">Cancel</button>
-      <button type="button" class="btn primary" [disabled]="localTab() === 'link' ? addBusy() : !localKeys().size || (hasMetadata() && (!supportsMetadata() || discoveryBlocked()))" (click)="onApply()">
+      <button type="button" class="btn primary" [disabled]="localTab() === 'link' ? addBusy() : !!rangeError() || !localKeys().size || (hasMetadata() && (!supportsMetadata() || discoveryBlocked()))" (click)="onApply()">
         @if (localTab() === 'link') {
           <app-icon [path]="mdiPlus" [size]="18" />Add
         } @else {

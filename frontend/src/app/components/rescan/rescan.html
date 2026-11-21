@@ -1,0 +1,8 @@
+@if (store.loaded()) {
+  <button type="button" class="btn ghost sm" (click)="rescan.emit()" title="Scan Immich again with the current selection">
+    <app-icon [path]="mdiRefresh" [size]="16" />Rescan
+  </button>
+  @if (age()) {
+    <span class="text-xs text-muted">{{ age() }}</span>
+  }
+}
