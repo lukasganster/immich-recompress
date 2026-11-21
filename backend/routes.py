@@ -47,6 +47,7 @@ from backend.immich_api import (
     _key_env_for_asset,
 )
 from backend.browse import collect_filtered, discover, metadata_filters
+from backend.jxl_probe import lossless_jxl_only
 from backend.jobs import (
     broadcast,
     broadcast_queue_update,
@@ -108,8 +109,11 @@ def _optional_number(args, name):
     return value
 
 
-def _narrow_summaries(summaries, max_bytes, min_mp, max_mp, formats):
-    """Apply the filters that need no rescan, and count formats before the format filter."""
+def _narrow_summaries(summaries, max_bytes, min_mp, max_mp, formats, lossless_only=None):
+    """Apply the filters that need no rescan, and count formats before the format filter.
+
+    `lossless_only` downloads part of each JXL, so it runs after every cheaper filter.
+    """
     kept = []
     for summary in summaries:
         if max_bytes is not None and summary["size"] > max_bytes:
@@ -120,13 +124,16 @@ def _narrow_summaries(summaries, max_bytes, min_mp, max_mp, formats):
         if (min_mp is not None and mp < min_mp) or (max_mp is not None and mp > max_mp):
             continue
         kept.append(summary)
+    unchecked = None
+    if lossless_only:
+        kept, unchecked = ([], 0) if formats and "JXL" not in formats else lossless_only(kept)
     counts = {}
     for summary in kept:
         if summary.get("format"):
             counts[summary["format"]] = counts.get(summary["format"], 0) + 1
     if formats:
         kept = [summary for summary in kept if summary.get("format") in formats]
-    return kept, counts
+    return kept, counts, unchecked
 
 
 def _normalise_capture_dates(args):
@@ -365,9 +372,18 @@ def api_assets():
         return jsonify({"error": "The maximum megapixels must not be lower than the minimum."}), 400
     format_filter = {value.strip().upper() for value in request.args.getlist("format") if value.strip()}
 
+    jxl_lossless = media == "image" and request.args.get("jxl_lossless") == "1"
+
     def respond(summaries):
-        summaries, formats = _narrow_summaries(summaries, max_bytes, min_mp, max_mp, format_filter)
-        return paginate_summaries(summaries, sort, order, page, per_page, formats)
+        summaries, formats, unchecked = _narrow_summaries(
+            summaries, max_bytes, min_mp, max_mp, format_filter,
+            partial(lossless_jxl_only, env) if jxl_lossless else None)
+        extra = {} if unchecked is None else {"jxl_unchecked": unchecked}
+        return paginate_summaries(summaries, sort, order, page, per_page, formats, **extra)
+
+    def publish(summaries):
+        _cache_asset_summaries(cache_key, summaries)
+        return respond(summaries)
 
     api_keys = env.get("api_keys") or []
     if not env["url"] or not api_keys:
@@ -405,8 +421,7 @@ def api_assets():
             return jsonify({"error": str(exc)}), 502
         with _asset_key_lock:
             _asset_key_map.update(assignments)
-        _cache_asset_summaries(cache_key, summaries)
-        return respond(summaries)
+        return publish(summaries)
     use_structured_search = capture_dates and supports_structured_search(env)
 
     if media == "motionphoto":
@@ -417,8 +432,7 @@ def api_assets():
                 _legacy_capture_filter(capture_dates) if capture_dates and not use_structured_search else None)
         except StructuredSearchError as exc:
             return jsonify({"error": str(exc)}), 502
-        _cache_asset_summaries(cache_key, summaries)
-        return respond(summaries)
+        return publish(summaries)
 
     # collected is a list of (asset_dict, key_idx) tuples
     collected: list = []
@@ -469,8 +483,7 @@ def api_assets():
             continue
         summaries.append(summary)
 
-    _cache_asset_summaries(cache_key, summaries)
-    return respond(summaries)
+    return publish(summaries)
 
 
 def resolve_asset_summary(env, api_keys, asset_id):

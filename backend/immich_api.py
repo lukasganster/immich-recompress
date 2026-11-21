@@ -649,7 +649,7 @@ def collect_motion_photos(env, key_indices, min_bytes, user_filter, search_filte
     return out
 
 
-def paginate_summaries(summaries, sort, order, page, per_page, formats=None):
+def paginate_summaries(summaries, sort, order, page, per_page, formats=None, **extra):
     """Sort, total and paginate a list of asset summaries into the list response."""
     reverse = order == "desc"
     if sort == "size":
@@ -679,6 +679,7 @@ def paginate_summaries(summaries, sort, order, page, per_page, formats=None):
         "per_page": per_page,
         "assets": summaries[start:end],
         "formats": formats or {},
+        **extra,
     })
 
 
